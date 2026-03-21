@@ -728,7 +728,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                 _show_disconnected(screen)
                 return
 
-            dash_events = []  # événements de dash à envoyer au client ce frame
+            dash_events  = []  # événements de dash à envoyer au client ce frame
+            sound_events = []  # sons à jouer côté client ce frame
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -828,9 +829,12 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                     typ, data = res
                     if typ == 'melee':
                         sound_manager.play_sword_sound()
+                        sound_events.append('sword')
                         for e in list(enemies_group):
                             if getattr(e, 'health', 0) > 0 and data.colliderect(e.feet):
                                 e.damage(player2.melee_damage)
+                                if e.health <= 0:
+                                    sound_events.append('enemy_death')
                                 _handle_enemy_death(e, group, items_group, particles_group)
 
             # Dash player2
@@ -880,10 +884,14 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
 
             # --- Ennemis ---
             for e in list(enemies_group):
-                # On passe le joueur le plus proche aux ennemis
-                d1 = (pygame.math.Vector2(player.feet.center)  - pygame.math.Vector2(e.feet.center)).length()
-                d2 = (pygame.math.Vector2(player2.feet.center) - pygame.math.Vector2(e.feet.center)).length()
-                target = player if d1 < d2 else player2
+                # Ciblage : seulement les joueurs vivants
+                live = [p for p in [player, player2] if p.health > 0]
+                if live:
+                    target = min(live, key=lambda p: (
+                        pygame.math.Vector2(p.feet.center) - pygame.math.Vector2(e.feet.center)
+                    ).length())
+                else:
+                    target = player  # les deux morts, peu importe
                 e.update(target, walls)
                 # Dégâts sur le joueur non-ciblé (boss avec get_attack_hitbox), une fois par cooldown
                 other = player2 if target is player else player
@@ -911,9 +919,12 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                     typ, data = res
                     if typ == 'melee':
                         sound_manager.play_sword_sound()
+                        sound_events.append('sword')
                         for e in list(enemies_group):
                             if getattr(e, 'health', 0) > 0 and data.colliderect(e.feet):
                                 e.damage(player.melee_damage)
+                                if e.health <= 0:
+                                    sound_events.append('enemy_death')
                                 _handle_enemy_death(e, group, items_group, particles_group)
 
             new_proj = player.check_ranged_attack()
@@ -927,13 +938,18 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                         body = e.feet.copy(); body.height += 25; body.y -= 25
                         if proj.hitbox.colliderect(body):
                             sound_manager.play_projectile_sound()
+                            sound_events.append('arrow')
                             e.damage(proj.damage_amount)
+                            if e.health <= 0:
+                                sound_events.append('enemy_death')
                             _handle_enemy_death(e, group, items_group, particles_group)
                             proj.kill(); break
                 if proj.alive():
                     for wall in walls:
                         if proj.hitbox.colliderect(wall):
-                            sound_manager.play_projectile_sound(); proj.kill(); break
+                            sound_manager.play_projectile_sound()
+                            sound_events.append('arrow')
+                            proj.kill(); break
 
 
             can_exit = False
@@ -1020,7 +1036,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                 'items':       [_serialize_item(it)        for it   in items_group],
                 'projectiles': [_serialize_projectile(pr)  for pr   in projectiles_group],
                 'game_over':   game_over,
-                'events':      {'dashes': dash_events},
+                'events':      {'dashes': dash_events, 'sounds': sound_events},
             }
             server.send_state(state)
 
@@ -1127,6 +1143,16 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 
         # (Re)charger la carte si le niveau change
         if new_level != loaded_level:
+            # Nettoyage explicite de tous les anciens sprites avant de recréer le groupe
+            for re in remote_enemies.values():
+                re.kill()
+            for it in remote_items.values():
+                it.kill()
+            for rp in remote_projectiles.values():
+                rp.kill()
+            if remote_player: remote_player.kill()
+            if local_player:  local_player.kill()
+
             loaded_level = new_level
             current_level_index = new_level
             if new_level >= len(levels):
@@ -1224,8 +1250,9 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 rp.hitbox.centerx = pdata['x']
                 rp.hitbox.centery = pdata['y']
 
-        # --- Particules de dash (événements serveur) ---
-        for dash in state.get('events', {}).get('dashes', []):
+        # --- Événements serveur (particules + sons) ---
+        events_recv = state.get('events', {})
+        for dash in events_recv.get('dashes', []):
             for _ in range(20):
                 p = SmokeParticle(
                     dash['x'] + random.randint(-15, 15),
@@ -1233,6 +1260,16 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 )
                 group.add(p)
                 client_particles_grp.add(p)
+
+        _SOUND_MAP = {
+            'sword':       sound_manager.play_sword_sound,
+            'arrow':       sound_manager.play_projectile_sound,
+            'enemy_death': sound_manager.play_projectile_sound,  # son générique
+        }
+        for snd in events_recv.get('sounds', []):
+            fn = _SOUND_MAP.get(snd)
+            if fn:
+                fn()
 
         # --- Caméra sur le joueur local (index 1) ---
         if local_player:
@@ -1286,6 +1323,13 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         # Barre de vie du joueur hôte (en haut à droite)
         rp_state = players_state[0] if len(players_state) >= 1 else {}
         _draw_remote_health(screen, rp_state.get('health', 100), rp_state.get('max_health', 100), label='HÔTE')
+
+        # Barre de vie du boss (si présent et vivant)
+        for edata in enemies_state:
+            if edata.get('etype') in ('bigenemy', 'necromancer') and edata.get('health', 0) > 0:
+                boss_name = "Gardien des profondeurs" if edata['etype'] == 'bigenemy' else "La Faucheuse"
+                ui.draw_boss_health_bar(edata['health'], edata['max_health'], boss_name)
+                break  # un seul boss à la fois
 
         # Indicateur multijoueur
         mp_surf = font_small.render("● MULTIJOUEUR (CLIENT)", True, (80, 200, 80))

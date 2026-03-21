@@ -499,7 +499,8 @@ class BigEnemy(pygame.sprite.Sprite):
         else:
             attack_rect.right = self.feet.right + 10
 
-        attack_rect.centery = self.feet.centery
+        # Ancrer le bas sur les pieds, réduire la portée vers le haut
+        attack_rect.bottom = self.feet.centery + 15
         return attack_rect
 
     def animate(self):

@@ -101,19 +101,21 @@ class SoundManager:
     # Calcul de spatialisation
     # ------------------------------------------------------------------
     @staticmethod
-    def _compute_spatial(source_pos, listener_pos):
+    def _compute_spatial(source_pos, listener_pos, max_dist=None):
         """Retourne (volume, left_factor, right_factor) entre 0 et 1."""
         dx = source_pos[0] - listener_pos[0]
         dy = source_pos[1] - listener_pos[1]
         distance = math.hypot(dx, dy)
 
+        effective_max = max_dist if max_dist is not None else MAX_DISTANCE
+
         # Atténuation linéaire
         if distance <= MIN_DISTANCE:
             volume = 1.0
-        elif distance >= MAX_DISTANCE:
+        elif distance >= effective_max:
             volume = 0.0
         else:
-            volume = 1.0 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE)
+            volume = 1.0 - (distance - MIN_DISTANCE) / (effective_max - MIN_DISTANCE)
 
         # Panning stéréo
         pan = max(-1.0, min(1.0, dx / PAN_RANGE)) if PAN_RANGE > 0 else 0.0
@@ -123,23 +125,29 @@ class SoundManager:
         return volume, left_factor, right_factor
 
     def _get_channel(self):
-        """Retourne un channel libre en round-robin."""
+        """Retourne un channel libre en round-robin (0-29, 30-31 réservés aux pas)."""
         if not self.enabled:
             return None
-        total = pygame.mixer.get_num_channels()
-        for _ in range(total):
-            ch = pygame.mixer.Channel(self._next_channel % total)
-            self._next_channel = (self._next_channel + 1) % total
+        usable = 30  # channels 0-29 pour les SFX, 30-31 réservés aux pas
+        for _ in range(usable):
+            ch = pygame.mixer.Channel(self._next_channel % usable)
+            self._next_channel = (self._next_channel + 1) % usable
             if not ch.get_busy():
                 return ch
         # Tous occupés → prend le prochain quand même (interrompt)
-        ch = pygame.mixer.Channel(self._next_channel % total)
-        self._next_channel = (self._next_channel + 1) % total
+        ch = pygame.mixer.Channel(self._next_channel % usable)
+        self._next_channel = (self._next_channel + 1) % usable
         return ch
 
     # ------------------------------------------------------------------
     # LECTURE SPATIALISÉE — pour tous les SFX du jeu
     # ------------------------------------------------------------------
+    # Distance max réduite pour les sons de boss (plus réaliste)
+    BOSS_MAX_DISTANCE = 350
+
+    # Sons de boss qui utilisent une distance réduite
+    _BOSS_SOUNDS = {'boss_activation', 'boss_attack', 'boss_death', 'boss_talk'}
+
     def play_spatial(self, sound_name, source_pos, listener_pos):
         """Joue un son avec volume et panning ajustés à la distance.
 
@@ -153,7 +161,10 @@ class SoundManager:
         if not sound:
             return
 
-        volume, left_f, right_f = self._compute_spatial(source_pos, listener_pos)
+        # Distance max réduite pour les sons de boss
+        max_dist = self.BOSS_MAX_DISTANCE if sound_name in self._BOSS_SOUNDS else None
+
+        volume, left_f, right_f = self._compute_spatial(source_pos, listener_pos, max_dist)
         if volume <= 0.0:
             return  # trop loin, on ne joue rien
 
@@ -187,13 +198,43 @@ class SoundManager:
         if 'eating' in self.sounds: self.sounds['eating'].play()
 
     # ------------------------------------------------------------------
-    # LECTURE DIRECTE (non spatialisée) — sons personnels du joueur
+    # PAS DE MARCHE — spatialisés via channel dédié
     # ------------------------------------------------------------------
     def play_step(self):
+        """Pas du joueur local (loop, volume plein)."""
         if 'step' in self.sounds: self.sounds['step'].play(-1)
 
     def stop_step(self):
         if 'step' in self.sounds: self.sounds['step'].stop()
+
+    def play_remote_step(self, source_pos, listener_pos):
+        """Démarre les pas du joueur distant sur un channel dédié (channel 30)."""
+        if not self.enabled or 'step' not in self.sounds:
+            return
+        ch = pygame.mixer.Channel(30)
+        if not ch.get_busy():
+            ch.play(self.sounds['step'], -1)
+        self.update_remote_step_volume(source_pos, listener_pos)
+
+    def update_remote_step_volume(self, source_pos, listener_pos):
+        """Met à jour le volume spatial des pas distants (appeler chaque frame)."""
+        if not self.enabled:
+            return
+        ch = pygame.mixer.Channel(30)
+        if not ch.get_busy():
+            return
+        volume, left_f, right_f = self._compute_spatial(source_pos, listener_pos)
+        base = self.base_volumes.get('step', 0.4)
+        final_vol = base * self.global_sfx_vol * volume
+        ch.set_volume(final_vol * left_f, final_vol * right_f)
+
+    def stop_remote_step(self):
+        """Arrête les pas du joueur distant."""
+        if not self.enabled:
+            return
+        ch = pygame.mixer.Channel(30)
+        if ch.get_busy():
+            ch.stop()
 
     def play_death(self):
         if 'death' in self.sounds: self.sounds['death'].play()

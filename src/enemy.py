@@ -527,16 +527,16 @@ class BigEnemy(pygame.sprite.Sprite):
         self.animate()
 
     def get_attack_hitbox(self):
-        range_attack = 160 
-        width_attack = 50 
-        
+        range_attack = 90
+        width_attack = 50
+
         attack_rect = pygame.Rect(0, 0, range_attack, width_attack)
-        
+
         if self.facing == 'right':
             attack_rect.left = self.feet.left - 10
         else:
             attack_rect.right = self.feet.right + 10
-            
+
         attack_rect.centery = self.feet.centery
         return attack_rect
 
@@ -981,7 +981,7 @@ class Necromancer(pygame.sprite.Sprite):
         # Ancrage sur feet.centerx : la zone part du centre du boss
         # et s'étend uniquement devant lui (dans la direction du regard).
         # Salve 2 : légèrement plus large pour le second balayage ample.
-        width = 110 if salve == 1 else 130
+        width = 65 if salve == 1 else 80
         height = 80
         attack_rect = pygame.Rect(0, 0, width, height)
 

@@ -152,7 +152,7 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
         while level_running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    return
+                    pygame.mixer.music.stop(); return
                 elif event.type == EUREKA_EVENT:
                     if not is_paused: 
                         sound_manager.play_eureka()
@@ -181,8 +181,8 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                         elif "resume" in pause_rects and pause_rects["resume"].collidepoint(pos):
                             is_paused = False
                         elif pause_rects.get("quit") and pause_rects["quit"].collidepoint(pos):
-                            return
-                            
+                            pygame.mixer.music.stop(); return
+
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE: 
                         is_paused = not is_paused 
@@ -636,15 +636,24 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
 
     font = pygame.font.SysFont(None, 36)
 
+    def _cleanup_audio():
+        """Stoppe toute musique et sons en boucle avant de quitter."""
+        try:
+            pygame.mixer.music.stop()
+            sound_manager.stop_step()
+            sound_manager.stop_remote_step()
+        except Exception:
+            pass
+
     while current_level_index < len(levels):
         if not server.connected:
-            return
+            _cleanup_audio(); return
 
         try:
             tmx_data = pytmx.util_pygame.load_pygame(levels[current_level_index])
         except Exception as e:
             print(f"Erreur carte : {e}")
-            return
+            _cleanup_audio(); return
 
         map_data  = pyscroll.data.TiledMapData(tmx_data)
         map_layer = pyscroll.BufferedRenderer(map_data, (screen_width, screen_height))
@@ -721,6 +730,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
 
         level_running  = True
         was_walking    = False
+        p2_was_walking = False
         death_time     = None
         death_sound_played = False
         both_dead_time = None
@@ -733,6 +743,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
         while level_running:
             # --- Déconnexion client ---
             if not server.connected:
+                _cleanup_audio()
                 _show_disconnected(screen)
                 return
 
@@ -741,7 +752,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    server.stop()
+                    _cleanup_audio(); server.stop()
                     return
                 elif event.type == EUREKA_EVENT:
                     if not is_paused:
@@ -764,7 +775,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                         elif "resume" in pause_rects and pause_rects["resume"].collidepoint(pos):
                             is_paused = False
                         elif pause_rects.get("quit") and pause_rects["quit"].collidepoint(pos):
-                            server.stop()
+                            _cleanup_audio(); server.stop()
                             return
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
@@ -1002,6 +1013,20 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
             elif not player.is_moving() and was_walking:
                 sound_manager.stop_step(); was_walking = False
 
+            # Pas spatialisés du joueur distant (player2)
+            p2_moving = player2.is_moving() if hasattr(player2, 'is_moving') else False
+            if p2_moving and not p2_was_walking:
+                p2_pos = (player2.feet.centerx, player2.feet.centery)
+                sound_manager.play_remote_step(p2_pos, host_pos)
+                p2_was_walking = True
+            elif not p2_moving and p2_was_walking:
+                sound_manager.stop_remote_step()
+                p2_was_walking = False
+            elif p2_moving and p2_was_walking:
+                # Mise à jour du volume spatial chaque frame
+                p2_pos = (player2.feet.centerx, player2.feet.centery)
+                sound_manager.update_remote_step_volume(p2_pos, host_pos)
+
             # --- Caméra (suit joueur local) ---
             view_w = screen_width / zoom_level
             view_h = screen_height / zoom_level
@@ -1064,7 +1089,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
             if game_over:
                 if both_dead_time is None: both_dead_time = pygame.time.get_ticks()
                 if pygame.time.get_ticks() - both_dead_time > 5000:
-                    server.stop(); return
+                    _cleanup_audio(); server.stop(); return
 
             # --- Envoi état au client ---
             state = {
@@ -1104,18 +1129,27 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
     font_small = pygame.font.SysFont(None, 24)
     death_font = pygame.font.SysFont("old english text mt, garamond, times new roman, serif", 120)
 
+    def _cleanup_client_audio():
+        """Stoppe toute musique et sons en boucle côté client."""
+        try:
+            pygame.mixer.music.stop()
+            sound_manager.stop_step()
+            sound_manager.stop_remote_step()
+        except Exception:
+            pass
+
     # Attendre le premier état pour connaître le niveau
     wait_start = pygame.time.get_ticks()
     first_state = None
     while first_state is None:
         if not client.connected:
-            _show_disconnected(screen); return
+            _cleanup_client_audio(); _show_disconnected(screen); return
         first_state = client.get_state() if client.get_state() else None
         if pygame.time.get_ticks() - wait_start > 10000:
-            _show_disconnected(screen); return
+            _cleanup_client_audio(); _show_disconnected(screen); return
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                client.stop(); pygame.quit(); import sys; sys.exit()
+                _cleanup_client_audio(); client.stop(); pygame.quit(); import sys; sys.exit()
         screen.fill((10, 10, 20))
         t = pygame.font.SysFont(None, 36).render("Connexion en cours…", True, (200, 200, 200))
         screen.blit(t, t.get_rect(center=(screen_width // 2, screen_height // 2)))
@@ -1145,14 +1179,15 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
     prev_lp = {'current_weapon': None, 'has_melee': False, 'has_ranged': False,
                'has_pickaxe': False, 'has_boots': False, 'arrows': 0, 'health': 100}
     client_was_walking = False
+    client_rp_was_walking = False
 
     while True:
         if not client.connected:
-            _show_disconnected(screen); return
+            _cleanup_client_audio(); _show_disconnected(screen); return
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                client.stop(); pygame.quit(); import sys; sys.exit()
+                _cleanup_client_audio(); client.stop(); pygame.quit(); import sys; sys.exit()
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 is_paused_client = not is_paused_client   # toggle, ne quitte PAS
@@ -1175,7 +1210,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                     elif "resume" in pause_rects_client and pause_rects_client["resume"].collidepoint(pos):
                         is_paused_client = False
                     elif pause_rects_client.get("quit") and pause_rects_client["quit"].collidepoint(pos):
-                        client.stop(); return   # seul endroit qui déconnecte
+                        _cleanup_client_audio(); client.stop(); return
 
         # Récupérer l'état depuis le serveur
         state = client.get_state()
@@ -1199,11 +1234,11 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             loaded_level = new_level
             current_level_index = new_level
             if new_level >= len(levels):
-                return
+                _cleanup_client_audio(); return
             try:
                 tmx_data = pytmx.util_pygame.load_pygame(levels[new_level])
             except Exception as e:
-                print(f"Erreur carte client : {e}"); return
+                print(f"Erreur carte client : {e}"); _cleanup_client_audio(); return
 
             map_data  = pyscroll.data.TiledMapData(tmx_data)
             map_layer = pyscroll.BufferedRenderer(map_data, (screen_width, screen_height))
@@ -1402,17 +1437,28 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 
         prev_lp = dict(lp_now)
 
-        # --- Son de pas personnel (client) ---
-        lp_moving = any([
-            lp_now.get('state') == 'run',
-            lp_now.get('state') == 'walk',
-        ])
+        # --- Son de pas du joueur local (client) ---
+        lp_moving = lp_now.get('state') in ('run', 'walk')
         if lp_moving and not client_was_walking:
             sound_manager.play_step()
             client_was_walking = True
         elif not lp_moving and client_was_walking:
             sound_manager.stop_step()
             client_was_walking = False
+
+        # --- Pas spatialisés du joueur distant (host) ---
+        rp_state_now = players_state[0] if len(players_state) >= 1 else {}
+        rp_moving = rp_state_now.get('state') in ('run', 'walk')
+        if rp_moving and not client_rp_was_walking:
+            rp_pos = (rp_state_now.get('x', 0), rp_state_now.get('y', 0))
+            sound_manager.play_remote_step(rp_pos, client_listener)
+            client_rp_was_walking = True
+        elif not rp_moving and client_rp_was_walking:
+            sound_manager.stop_remote_step()
+            client_rp_was_walking = False
+        elif rp_moving and client_rp_was_walking:
+            rp_pos = (rp_state_now.get('x', 0), rp_state_now.get('y', 0))
+            sound_manager.update_remote_step_volume(rp_pos, client_listener)
 
         # --- Capturer et envoyer les inputs locaux ---
         keys = pygame.key.get_pressed()
@@ -1450,9 +1496,11 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         rp_state = players_state[0] if len(players_state) >= 1 else {}
         _draw_remote_health(screen, rp_state.get('health', 100), rp_state.get('max_health', 100), label='HÔTE')
 
-        # Barre de vie du boss (si présent et vivant)
+        # Barre de vie du boss (uniquement si aggro et vivant)
         for edata in enemies_state:
-            if edata.get('etype') in ('bigenemy', 'necromancer') and edata.get('health', 0) > 0:
+            if (edata.get('etype') in ('bigenemy', 'necromancer')
+                    and edata.get('has_aggro', False)
+                    and edata.get('health', 0) > 0):
                 boss_name = "Gardien des profondeurs" if edata['etype'] == 'bigenemy' else "La Faucheuse"
                 ui.draw_boss_health_bar(edata['health'], edata['max_health'], boss_name)
                 break  # un seul boss à la fois
@@ -1479,7 +1527,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 screen.blit(dt_surf, dt_surf.get_rect(center=(screen_width // 2, screen_height // 2)))
             # Ne quitter que lorsque les DEUX joueurs sont morts (signal serveur)
             if game_over and elapsed > 5000:
-                client.stop(); return
+                _cleanup_client_audio(); client.stop(); return
         else:
             death_time = None
             death_sound_played = False

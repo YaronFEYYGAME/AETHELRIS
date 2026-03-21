@@ -490,7 +490,7 @@ class BigEnemy(pygame.sprite.Sprite):
 
     def get_attack_hitbox(self):
         range_attack = 135
-        width_attack = 50
+        width_attack = 25
 
         attack_rect = pygame.Rect(0, 0, range_attack, width_attack)
 
@@ -499,7 +499,7 @@ class BigEnemy(pygame.sprite.Sprite):
         else:
             attack_rect.right = self.feet.right + 10
 
-        # Ancrer le bas sur les pieds, réduire la portée vers le haut
+        # Ancrer le bas sur les pieds, hitbox étroite verticalement
         attack_rect.bottom = self.feet.centery + 15
         return attack_rect
 

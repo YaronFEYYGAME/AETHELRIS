@@ -783,6 +783,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                         if event.key == pygame.K_LSHIFT and player.has_boots:
                             if player.dash(walls):
                                 sound_manager.play_dash_sound()
+                                sound_events.append('dash')
                                 dash_events.append({'player': 0, 'x': player.feet.centerx, 'y': player.feet.bottom})
                                 for _ in range(20):
                                     smoke = SmokeParticle(player.feet.centerx + random.randint(-15, 15),
@@ -830,7 +831,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                     typ, data = res
                     if typ == 'melee':
                         sound_manager.play_sword_sound()
-                        sound_events.append('sword')
+                        # Ne pas envoyer 'sword' au client : il le joue déjà localement
                         for e in list(enemies_group):
                             if getattr(e, 'health', 0) > 0 and data.colliderect(e.feet):
                                 e.damage(player2.melee_damage)
@@ -842,6 +843,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
             if net_inputs.get('dash') and player2.has_boots:
                 if player2.dash(walls):
                     sound_manager.play_dash_sound()
+                    sound_events.append('dash')
                     dash_events.append({'player': 1, 'x': player2.feet.centerx, 'y': player2.feet.bottom})
                     for _ in range(20):
                         smoke = SmokeParticle(player2.feet.centerx + random.randint(-15, 15),
@@ -1270,6 +1272,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             'sword':           sound_manager.play_sword_sound,
             'arrow':           sound_manager.play_projectile_sound,
             'enemy_death':     sound_manager.play_projectile_sound,
+            'dash':            sound_manager.play_dash_sound,
             'boss_activation': sound_manager.play_boss_activation,
             'boss_attack':     sound_manager.play_boss_attack,
             'boss_death':      sound_manager.play_boss_death,
@@ -1321,6 +1324,16 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 
         # --- Capturer et envoyer les inputs locaux ---
         keys = pygame.key.get_pressed()
+        lp_state_cur = players_state[1] if len(players_state) >= 2 else {}
+
+        # Son d'épée immédiat côté client (pas d'attente réseau)
+        if keys[pygame.K_e] and lp_state_cur.get('current_weapon') == 'melee' and lp_state_cur.get('health', 0) > 0:
+            if not getattr(run_game_mp_client, '_client_attacking', False):
+                sound_manager.play_sword_sound()
+                run_game_mp_client._client_attacking = True
+        else:
+            run_game_mp_client._client_attacking = False
+
         inputs = {
             'up':      bool(keys[pygame.K_z]),
             'down':    bool(keys[pygame.K_s]),

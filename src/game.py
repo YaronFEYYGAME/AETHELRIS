@@ -728,6 +728,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                 _show_disconnected(screen)
                 return
 
+            dash_events = []  # événements de dash à envoyer au client ce frame
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     server.stop()
@@ -779,6 +781,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                         if event.key == pygame.K_LSHIFT and player.has_boots:
                             if player.dash(walls):
                                 sound_manager.play_dash_sound()
+                                dash_events.append({'player': 0, 'x': player.feet.centerx, 'y': player.feet.bottom})
                                 for _ in range(20):
                                     smoke = SmokeParticle(player.feet.centerx + random.randint(-15, 15),
                                                          player.feet.bottom + random.randint(-15, 5))
@@ -834,6 +837,11 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
             if net_inputs.get('dash') and player2.has_boots:
                 if player2.dash(walls):
                     sound_manager.play_dash_sound()
+                    dash_events.append({'player': 1, 'x': player2.feet.centerx, 'y': player2.feet.bottom})
+                    for _ in range(20):
+                        smoke = SmokeParticle(player2.feet.centerx + random.randint(-15, 15),
+                                             player2.feet.bottom + random.randint(-15, 5))
+                        group.add(smoke); particles_group.add(smoke)
 
             # Ramasser objet player2
             if net_inputs.get('interact') and player2.health > 0:
@@ -860,6 +868,12 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
             if net_inputs.get('weapon2') and player2.has_ranged and player2.current_weapon != 'ranged':
                 player2.switch_weapon('ranged'); sound_manager.play_equip_bow()
 
+            # Attaque à distance player2
+            new_proj2 = player2.check_ranged_attack()
+            if new_proj2:
+                new_proj2._mp_id = _next_id()
+                group.add(new_proj2); projectiles_group.add(new_proj2)
+
             # --- Joueur local ---
             player.update()
             player.move(walls)
@@ -871,6 +885,15 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                 d2 = (pygame.math.Vector2(player2.feet.center) - pygame.math.Vector2(e.feet.center)).length()
                 target = player if d1 < d2 else player2
                 e.update(target, walls)
+                # Dégâts sur le joueur non-ciblé (boss avec get_attack_hitbox), une fois par cooldown
+                other = player2 if target is player else player
+                if hasattr(e, 'get_attack_hitbox') and getattr(e, 'is_attacking', False) and other.health > 0:
+                    atk = e.get_attack_hitbox()
+                    now = pygame.time.get_ticks()
+                    last_mp = getattr(e, '_mp_other_dmg_time', 0)
+                    if atk and atk.colliderect(other.feet) and now - last_mp > getattr(e, 'attack_cooldown', 1500):
+                        other.damage(getattr(e, 'damage_amount', 10))
+                        e._mp_other_dmg_time = now
                 if hasattr(e, 'pending_summons') and e.pending_summons:
                     for sx, sy in e.pending_summons:
                         ns = Spirit(sx, sy); ns._mp_id = _next_id()
@@ -912,15 +935,6 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                         if proj.hitbox.colliderect(wall):
                             sound_manager.play_projectile_sound(); proj.kill(); break
 
-            # --- Ennemis touchent les joueurs ---
-            for e in list(enemies_group):
-                if getattr(e, 'is_attacking', False):
-                    atk = e.get_attack_hitbox() if hasattr(e, 'get_attack_hitbox') else None
-                    if atk:
-                        if player.health > 0 and atk.colliderect(player.feet):
-                            player.damage(getattr(e, 'damage_amount', 10))
-                        if player2.health > 0 and atk.colliderect(player2.feet):
-                            player2.damage(getattr(e, 'damage_amount', 10))
 
             can_exit = False
             show_exit_dialogue = False
@@ -1006,6 +1020,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                 'items':       [_serialize_item(it)        for it   in items_group],
                 'projectiles': [_serialize_projectile(pr)  for pr   in projectiles_group],
                 'game_over':   game_over,
+                'events':      {'dashes': dash_events},
             }
             server.send_state(state)
 
@@ -1208,6 +1223,16 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 rp.rect.centery   = pdata['y']
                 rp.hitbox.centerx = pdata['x']
                 rp.hitbox.centery = pdata['y']
+
+        # --- Particules de dash (événements serveur) ---
+        for dash in state.get('events', {}).get('dashes', []):
+            for _ in range(20):
+                p = SmokeParticle(
+                    dash['x'] + random.randint(-15, 15),
+                    dash['y'] + random.randint(-15, 5)
+                )
+                group.add(p)
+                client_particles_grp.add(p)
 
         # --- Caméra sur le joueur local (index 1) ---
         if local_player:

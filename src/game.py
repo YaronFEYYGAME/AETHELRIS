@@ -523,6 +523,9 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
 # =============================================================================
 
 def _serialize_player(p):
+    dash_cr = min(1.0, max(0.0,
+        (pygame.time.get_ticks() - p.last_dash_time) / p.dash_cooldown
+    ))
     return {
         'x': p.feet.centerx,
         'y': p.feet.bottom,
@@ -531,6 +534,14 @@ def _serialize_player(p):
         'frame': p.frame_index,
         'health': p.health,
         'max_health': p.max_health,
+        # Inventaire pour le HUD côté client
+        'current_weapon': p.current_weapon,
+        'has_melee':      p.has_melee,
+        'has_ranged':     p.has_ranged,
+        'has_pickaxe':    p.has_pickaxe,
+        'has_boots':      p.has_boots,
+        'arrows':         p.arrows,
+        'dash_cr':        dash_cr,
     }
 
 
@@ -704,6 +715,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
         was_walking    = False
         death_time     = None
         death_sound_played = False
+        both_dead_time = None
         can_exit       = False
         show_exit_dialogue = False
 
@@ -958,8 +970,12 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
             mp_surf = pygame.font.SysFont(None, 24).render("● MULTIJOUEUR", True, (80, 200, 80))
             screen.blit(mp_surf, (screen_width - mp_surf.get_width() - 10, 10))
 
-            # --- Mort joueur local ---
-            if player.health <= 0:
+            # --- Mort joueur local (serveur) ---
+            server_dead = player.health <= 0
+            client_dead = player2.health <= 0
+            game_over   = server_dead and client_dead
+
+            if server_dead:
                 if death_time is None: death_time = pygame.time.get_ticks()
                 elapsed = pygame.time.get_ticks() - death_time
                 if elapsed > 1000:
@@ -972,7 +988,14 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                     dt_surf = death_font.render("Vous êtes mort", True, (255, 255, 255))
                     dt_surf.set_alpha(int(255 * prog))
                     screen.blit(dt_surf, dt_surf.get_rect(center=(screen_width // 2, screen_height // 2)))
-                if elapsed > 5000:
+            else:
+                death_time = None
+                death_sound_played = False
+
+            # Fin de partie : les DEUX joueurs sont morts
+            if game_over:
+                if both_dead_time is None: both_dead_time = pygame.time.get_ticks()
+                if pygame.time.get_ticks() - both_dead_time > 5000:
                     server.stop(); return
 
             # --- Envoi état au client ---
@@ -982,6 +1005,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                 'enemies':     [_serialize_enemy(e)        for e    in enemies_group],
                 'items':       [_serialize_item(it)        for it   in items_group],
                 'projectiles': [_serialize_projectile(pr)  for pr   in projectiles_group],
+                'game_over':   game_over,
             }
             server.send_state(state)
 
@@ -1045,6 +1069,8 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 
     death_time = None
     death_sound_played = False
+    is_paused_client   = False
+    pause_rects_client = {}
 
     while True:
         if not client.connected:
@@ -1053,8 +1079,29 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 client.stop(); pygame.quit(); import sys; sys.exit()
+
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                client.stop(); return
+                is_paused_client = not is_paused_client   # toggle, ne quitte PAS
+
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if is_paused_client and pause_rects_client:
+                    pos = event.pos
+                    if pause_rects_client.get("mus_min") and pause_rects_client["mus_min"].collidepoint(pos):
+                        global_music_vol = max(0.0, global_music_vol - 0.1)
+                        pygame.mixer.music.set_volume(global_music_vol)
+                    elif pause_rects_client.get("mus_pl") and pause_rects_client["mus_pl"].collidepoint(pos):
+                        global_music_vol = min(1.0, global_music_vol + 0.1)
+                        pygame.mixer.music.set_volume(global_music_vol)
+                    elif pause_rects_client.get("sfx_min") and pause_rects_client["sfx_min"].collidepoint(pos):
+                        global_sfx_vol = max(0.0, global_sfx_vol - 0.1)
+                        sound_manager.update_sfx_volume(global_sfx_vol)
+                    elif pause_rects_client.get("sfx_pl") and pause_rects_client["sfx_pl"].collidepoint(pos):
+                        global_sfx_vol = min(1.0, global_sfx_vol + 0.1)
+                        sound_manager.update_sfx_volume(global_sfx_vol)
+                    elif "resume" in pause_rects_client and pause_rects_client["resume"].collidepoint(pos):
+                        is_paused_client = False
+                    elif pause_rects_client.get("quit") and pause_rects_client["quit"].collidepoint(pos):
+                        client.stop(); return   # seul endroit qui déconnecte
 
         # Récupérer l'état depuis le serveur
         state = client.get_state()
@@ -1085,9 +1132,11 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             local_player  = RemotePlayer(100, 100)
             group.add(remote_player)
             group.add(local_player)
-            remote_enemies     = {}
-            remote_items       = {}
-            remote_projectiles = {}
+            remote_enemies        = {}   # id → RemoteEnemy
+            remote_enemy_etypes   = {}   # id → etype (pour particules)
+            remote_items          = {}   # (x,y,type) → Item
+            remote_projectiles    = {}   # id → Projectile
+            client_particles_grp  = pygame.sprite.Group()
 
         players_state  = state.get('players',     [{}, {}])
         enemies_state  = state.get('enemies',     [])
@@ -1104,14 +1153,25 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         current_eids = {e['id'] for e in enemies_state}
         for eid in list(remote_enemies.keys()):
             if eid not in current_eids:
-                remote_enemies[eid].kill()
+                re = remote_enemies[eid]
+                # Spawner des particules de mort localement
+                etype = remote_enemy_etypes.get(eid, 'enemy')
+                ParticleClass = DarkParticle if etype in ('necromancer', 'spirit') else BloodParticle
+                for _ in range(15):
+                    p = ParticleClass(re.rect.centerx, re.rect.centery)
+                    group.add(p)
+                    client_particles_grp.add(p)
+                re.kill()
                 del remote_enemies[eid]
+                remote_enemy_etypes.pop(eid, None)
         for edata in enemies_state:
             eid = edata['id']
             if eid not in remote_enemies:
-                re = RemoteEnemy(edata.get('etype', 'enemy'))
+                etype = edata.get('etype', 'enemy')
+                re = RemoteEnemy(etype)
                 group.add(re)
-                remote_enemies[eid] = re
+                remote_enemies[eid]      = re
+                remote_enemy_etypes[eid] = etype
             remote_enemies[eid].update_from_state(edata)
 
         # --- Items distants ---
@@ -1149,21 +1209,6 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 rp.hitbox.centerx = pdata['x']
                 rp.hitbox.centery = pdata['y']
 
-        # Capturer et envoyer les inputs locaux
-        keys = pygame.key.get_pressed()
-        inputs = {
-            'up':      bool(keys[pygame.K_z]),
-            'down':    bool(keys[pygame.K_s]),
-            'left':    bool(keys[pygame.K_q]),
-            'right':   bool(keys[pygame.K_d]),
-            'attack':  bool(keys[pygame.K_e]),
-            'interact': bool(keys[pygame.K_f]),
-            'dash':    bool(keys[pygame.K_LSHIFT]),
-            'weapon1': bool(keys[pygame.K_1]),
-            'weapon2': bool(keys[pygame.K_2]),
-        }
-        client.send_inputs(inputs)
-
         # --- Caméra sur le joueur local (index 1) ---
         if local_player:
             view_w = screen_width / zoom_level
@@ -1178,20 +1223,52 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 
         group.draw(screen)
 
-        # --- HUD joueur local ---
+        # Animer les particules locales (sang, fumée, etc.)
+        client_particles_grp.update()
+
+        # --- Pause menu ---
+        if is_paused_client:
+            # Envoyer des inputs vides pendant la pause
+            client.send_inputs({})
+            pause_rects_client = ui.draw_pause_menu(global_music_vol, global_sfx_vol)
+            pygame.display.flip()
+            clock.tick(60)
+            continue
+
+        # --- Capturer et envoyer les inputs locaux ---
+        keys = pygame.key.get_pressed()
+        inputs = {
+            'up':      bool(keys[pygame.K_z]),
+            'down':    bool(keys[pygame.K_s]),
+            'left':    bool(keys[pygame.K_q]),
+            'right':   bool(keys[pygame.K_d]),
+            'attack':  bool(keys[pygame.K_e]),
+            'interact': bool(keys[pygame.K_f]),
+            'dash':    bool(keys[pygame.K_LSHIFT]),
+            'weapon1': bool(keys[pygame.K_1]),
+            'weapon2': bool(keys[pygame.K_2]),
+        }
+        client.send_inputs(inputs)
+
+        # --- HUD joueur local (complet) ---
         lp_state = players_state[1] if len(players_state) >= 2 else {}
         ui.draw_health_bar(lp_state.get('health', 100), lp_state.get('max_health', 100))
+        ui.draw_weapon_icon(lp_state.get('current_weapon', None))
+        ui.draw_pickaxe_icon(lp_state.get('has_pickaxe', False))
+        ui.draw_ammo_count(lp_state.get('current_weapon', None), lp_state.get('arrows', 0))
+        ui.draw_boots_icon(lp_state.get('has_boots', False), lp_state.get('dash_cr', 1.0))
 
-        # Barre de vie joueur distant (serveur)
+        # Barre de vie du joueur hôte (en haut à droite)
         rp_state = players_state[0] if len(players_state) >= 1 else {}
-        _draw_remote_health(screen, rp_state.get('health', 100), rp_state.get('max_health', 100))
+        _draw_remote_health(screen, rp_state.get('health', 100), rp_state.get('max_health', 100), label='HÔTE')
 
         # Indicateur multijoueur
         mp_surf = font_small.render("● MULTIJOUEUR (CLIENT)", True, (80, 200, 80))
         screen.blit(mp_surf, (screen_width - mp_surf.get_width() - 10, 10))
 
         # --- Mort joueur local ---
-        lp_health = lp_state.get('health', 100)
+        lp_health  = lp_state.get('health', 100)
+        game_over  = state.get('game_over', False)
         if lp_health <= 0:
             if death_time is None: death_time = pygame.time.get_ticks()
             elapsed = pygame.time.get_ticks() - death_time
@@ -1205,7 +1282,8 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 dt_surf = death_font.render("Vous êtes mort", True, (255, 255, 255))
                 dt_surf.set_alpha(int(255 * prog))
                 screen.blit(dt_surf, dt_surf.get_rect(center=(screen_width // 2, screen_height // 2)))
-            if elapsed > 5000:
+            # Ne quitter que lorsque les DEUX joueurs sont morts (signal serveur)
+            if game_over and elapsed > 5000:
                 client.stop(); return
         else:
             death_time = None
@@ -1251,7 +1329,7 @@ def _handle_enemy_death(enemy, group, items_group, particles_group):
             group.add(p); particles_group.add(p)
 
 
-def _draw_remote_health(screen, health, max_health):
+def _draw_remote_health(screen, health, max_health, label='P2'):
     """Barre de vie du joueur distant, affichée en haut à droite."""
     bar_w, bar_h = 150, 15
     x = screen.get_width() - bar_w - 20
@@ -1262,7 +1340,7 @@ def _draw_remote_health(screen, health, max_health):
     pygame.draw.rect(screen, color, (x, y, int(bar_w * ratio), bar_h))
     pygame.draw.rect(screen, (255, 255, 255), (x, y, bar_w, bar_h), 2)
     font = pygame.font.SysFont(None, 20)
-    lbl = font.render("P2", True, (200, 200, 200))
+    lbl = font.render(label, True, (200, 200, 200))
     screen.blit(lbl, (x - lbl.get_width() - 5, y))
 
 

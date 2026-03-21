@@ -144,7 +144,7 @@
   <object id="15" type="collision" x="945.25" y="464.75" width="93.75" height="62.25"/>
  </objectgroup>
  <objectgroup id="5" name="spawn">
-  <object id="16" type="necromancer" x="918.667" y="739">
+  <object id="16" type="bigenemy" x="918.667" y="739">
    <point/>
   </object>
   <object id="20" type="player" x="149" y="184.333">

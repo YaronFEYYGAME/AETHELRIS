@@ -143,7 +143,7 @@ class SoundManager:
     # LECTURE SPATIALISÉE — pour tous les SFX du jeu
     # ------------------------------------------------------------------
     # Distance max réduite pour les sons de boss (plus réaliste)
-    BOSS_MAX_DISTANCE = 350
+    BOSS_MAX_DISTANCE = 220
 
     # Sons de boss qui utilisent une distance réduite
     _BOSS_SOUNDS = {'boss_activation', 'boss_attack', 'boss_death', 'boss_talk'}
@@ -169,12 +169,14 @@ class SoundManager:
             return  # trop loin, on ne joue rien
 
         base = self.base_volumes.get(sound_name, 1.0)
-        final_vol = base * self.global_sfx_vol * volume
+        final_vol = min(1.0, base * self.global_sfx_vol * volume)
 
         ch = self._get_channel()
         if ch:
+            left = min(1.0, final_vol * left_f)
+            right = min(1.0, final_vol * right_f)
             ch.play(sound)
-            ch.set_volume(final_vol * left_f, final_vol * right_f)
+            ch.set_volume(left, right)
 
     def play_spatial_dash(self, source_pos, listener_pos):
         """Joue un son de dash aléatoire spatialisé."""

@@ -314,16 +314,37 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
             player.update()
             player.move(walls)
             
+            ppos = (player.feet.centerx, player.feet.centery)
             for enemy in enemies_group:
                 enemy.update(player, walls)
-                
+
                 if hasattr(enemy, 'pending_summons') and enemy.pending_summons:
                     for sx, sy in enemy.pending_summons:
                         new_spirit = Spirit(sx, sy)
                         group.add(new_spirit)
                         enemies_group.add(new_spirit)
                     enemy.pending_summons.clear()
-                
+
+                # Jouer les sons des boss via le SpatialAudioManager
+                if hasattr(enemy, 'pending_sounds') and enemy.pending_sounds:
+                    boss_pos = (enemy.feet.centerx, enemy.feet.centery)
+                    for bs in enemy.pending_sounds:
+                        if bs == 'boss_bgm_start':
+                            try:
+                                pygame.mixer.music.load("assets/sounds/boss1_soundtrack.mp3")
+                                pygame.mixer.music.set_volume(global_music_vol)
+                                pygame.mixer.music.play(-1)
+                            except Exception:
+                                pass
+                        elif bs == 'boss_bgm_stop':
+                            try:
+                                pygame.mixer.music.fadeout(4000)
+                            except Exception:
+                                pass
+                        else:
+                            sound_manager.play_spatial(bs, boss_pos, ppos)
+                    enemy.pending_sounds.clear()
+
             projectiles_group.update()
             particles_group.update()
 
@@ -945,8 +966,20 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                     boss_pos = (e.feet.centerx, e.feet.centery)
                     for bs in e.pending_sounds:
                         if isinstance(bs, str):
-                            # Son de boss spatialisé pour le host
-                            if not bs.startswith('boss_bgm'):
+                            if bs == 'boss_bgm_start':
+                                try:
+                                    pygame.mixer.music.load("assets/sounds/boss1_soundtrack.mp3")
+                                    pygame.mixer.music.set_volume(global_music_vol)
+                                    pygame.mixer.music.play(-1)
+                                except Exception:
+                                    pass
+                            elif bs == 'boss_bgm_stop':
+                                try:
+                                    pygame.mixer.music.fadeout(4000)
+                                except Exception:
+                                    pass
+                            else:
+                                # Son de boss spatialisé pour le host
                                 sound_manager.play_spatial(bs, boss_pos, host_pos)
                             sound_events.append({'sound': bs, 'x': boss_pos[0], 'y': boss_pos[1]})
                         else:

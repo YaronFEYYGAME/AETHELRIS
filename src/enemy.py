@@ -269,23 +269,7 @@ class BigEnemy(pygame.sprite.Sprite):
         self.has_aggro = False
         self.pending_drop = None
         
-        try:
-            self.sound_activation = pygame.mixer.Sound("assets/sounds/boss1_activation.wav")
-            self.sound_talk = pygame.mixer.Sound("assets/sounds/boss1_talk.wav")
-            self.sound_death = pygame.mixer.Sound("assets/sounds/boss1_death.wav")
-            self.sound_attack = pygame.mixer.Sound("assets/sounds/boss1_attack.wav")
-            
-            self.sound_activation.set_volume(0.4) 
-            self.sound_talk.set_volume(0.35) 
-            self.sound_death.set_volume(0.45)
-            self.sound_attack.set_volume(0.4) 
-        except Exception as e:
-            print(f"⚠️ Erreur de chargement des sons du Boss: {e}")
-            self.sound_activation = None
-            self.sound_talk = None
-            self.sound_death = None
-            self.sound_attack = None
-
+        # Sons gérés via pending_sounds → SpatialAudioManager dans game.py
         self.activation_played = False
         self.death_sound_played = False
         self.last_talk_time = 0
@@ -335,16 +319,11 @@ class BigEnemy(pygame.sprite.Sprite):
                 self.velocity.xy = 0, 0
                 self._is_blinking = False
                 
-                if not self.death_sound_played and self.sound_death:
-                    self.sound_death.play()
+                if not self.death_sound_played:
                     self.death_sound_played = True
                     self.pending_sounds.append('boss_death')
 
                 if self.bgm_playing:
-                    try:
-                        pygame.mixer.music.fadeout(4000)
-                    except Exception:
-                        pass
                     self.bgm_playing = False
                     self.pending_sounds.append('boss_bgm_stop')
             else:
@@ -368,28 +347,17 @@ class BigEnemy(pygame.sprite.Sprite):
         if distance < self.aggro_radius and player.health > 0:
             if not self.has_aggro:
                 self.has_aggro = True
-                if not self.activation_played and self.sound_activation:
-                    self.sound_activation.play()
+                if not self.activation_played:
                     self.activation_played = True
                     self.pending_sounds.append('boss_activation')
 
                 if not self.bgm_playing:
-                    try:
-                        pygame.mixer.music.load("assets/sounds/boss1_soundtrack.mp3")
-                        pygame.mixer.music.set_volume(0.5)
-                        pygame.mixer.music.play(-1)
-                        self.bgm_playing = True
-                        self.pending_sounds.append('boss_bgm_start')
-                    except Exception as e:
-                        print(f"⚠️ Erreur de chargement de la musique du Boss: {e}")
+                    self.bgm_playing = True
+                    self.pending_sounds.append('boss_bgm_start')
 
         elif player.health <= 0:
             self.has_aggro = False
             if self.bgm_playing:
-                try:
-                    pygame.mixer.music.fadeout(4000)
-                except Exception:
-                    pass
                 self.bgm_playing = False
                 self.pending_sounds.append('boss_bgm_stop')
 
@@ -397,8 +365,6 @@ class BigEnemy(pygame.sprite.Sprite):
             if current_time - self.last_talk_time > self.talk_cooldown:
                 import random
                 if random.randint(1, 150) <= 1:
-                    if self.sound_talk:
-                        self.sound_talk.play()
                     self.pending_sounds.append('boss_talk')
                     self.last_talk_time = current_time
                     self.talk_count += 1
@@ -422,9 +388,7 @@ class BigEnemy(pygame.sprite.Sprite):
                 self.has_dealt_damage_1 = True 
                 
             elif current_frame == 5 and not self.has_dealt_damage_2:
-                if self.sound_attack:
-                    self.sound_attack.play()
-                    self.pending_sounds.append('boss_attack')
+                self.pending_sounds.append('boss_attack')
 
                 attack_area = self.get_attack_hitbox()
                 if attack_area.colliderect(player.feet.inflate(20, 20)) and player.health > 0:
@@ -449,9 +413,7 @@ class BigEnemy(pygame.sprite.Sprite):
                         self.has_dealt_damage_2 = False
                         self.velocity.xy = 0, 0
                         
-                        if self.sound_attack:
-                            self.sound_attack.play()
-                            self.pending_sounds.append('boss_attack')
+                        self.pending_sounds.append('boss_attack')
                     else:
                         self.state = 'idle'
                         self.velocity.xy = 0, 0
@@ -527,7 +489,7 @@ class BigEnemy(pygame.sprite.Sprite):
         self.animate()
 
     def get_attack_hitbox(self):
-        range_attack = 90
+        range_attack = 135
         width_attack = 50
 
         attack_rect = pygame.Rect(0, 0, range_attack, width_attack)
@@ -772,11 +734,7 @@ class Necromancer(pygame.sprite.Sprite):
         self.slide_dir_y = 1
         self.pending_sounds = []
 
-        try:
-            self.sound_attack = pygame.mixer.Sound("assets/sounds/boss1_attack.wav")
-            self.sound_attack.set_volume(0.4)
-        except:
-            self.sound_attack = None
+        # Sons gérés via pending_sounds → SpatialAudioManager dans game.py
 
     def load_grid_animation(self, state_name, path, cols, rows, num_frames):
         try:
@@ -819,8 +777,6 @@ class Necromancer(pygame.sprite.Sprite):
                 self._is_blinking = False
                 self.pending_sounds.append('boss_death')
                 if self.bgm_playing:
-                    try: pygame.mixer.music.fadeout(4000)
-                    except: pass
                     self.bgm_playing = False
                     self.pending_sounds.append('boss_bgm_stop')
 
@@ -839,19 +795,12 @@ class Necromancer(pygame.sprite.Sprite):
             if not self.has_aggro:
                 self.has_aggro = True
             if not self.bgm_playing:
-                try:
-                    pygame.mixer.music.load("assets/sounds/boss1_soundtrack.mp3")
-                    pygame.mixer.music.set_volume(0.5)
-                    pygame.mixer.music.play(-1)
-                    self.bgm_playing = True
-                    self.pending_sounds.append('boss_bgm_start')
-                except: pass
+                self.bgm_playing = True
+                self.pending_sounds.append('boss_bgm_start')
         elif player.health <= 0:
             self.has_aggro = False
             self._is_blinking = False
             if self.bgm_playing:
-                try: pygame.mixer.music.fadeout(4000)
-                except: pass
                 self.bgm_playing = False
                 self.pending_sounds.append('boss_bgm_stop')
 
@@ -873,9 +822,7 @@ class Necromancer(pygame.sprite.Sprite):
             current_frame = int(self.frame_index)
             # Frame 6 : la faux est au bas de son premier balayage (impact visuel)
             if current_frame == 6 and not self.has_dealt_damage_1:
-                if self.sound_attack:
-                    self.sound_attack.play()
-                    self.pending_sounds.append('boss_attack')
+                self.pending_sounds.append('boss_attack')
                 attack_area = self.get_attack_hitbox(salve=1)
                 if self._hits_player(attack_area, player) and player.health > 0:
                     player.damage(self.damage_amount)
@@ -883,9 +830,7 @@ class Necromancer(pygame.sprite.Sprite):
                 self.has_dealt_damage_1 = True
             # Frame 11 : second balayage, faux au plus bas
             elif current_frame == 11 and not self.has_dealt_damage_2:
-                if self.sound_attack:
-                    self.sound_attack.play()
-                    self.pending_sounds.append('boss_attack')
+                self.pending_sounds.append('boss_attack')
                 attack_area = self.get_attack_hitbox(salve=2)
                 if self._hits_player(attack_area, player) and player.health > 0:
                     player.damage(self.damage_amount)
@@ -981,7 +926,7 @@ class Necromancer(pygame.sprite.Sprite):
         # Ancrage sur feet.centerx : la zone part du centre du boss
         # et s'étend uniquement devant lui (dans la direction du regard).
         # Salve 2 : légèrement plus large pour le second balayage ample.
-        width = 65 if salve == 1 else 80
+        width = 95 if salve == 1 else 115
         height = 80
         attack_rect = pygame.Rect(0, 0, width, height)
 

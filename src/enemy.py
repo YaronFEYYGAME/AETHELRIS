@@ -537,10 +537,7 @@ class BigEnemy(pygame.sprite.Sprite):
             self.image.blit(red_overlay, (0, 0))
     
     def update_volumes(self, music_vol, sfx_vol):
-        if self.sound_activation: self.sound_activation.set_volume(sfx_vol * 0.5)
-        if self.sound_talk: self.sound_talk.set_volume(sfx_vol * 0.45) 
-        if self.sound_death: self.sound_death.set_volume(sfx_vol * 0.55)
-        if self.sound_attack: self.sound_attack.set_volume(sfx_vol * 0.5)
+        # Sons gérés via pending_sounds → SpatialAudioManager, rien à ajuster ici
         pygame.mixer.music.set_volume(music_vol)
 
 # =====================================================================
@@ -977,7 +974,7 @@ class Necromancer(pygame.sprite.Sprite):
                 self._is_blinking = False
             
     def update_volumes(self, music_vol, sfx_vol):
-        if self.sound_attack: self.sound_attack.set_volume(sfx_vol * 0.5)
+        # Sons gérés via pending_sounds → SpatialAudioManager, rien à ajuster ici
         pygame.mixer.music.set_volume(music_vol)
 
 

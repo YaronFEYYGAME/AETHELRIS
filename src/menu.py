@@ -186,11 +186,19 @@ def _hosting_screen(screen):
         _draw_centered(screen, font_small, f"IP locale : {local_ip}", cy + 50, (160, 200, 255))
         _draw_centered(screen, font_hint,
                        "L'autre joueur peut entrer le code OU l'IP complète",
-                       cy + 78, (110, 110, 130))
+                       cy + 73, (110, 110, 130))
+
+        # Notice pare-feu Windows
+        _draw_centered(screen, font_hint,
+                       f"Port TCP : {GameServer.PORT}  —  Si connexion impossible :",
+                       cy + 98, (140, 110, 60))
+        _draw_centered(screen, font_hint,
+                       "Autorisez Python dans le Pare-feu Windows",
+                       cy + 116, (180, 130, 60))
 
         # Animation d'attente
         wait_str  = "Attente" + "." * dots
-        _draw_centered(screen, font_hint, wait_str, cy + 105, (130, 130, 130))
+        _draw_centered(screen, font_hint, wait_str, cy + 135, (130, 130, 130))
 
         draw_button(screen, btn_cancel, "Annuler")
         pygame.display.flip()

@@ -8,6 +8,7 @@ from sound import SoundManager
 from enemy import Enemy, BigEnemy, Necromancer, Spirit, RemoteEnemy
 from ui import UI
 from item import Item
+from projectile import Projectile
 from obstacle import Rock, RockParticle, BloodParticle, SmokeParticle, DarkParticle
 
 # Fonction utilitaire pour dessiner les hitboxes par-dessus le zoom de la caméra
@@ -542,21 +543,31 @@ def _serialize_enemy(e):
         etype = 'spirit'
     else:
         etype = 'enemy'
+    health = getattr(e, 'health', 1)
     return {
-        'id': getattr(e, '_mp_id', id(e)),
-        'x': e.feet.centerx,
-        'y': e.feet.bottom,
-        'state': e.state,
-        'direction': e.facing,
-        'frame': e.frame_index,
-        'health': e.health,
-        'max_health': e.max_health,
-        'etype': etype,
+        'id':        getattr(e, '_mp_id', id(e)),
+        'x':         getattr(e.feet, 'centerx', 0) if hasattr(e, 'feet') else 0,
+        'y':         getattr(e.feet, 'bottom',  0) if hasattr(e, 'feet') else 0,
+        'state':     getattr(e, 'state',       'idle'),
+        'direction': getattr(e, 'facing',      'right'),
+        'frame':     getattr(e, 'frame_index', 0),
+        'health':    health,
+        'max_health': getattr(e, 'max_health', health),  # Spirit n'a pas max_health
+        'etype':     etype,
     }
 
 
 def _serialize_item(item):
     return {'x': item.rect.x, 'y': item.rect.y, 'type': item.item_type}
+
+
+def _serialize_projectile(proj):
+    return {
+        'id':        getattr(proj, '_mp_id', id(proj)),
+        'x':         proj.rect.centerx,
+        'y':         proj.rect.centery,
+        'direction': getattr(proj, 'direction', 'right'),
+    }
 
 
 def _load_level(level_path, screen_width, screen_height):
@@ -872,6 +883,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
 
             new_proj = player.check_ranged_attack()
             if new_proj:
+                new_proj._mp_id = _next_id()
                 group.add(new_proj); projectiles_group.add(new_proj)
 
             for proj in list(projectiles_group):
@@ -965,10 +977,11 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
 
             # --- Envoi état au client ---
             state = {
-                'level': current_level_index,
-                'players': [_serialize_player(player), _serialize_player(player2)],
-                'enemies': [_serialize_enemy(e) for e in enemies_group],
-                'items':   [_serialize_item(it)  for it in items_group],
+                'level':       current_level_index,
+                'players':     [_serialize_player(player), _serialize_player(player2)],
+                'enemies':     [_serialize_enemy(e)        for e    in enemies_group],
+                'items':       [_serialize_item(it)        for it   in items_group],
+                'projectiles': [_serialize_projectile(pr)  for pr   in projectiles_group],
             }
             server.send_state(state)
 
@@ -1021,9 +1034,11 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
     loaded_level = -1
 
     group = None
-    remote_enemies = {}  # id → RemoteEnemy sprite
-    remote_player  = None  # sprite du joueur serveur
-    local_player   = None  # sprite du joueur client (pos de référence caméra)
+    remote_enemies     = {}   # id  → RemoteEnemy sprite
+    remote_items       = {}   # (x,y,type) → Item sprite
+    remote_projectiles = {}   # id  → Projectile sprite
+    remote_player = None      # sprite du joueur serveur
+    local_player  = None      # sprite du joueur client (pos de référence caméra)
 
     map_pixel_width  = 0
     map_pixel_height = 0
@@ -1070,22 +1085,25 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             local_player  = RemotePlayer(100, 100)
             group.add(remote_player)
             group.add(local_player)
-            remote_enemies = {}
+            remote_enemies     = {}
+            remote_items       = {}
+            remote_projectiles = {}
 
-        players_state  = state.get('players', [{}, {}])
-        enemies_state  = state.get('enemies', [])
-        items_state    = state.get('items', [])
+        players_state  = state.get('players',     [{}, {}])
+        enemies_state  = state.get('enemies',     [])
+        items_state    = state.get('items',       [])
+        projs_state    = state.get('projectiles', [])
 
-        # Mise à jour joueurs
+        # --- Joueurs ---
         if len(players_state) >= 1 and remote_player:
             remote_player.update_from_state(players_state[0])
         if len(players_state) >= 2 and local_player:
             local_player.update_from_state(players_state[1])
 
-        # Mise à jour ennemis distants
-        current_ids = {e['id'] for e in enemies_state}
+        # --- Ennemis distants ---
+        current_eids = {e['id'] for e in enemies_state}
         for eid in list(remote_enemies.keys()):
-            if eid not in current_ids:
+            if eid not in current_eids:
                 remote_enemies[eid].kill()
                 del remote_enemies[eid]
         for edata in enemies_state:
@@ -1095,6 +1113,41 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 group.add(re)
                 remote_enemies[eid] = re
             remote_enemies[eid].update_from_state(edata)
+
+        # --- Items distants ---
+        # Clé = (x, y, type) : les items ne bougent pas
+        current_ikeys = {(d['x'], d['y'], d['type']) for d in items_state}
+        for ikey in list(remote_items.keys()):
+            if ikey not in current_ikeys:
+                remote_items[ikey].kill()
+                del remote_items[ikey]
+        for d in items_state:
+            ikey = (d['x'], d['y'], d['type'])
+            if ikey not in remote_items:
+                it = Item(0, 0, d['type'])
+                it.rect.x = d['x']
+                it.rect.y = d['y']
+                group.add(it)
+                remote_items[ikey] = it
+
+        # --- Projectiles distants ---
+        current_pids = {p['id'] for p in projs_state}
+        for pid in list(remote_projectiles.keys()):
+            if pid not in current_pids:
+                remote_projectiles[pid].kill()
+                del remote_projectiles[pid]
+        for pdata in projs_state:
+            pid = pdata['id']
+            if pid not in remote_projectiles:
+                rp = Projectile(pdata['x'], pdata['y'], pdata['direction'])
+                group.add(rp)
+                remote_projectiles[pid] = rp
+            else:
+                rp = remote_projectiles[pid]
+                rp.rect.centerx   = pdata['x']
+                rp.rect.centery   = pdata['y']
+                rp.hitbox.centerx = pdata['x']
+                rp.hitbox.centery = pdata['y']
 
         # Capturer et envoyer les inputs locaux
         keys = pygame.key.get_pressed()

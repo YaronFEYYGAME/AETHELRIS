@@ -214,17 +214,24 @@ class GameClient:
         except ConnectionRefusedError:
             self.last_error = (
                 f"Connexion refusée par {host_ip}:{self.PORT}\n"
-                "Vérifiez que le serveur est bien lancé et que le pare-feu l'autorise."
+                "→ Vérifiez que l'hôte a bien lancé \"Héberger\" avant vous.\n"
+                "→ Sur Windows : autorisez Python dans le Pare-feu Windows\n"
+                "  (Panneau de config > Pare-feu > Autoriser une application)"
             )
             return False
         except socket.timeout:
             self.last_error = (
                 f"Timeout — {host_ip}:{self.PORT} ne répond pas ({timeout} s)\n"
-                "Vérifiez l'IP/code et que les deux machines sont sur le même réseau."
+                "→ Vérifiez que les deux PC sont sur le même réseau WiFi.\n"
+                "→ Sur Windows : autorisez Python dans le Pare-feu Windows\n"
+                f"  Port utilisé : TCP {self.PORT}"
             )
             return False
         except OSError as e:
-            self.last_error = f"Erreur réseau : {e}"
+            self.last_error = (
+                f"Erreur réseau : {e}\n"
+                f"→ Vérifiez l'IP saisie et le port TCP {self.PORT}"
+            )
             return False
 
     def _recv_loop(self):

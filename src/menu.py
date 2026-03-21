@@ -1,9 +1,10 @@
 import pygame
 import sys
+import threading
 from utils import draw_pixel_text, draw_button
 from ui import UI
 from sound import SoundManager
-from network import GameServer, GameClient, get_local_ip, ip_to_code, scan_for_host
+from network import GameServer, GameClient, get_local_ip, ip_to_code, resolve_host
 
 
 def start_menu(screen):
@@ -15,10 +16,10 @@ def start_menu(screen):
     ui = UI(screen)
     sound_manager = SoundManager()
 
-    screen_width = screen.get_width()
+    screen_width  = screen.get_width()
     screen_height = screen.get_height()
 
-    button_width = 200
+    button_width  = 200
     button_height = 55
     button_x = (screen_width - button_width) // 2
 
@@ -28,8 +29,7 @@ def start_menu(screen):
     settings_button = pygame.Rect(button_x, 485, button_width, button_height)
     quit_button     = pygame.Rect(button_x, 550, button_width, button_height)
 
-    title = "AETHELRIS"
-    scale = 2
+    title   = "AETHELRIS"
     x_title = 50
     y_title = 50
 
@@ -39,8 +39,8 @@ def start_menu(screen):
     except FileNotFoundError:
         bg_image = None
 
-    music_vol = 0.5
-    sfx_vol = 0.8
+    music_vol   = 0.5
+    sfx_vol     = 0.8
     in_settings = False
     pause_rects = {}
 
@@ -57,7 +57,7 @@ def start_menu(screen):
         else:
             screen.fill((15, 10, 25))
 
-        draw_pixel_text(screen, title, x_title, y_title, scale, (150, 100, 255))
+        draw_pixel_text(screen, title, x_title, y_title, 2, (150, 100, 255))
 
         if not in_settings:
             draw_button(screen, play_button,     "JOUER")
@@ -80,18 +80,16 @@ def start_menu(screen):
                         return music_vol, sfx_vol, 'solo', None
 
                     if host_button.collidepoint(event.pos):
-                        result = _hosting_screen(screen, music_vol, sfx_vol)
+                        result = _hosting_screen(screen)
                         if result:
-                            server_obj = result
                             pygame.mixer.music.stop()
-                            return music_vol, sfx_vol, 'host', server_obj
+                            return music_vol, sfx_vol, 'host', result
 
                     if join_button.collidepoint(event.pos):
-                        result = _join_screen(screen, music_vol, sfx_vol)
+                        result = _join_screen(screen)
                         if result:
-                            client_obj = result
                             pygame.mixer.music.stop()
-                            return music_vol, sfx_vol, 'join', client_obj
+                            return music_vol, sfx_vol, 'join', result
 
                     if settings_button.collidepoint(event.pos):
                         in_settings = True
@@ -122,41 +120,43 @@ def start_menu(screen):
 
 
 # ---------------------------------------------------------------------------
-# Écran "Héberger" : démarre le serveur, affiche le code, attend le client
+# Écran "Héberger"
 # ---------------------------------------------------------------------------
 
-def _hosting_screen(screen, music_vol, sfx_vol):
-    """Affiche le code d'accès et attend qu'un client se connecte.
-    Retourne le GameServer connecté, ou None si annulé."""
-    clock = pygame.time.Clock()
-    font_big  = pygame.font.SysFont(None, 80)
-    font_med  = pygame.font.SysFont(None, 36)
+def _hosting_screen(screen):
+    """Démarre le serveur, affiche le code + l'IP, attend un client.
+    Retourne le GameServer une fois connecté, ou None si annulé."""
+    clock      = pygame.time.Clock()
+    font_big   = pygame.font.SysFont(None, 90)
+    font_med   = pygame.font.SysFont(None, 38)
     font_small = pygame.font.SysFont(None, 28)
+    font_hint  = pygame.font.SysFont(None, 24)
 
     local_ip = get_local_ip()
-    code = ip_to_code(local_ip)
+    code     = ip_to_code(local_ip)
     code_str = f"{code:03d}"
 
     server = GameServer()
     try:
         server.start()
     except Exception as e:
-        _show_error(screen, f"Impossible de démarrer le serveur : {e}")
+        _show_error(screen, f"Impossible de démarrer le serveur :\n{e}")
         return None
 
-    btn_cancel = pygame.Rect(screen.get_width() // 2 - 100, screen.get_height() // 2 + 120, 200, 50)
+    sw, sh = screen.get_size()
+    cy     = sh // 2
+    btn_cancel = pygame.Rect(sw // 2 - 100, cy + 140, 200, 50)
 
-    dots = 0
+    dots      = 0
     dot_timer = 0
 
     while True:
         dt = clock.tick(60)
         dot_timer += dt
-        if dot_timer > 400:
-            dots = (dots + 1) % 4
+        if dot_timer > 450:
+            dots      = (dots + 1) % 4
             dot_timer = 0
 
-        # Client connecté ?
         if server.client_arrived:
             return server
 
@@ -175,140 +175,192 @@ def _hosting_screen(screen, music_vol, sfx_vol):
 
         screen.fill((15, 10, 25))
 
-        # Titre
-        t = font_med.render("EN ATTENTE D'UN JOUEUR", True, (200, 180, 255))
-        screen.blit(t, t.get_rect(center=(screen.get_width() // 2, screen.get_height() // 2 - 120)))
+        _draw_centered(screen, font_med,   "EN ATTENTE D'UN JOUEUR",   cy - 140, (200, 180, 255))
+        _draw_centered(screen, font_small, "Donnez ce code à l'autre joueur :", cy - 80, (180, 180, 180))
 
-        # Code
-        label = font_small.render("Code à communiquer :", True, (180, 180, 180))
-        screen.blit(label, label.get_rect(center=(screen.get_width() // 2, screen.get_height() // 2 - 60)))
-
+        # Code (grand, jaune)
         code_surf = font_big.render(code_str, True, (255, 220, 50))
-        screen.blit(code_surf, code_surf.get_rect(center=(screen.get_width() // 2, screen.get_height() // 2)))
+        screen.blit(code_surf, code_surf.get_rect(center=(sw // 2, cy - 20)))
 
-        # IP info
-        ip_surf = font_small.render(f"(IP locale : {local_ip})", True, (120, 120, 120))
-        screen.blit(ip_surf, ip_surf.get_rect(center=(screen.get_width() // 2, screen.get_height() // 2 + 55)))
+        # IP complète (pour saisie directe)
+        _draw_centered(screen, font_small, f"IP locale : {local_ip}", cy + 50, (160, 200, 255))
+        _draw_centered(screen, font_hint,
+                       "L'autre joueur peut entrer le code OU l'IP complète",
+                       cy + 78, (110, 110, 130))
 
-        # Attente animée
-        wait_str = "Attente" + "." * dots
-        wait_surf = font_small.render(wait_str, True, (150, 150, 150))
-        screen.blit(wait_surf, wait_surf.get_rect(center=(screen.get_width() // 2, screen.get_height() // 2 + 85)))
+        # Animation d'attente
+        wait_str  = "Attente" + "." * dots
+        _draw_centered(screen, font_hint, wait_str, cy + 105, (130, 130, 130))
 
-        # Bouton annuler
         draw_button(screen, btn_cancel, "Annuler")
-
         pygame.display.flip()
 
 
 # ---------------------------------------------------------------------------
-# Écran "Rejoindre" : saisie du code à 3 chiffres, connexion au serveur
+# Écran "Rejoindre"
 # ---------------------------------------------------------------------------
 
-def _join_screen(screen, music_vol, sfx_vol):
-    """Affiche un champ de saisie pour le code à 3 chiffres.
+def _join_screen(screen):
+    """Affiche un champ de saisie (code OU IP).
     Retourne le GameClient connecté, ou None si annulé."""
-    clock = pygame.time.Clock()
-    font_big   = pygame.font.SysFont(None, 80)
-    font_med   = pygame.font.SysFont(None, 36)
+    clock      = pygame.time.Clock()
+    font_big   = pygame.font.SysFont(None, 72)
+    font_med   = pygame.font.SysFont(None, 38)
     font_small = pygame.font.SysFont(None, 28)
+    font_hint  = pygame.font.SysFont(None, 24)
 
-    code_input = ""
-    status_msg = ""
-    status_color = (200, 200, 200)
-    searching = False
+    sw, sh = screen.get_size()
+    cy     = sh // 2
 
-    btn_connect = pygame.Rect(screen.get_width() // 2 - 100, screen.get_height() // 2 + 100, 200, 50)
-    btn_cancel  = pygame.Rect(screen.get_width() // 2 - 100, screen.get_height() // 2 + 165, 200, 50)
+    user_input   = ""   # code (3 chiffres) OU IP complète
+    status_msg   = ""
+    status_color = (255, 80, 80)
+
+    btn_connect = pygame.Rect(sw // 2 - 105, cy + 110, 200, 50)
+    btn_cancel  = pygame.Rect(sw // 2 - 105, cy + 175, 200, 50)
+
+    # État de la tentative de connexion async
+    connecting    = [False]
+    result_box    = [None]   # GameClient ou None
+    error_box     = [""]
+
+    def _do_connect(inp):
+        connecting[0] = True
+        ip = resolve_host(inp)
+        if ip is None:
+            error_box[0] = (
+                f"Entrée invalide : \"{inp}\"\n"
+                "Entrez un code à 3 chiffres (ex: 047) ou une IP (ex: 192.168.1.47)"
+            )
+            result_box[0] = None
+            connecting[0] = False
+            return
+        client = GameClient()
+        ok = client.connect(ip, timeout=5)
+        if ok:
+            result_box[0] = client
+        else:
+            error_box[0] = client.last_error
+            result_box[0] = None
+        connecting[0] = False
 
     while True:
         clock.tick(60)
 
+        # Connexion en cours → spinner bloquant
+        if connecting[0]:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit(); sys.exit()
+            screen.fill((15, 10, 25))
+            _draw_centered(screen, font_med, "Connexion en cours…", cy - 20, (200, 180, 255))
+            ip_preview = resolve_host(user_input) or user_input
+            _draw_centered(screen, font_small, ip_preview, cy + 20, (160, 200, 255))
+            pygame.display.flip()
+            continue
+
+        # Résultat disponible ?
+        if result_box[0] is not None:
+            return result_box[0]
+        if error_box[0]:
+            status_msg   = error_box[0]
+            status_color = (255, 80, 80)
+            error_box[0] = ""
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
+                pygame.quit(); sys.exit()
+
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     return None
                 elif event.key == pygame.K_BACKSPACE:
-                    code_input = code_input[:-1]
+                    user_input = user_input[:-1]
                     status_msg = ""
                 elif event.key == pygame.K_RETURN:
-                    result = _try_connect(code_input)
-                    if result is None:
-                        status_msg = "Hôte introuvable. Vérifiez le code."
-                        status_color = (255, 80, 80)
-                    else:
-                        return result
-                elif event.unicode.isdigit() and len(code_input) < 3:
-                    code_input += event.unicode
-                    status_msg = ""
+                    if user_input:
+                        status_msg = ""
+                        t = threading.Thread(target=_do_connect, args=(user_input,), daemon=True)
+                        t.start()
+                elif event.unicode and len(user_input) < 15:
+                    c = event.unicode
+                    # N'accepte que chiffres et points (pour IP ou code)
+                    if c.isdigit() or c == '.':
+                        user_input += c
+                        status_msg = ""
 
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if btn_connect.collidepoint(event.pos):
-                    result = _try_connect(code_input)
-                    if result is None:
-                        status_msg = "Hôte introuvable. Vérifiez le code."
-                        status_color = (255, 80, 80)
-                    else:
-                        return result
+                if btn_connect.collidepoint(event.pos) and user_input:
+                    status_msg = ""
+                    t = threading.Thread(target=_do_connect, args=(user_input,), daemon=True)
+                    t.start()
                 if btn_cancel.collidepoint(event.pos):
                     return None
 
         screen.fill((15, 10, 25))
 
-        # Titre
-        t = font_med.render("ENTREZ LE CODE DE L'HÔTE", True, (200, 180, 255))
-        screen.blit(t, t.get_rect(center=(screen.get_width() // 2, screen.get_height() // 2 - 120)))
+        _draw_centered(screen, font_med, "REJOINDRE UNE PARTIE", cy - 130, (200, 180, 255))
 
-        label = font_small.render("Code à 3 chiffres :", True, (180, 180, 180))
-        screen.blit(label, label.get_rect(center=(screen.get_width() // 2, screen.get_height() // 2 - 60)))
+        _draw_centered(screen, font_small, "Code (3 chiffres) ou IP complète :", cy - 75, (180, 180, 180))
+        _draw_centered(screen, font_hint,  "Exemple :  047   ou   192.168.1.47",  cy - 50, (110, 110, 130))
 
         # Champ de saisie
-        display = code_input.ljust(3, '_')
-        code_surf = font_big.render(display, True, (255, 220, 50))
-        screen.blit(code_surf, code_surf.get_rect(center=(screen.get_width() // 2, screen.get_height() // 2)))
+        display   = user_input if user_input else "___"
+        field_col = (255, 220, 50) if user_input else (100, 100, 80)
+        field_surf = font_big.render(display, True, field_col)
+        screen.blit(field_surf, field_surf.get_rect(center=(sw // 2, cy + 5)))
 
-        # Message de statut
+        # Prévisualisation de l'IP résolue
+        if user_input:
+            preview_ip = resolve_host(user_input)
+            if preview_ip and '.' in user_input:
+                pass  # IP directe, pas de prévisualisation nécessaire
+            elif preview_ip:
+                prev_surf = font_hint.render(f"→ {preview_ip}", True, (100, 200, 100))
+                screen.blit(prev_surf, prev_surf.get_rect(center=(sw // 2, cy + 50)))
+            else:
+                prev_surf = font_hint.render("Entrée invalide", True, (200, 100, 100))
+                screen.blit(prev_surf, prev_surf.get_rect(center=(sw // 2, cy + 50)))
+
+        # Message de statut (erreur)
         if status_msg:
-            st_surf = font_small.render(status_msg, True, status_color)
-            screen.blit(st_surf, st_surf.get_rect(center=(screen.get_width() // 2, screen.get_height() // 2 + 60)))
+            # Affiche sur 2 lignes si besoin (le message peut contenir \n)
+            lines = status_msg.split('\n')
+            for i, line in enumerate(lines[:2]):
+                s = font_hint.render(line, True, status_color)
+                screen.blit(s, s.get_rect(center=(sw // 2, cy + 72 + i * 20)))
 
         draw_button(screen, btn_connect, "Connexion")
-        draw_button(screen, btn_cancel, "Annuler")
+        draw_button(screen, btn_cancel,  "Annuler")
 
         pygame.display.flip()
 
 
-def _try_connect(code_input):
-    """Tente de se connecter à l'hôte identifié par le code.
-    Retourne GameClient connecté ou None."""
-    if len(code_input) != 3 or not code_input.isdigit():
-        return None
-    code = int(code_input)
-    host_ip = scan_for_host(code)
-    if host_ip is None:
-        return None
-    client = GameClient()
-    if client.connect(host_ip, timeout=5):
-        return client
-    return None
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _draw_centered(surface, font, text, cy, color):
+    surf = font.render(text, True, color)
+    surface.blit(surf, surf.get_rect(center=(surface.get_width() // 2, cy)))
 
 
 def _show_error(screen, message):
-    clock = pygame.time.Clock()
-    font = pygame.font.SysFont(None, 32)
-    start = pygame.time.get_ticks()
-    while pygame.time.get_ticks() - start < 3000:
+    """Affiche un message d'erreur plein écran pendant 4 secondes."""
+    clock  = pygame.time.Clock()
+    font   = pygame.font.SysFont(None, 30)
+    start  = pygame.time.get_ticks()
+    lines  = message.split('\n')
+    while pygame.time.get_ticks() - start < 4000:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                pygame.quit(); sys.exit()
+            if event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
                 return
-        screen.fill((30, 0, 0))
-        surf = font.render(message, True, (255, 100, 100))
-        screen.blit(surf, surf.get_rect(center=(screen.get_width() // 2, screen.get_height() // 2)))
+        screen.fill((40, 0, 0))
+        cy = screen.get_height() // 2 - (len(lines) - 1) * 18
+        for i, line in enumerate(lines):
+            s = font.render(line, True, (255, 120, 120))
+            screen.blit(s, s.get_rect(center=(screen.get_width() // 2, cy + i * 36)))
         pygame.display.flip()
         clock.tick(60)

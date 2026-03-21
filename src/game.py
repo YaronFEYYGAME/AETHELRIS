@@ -194,15 +194,15 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                             show_mmo = True
                             
                         if player.health > 0:
-                            if event.key == pygame.K_1: 
+                            if event.key == pygame.K_1:
                                 if player.has_melee and player.current_weapon != 'melee':
                                     player.switch_weapon('melee')
-                                    sound_manager.play_equip_sword()
-                                    
-                            if event.key == pygame.K_2: 
+                                    sound_manager.play_ui_equip_sword()
+
+                            if event.key == pygame.K_2:
                                 if player.has_ranged and player.current_weapon != 'ranged':
                                     player.switch_weapon('ranged')
-                                    sound_manager.play_equip_bow()
+                                    sound_manager.play_ui_equip_bow()
                                     
                             if event.key == pygame.K_a and can_exit:
                                 player_inventory['melee'] = player.has_melee
@@ -220,7 +220,9 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                             if event.key == pygame.K_LSHIFT:
                                 if player.has_boots:
                                     if player.dash(walls):
-                                        sound_manager.play_dash_sound()
+                                        sound_manager.play_spatial_dash(
+                                            (player.feet.centerx, player.feet.centery),
+                                            (player.feet.centerx, player.feet.centery))
                                         for _ in range(20):
                                             offset_x = random.randint(-15, 15)
                                             offset_y = random.randint(-15, 5) 
@@ -235,30 +237,30 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                                             player.has_melee = True
                                             if player.current_weapon != 'melee':
                                                 player.current_weapon = 'melee'
-                                                sound_manager.play_equip_sword()
+                                                sound_manager.play_ui_equip_sword()
                                         elif item.item_type == 'ranged':
                                             if not player.has_ranged:
                                                 player.arrows += 10
                                             player.has_ranged = True
                                             if player.current_weapon != 'ranged':
                                                 player.current_weapon = 'ranged'
-                                                sound_manager.play_equip_bow()
+                                                sound_manager.play_ui_equip_bow()
                                         elif item.item_type == 'pickaxe':
                                             player.has_pickaxe = True
                                         elif item.item_type == 'arrow':
                                             nb_arrows = random.randint(1, 4)
                                             player.arrows += nb_arrows
-                                            sound_manager.play_equip_bow() 
+                                            sound_manager.play_ui_equip_bow()
                                         elif item.item_type == 'apple':
                                             heal_amount = player.max_health * 0.10
                                             player.heal(heal_amount)
-                                            sound_manager.play_eating()
+                                            sound_manager.play_ui_eating()
                                         elif item.item_type == 'boots':
                                             player.has_boots = True
-                                            sound_manager.play_equipement() 
-                                        
-                                        item.kill() 
-                                        break 
+                                            sound_manager.play_ui_equipement()
+
+                                        item.kill()
+                                        break
                                         
                                 if player.has_pickaxe:
                                     for rock in rocks_group:
@@ -268,13 +270,15 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                                                 particle = RockParticle(rock.rect.centerx, rock.rect.centery)
                                                 group.add(particle)
                                                 particles_group.add(particle)
-                                            
-                                            rock.kill() 
+
+                                            rock_pos = (rock.rect.centerx, rock.rect.centery)
+                                            rock.kill()
                                             if rock.hitbox in walls:
-                                                walls.remove(rock.hitbox) 
-                                            
-                                            player.has_pickaxe = False 
-                                            sound_manager.play_rock_broke()
+                                                walls.remove(rock.hitbox)
+
+                                            player.has_pickaxe = False
+                                            sound_manager.play_spatial('rock_broke', rock_pos,
+                                                                       (player.feet.centerx, player.feet.centery))
                                             pygame.time.set_timer(EUREKA_EVENT, 250, 1)
                                             break
 
@@ -341,12 +345,13 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                         break
 
             keys = pygame.key.get_pressed()
+            ppos = (player.feet.centerx, player.feet.centery)
             if keys[pygame.K_e] and player.current_weapon is not None and player.health > 0:
                 attack_result = player.attack()
                 if attack_result:
                     type_attack, data = attack_result
                     if type_attack == 'melee':
-                        sound_manager.play_sword_sound()
+                        sound_manager.play_spatial('sword', ppos, ppos)
                         for enemy in enemies_group:
                             if getattr(enemy, 'health', 0) > 0 and data.colliderect(enemy.feet):
                                 enemy.damage(player.melee_damage)
@@ -372,20 +377,21 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
 
             for projectile in projectiles_group:
                 for enemy in enemies_group:
-                    if getattr(enemy, 'health', 0) > 0: 
+                    if getattr(enemy, 'health', 0) > 0:
                         body_hitbox = enemy.feet.copy()
-                        body_hitbox.height += 25  
-                        body_hitbox.y -= 25       
+                        body_hitbox.height += 25
+                        body_hitbox.y -= 25
                         if projectile.hitbox.colliderect(body_hitbox):
-                            sound_manager.play_projectile_sound()
+                            hit_pos = (projectile.hitbox.centerx, projectile.hitbox.centery)
+                            sound_manager.play_spatial('shot', hit_pos, ppos)
                             enemy.damage(projectile.damage_amount)
-                            
+
                             if hasattr(enemy, 'pending_drop') and enemy.pending_drop:
                                 drop = Item(enemy.rect.centerx, enemy.rect.centery, enemy.pending_drop)
                                 group.add(drop)
                                 items_group.add(drop)
                                 enemy.pending_drop = None
-                                
+
                             if enemy.health <= 0:
                                 # --- PARTICULES SOMBRES ICI AUSSI ---
                                 ParticleClass = DarkParticle if isinstance(enemy, (Necromancer, Spirit)) else BloodParticle
@@ -393,16 +399,17 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                                     particle = ParticleClass(enemy.rect.centerx, enemy.rect.centery)
                                     group.add(particle)
                                     particles_group.add(particle)
-                                    
-                            projectile.kill() 
-                            break 
-                            
+
+                            projectile.kill()
+                            break
+
                 if projectile.alive():
                     for wall in walls:
                         if projectile.hitbox.colliderect(wall):
-                            sound_manager.play_projectile_sound()
+                            wall_pos = (projectile.hitbox.centerx, projectile.hitbox.centery)
+                            sound_manager.play_spatial('shot', wall_pos, ppos)
                             projectile.kill()
-                            break 
+                            break
 
             if player.is_moving() and not was_walking:
                 sound_manager.play_step()
@@ -765,9 +772,9 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                         continue
                     if not is_paused and player.health > 0:
                         if event.key == pygame.K_1 and player.has_melee and player.current_weapon != 'melee':
-                            player.switch_weapon('melee'); sound_manager.play_equip_sword()
+                            player.switch_weapon('melee'); sound_manager.play_ui_equip_sword()
                         if event.key == pygame.K_2 and player.has_ranged and player.current_weapon != 'ranged':
-                            player.switch_weapon('ranged'); sound_manager.play_equip_bow()
+                            player.switch_weapon('ranged'); sound_manager.play_ui_equip_bow()
                         if event.key == pygame.K_a and can_exit:
                             player_inventory  = {'melee': player.has_melee, 'ranged': player.has_ranged,
                                                  'pickaxe': player.has_pickaxe, 'boots': player.has_boots,
@@ -782,8 +789,9 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                             break
                         if event.key == pygame.K_LSHIFT and player.has_boots:
                             if player.dash(walls):
-                                sound_manager.play_dash_sound()
-                                sound_events.append('dash')
+                                host_pos = (player.feet.centerx, player.feet.centery)
+                                sound_manager.play_spatial_dash(host_pos, host_pos)
+                                sound_events.append({'sound': 'dash', 'x': player.feet.centerx, 'y': player.feet.centery})
                                 dash_events.append({'player': 0, 'x': player.feet.centerx, 'y': player.feet.bottom})
                                 for _ in range(20):
                                     smoke = SmokeParticle(player.feet.centerx + random.randint(-15, 15),
@@ -800,13 +808,15 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                                         for _ in range(15):
                                             p = RockParticle(rock.rect.centerx, rock.rect.centery)
                                             group.add(p); particles_group.add(p)
+                                        rx, ry = rock.rect.centerx, rock.rect.centery
                                         rock.kill()
                                         if rock.hitbox in walls: walls.remove(rock.hitbox)
                                         player.has_pickaxe = False
-                                        sound_manager.play_rock_broke()
-                                        sound_events.append('rock_broke')
+                                        sound_manager.play_spatial('rock_broke', (rx, ry),
+                                                                   (player.feet.centerx, player.feet.centery))
+                                        sound_events.append({'sound': 'rock_broke', 'x': rx, 'y': ry})
                                         pygame.time.set_timer(EUREKA_EVENT, 250, 1)
-                                        sound_events.append('eureka')
+                                        sound_events.append({'sound': 'eureka', 'x': rx, 'y': ry})
                                         break
 
             if not level_running:
@@ -827,25 +837,29 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
             player2.move(walls)
 
             # Attaque player2
+            host_pos = (player.feet.centerx, player.feet.centery)
             if net_inputs.get('attack') and player2.current_weapon and player2.health > 0:
                 res = player2.attack()
                 if res:
                     typ, data = res
                     if typ == 'melee':
-                        sound_manager.play_sword_sound()
+                        p2_pos = (player2.feet.centerx, player2.feet.centery)
+                        sound_manager.play_spatial('sword', p2_pos, host_pos)
                         # Ne pas envoyer 'sword' au client : il le joue déjà localement
                         for e in list(enemies_group):
                             if getattr(e, 'health', 0) > 0 and data.colliderect(e.feet):
                                 e.damage(player2.melee_damage)
                                 if e.health <= 0:
-                                    sound_events.append('enemy_death')
+                                    e_pos = (e.feet.centerx, e.feet.centery)
+                                    sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
                                 _handle_enemy_death(e, group, items_group, particles_group)
 
             # Dash player2
             if net_inputs.get('dash') and player2.has_boots:
                 if player2.dash(walls):
-                    sound_manager.play_dash_sound()
-                    sound_events.append('dash')
+                    p2_pos = (player2.feet.centerx, player2.feet.centery)
+                    sound_manager.play_spatial_dash(p2_pos, host_pos)
+                    sound_events.append({'sound': 'dash', 'x': p2_pos[0], 'y': p2_pos[1]})
                     dash_events.append({'player': 1, 'x': player2.feet.centerx, 'y': player2.feet.bottom})
                     for _ in range(20):
                         smoke = SmokeParticle(player2.feet.centerx + random.randint(-15, 15),
@@ -864,13 +878,14 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                             for _ in range(15):
                                 p = RockParticle(rock.rect.centerx, rock.rect.centery)
                                 group.add(p); particles_group.add(p)
+                            rx, ry = rock.rect.centerx, rock.rect.centery
                             rock.kill()
                             if rock.hitbox in walls: walls.remove(rock.hitbox)
                             player2.has_pickaxe = False
-                            sound_manager.play_rock_broke()
-                            sound_events.append('rock_broke')
+                            sound_manager.play_spatial('rock_broke', (rx, ry), host_pos)
+                            sound_events.append({'sound': 'rock_broke', 'x': rx, 'y': ry})
                             pygame.time.set_timer(EUREKA_EVENT, 250, 1)
-                            sound_events.append('eureka')
+                            sound_events.append({'sound': 'eureka', 'x': rx, 'y': ry})
                             break
 
             # Changement d'arme player2 (sans son : le client joue ses propres sons)
@@ -916,7 +931,15 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                     e.pending_summons.clear()
                 # Collecter les sons des boss pour les envoyer au client
                 if hasattr(e, 'pending_sounds') and e.pending_sounds:
-                    sound_events.extend(e.pending_sounds)
+                    boss_pos = (e.feet.centerx, e.feet.centery)
+                    for bs in e.pending_sounds:
+                        if isinstance(bs, str):
+                            # Son de boss spatialisé pour le host
+                            if not bs.startswith('boss_bgm'):
+                                sound_manager.play_spatial(bs, boss_pos, host_pos)
+                            sound_events.append({'sound': bs, 'x': boss_pos[0], 'y': boss_pos[1]})
+                        else:
+                            sound_events.append(bs)
                     e.pending_sounds.clear()
 
             projectiles_group.update()
@@ -929,13 +952,14 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                 if res:
                     typ, data = res
                     if typ == 'melee':
-                        sound_manager.play_sword_sound()
-                        sound_events.append('sword')
+                        sound_manager.play_spatial('sword', host_pos, host_pos)
+                        sound_events.append({'sound': 'sword', 'x': host_pos[0], 'y': host_pos[1]})
                         for e in list(enemies_group):
                             if getattr(e, 'health', 0) > 0 and data.colliderect(e.feet):
                                 e.damage(player.melee_damage)
                                 if e.health <= 0:
-                                    sound_events.append('enemy_death')
+                                    e_pos = (e.feet.centerx, e.feet.centery)
+                                    sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
                                 _handle_enemy_death(e, group, items_group, particles_group)
 
             new_proj = player.check_ranged_attack()
@@ -948,18 +972,21 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                     if getattr(e, 'health', 0) > 0:
                         body = e.feet.copy(); body.height += 25; body.y -= 25
                         if proj.hitbox.colliderect(body):
-                            sound_manager.play_projectile_sound()
-                            sound_events.append('arrow')
+                            hit_pos = (proj.hitbox.centerx, proj.hitbox.centery)
+                            sound_manager.play_spatial('shot', hit_pos, host_pos)
+                            sound_events.append({'sound': 'arrow', 'x': hit_pos[0], 'y': hit_pos[1]})
                             e.damage(proj.damage_amount)
                             if e.health <= 0:
-                                sound_events.append('enemy_death')
+                                e_pos = (e.feet.centerx, e.feet.centery)
+                                sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
                             _handle_enemy_death(e, group, items_group, particles_group)
                             proj.kill(); break
                 if proj.alive():
                     for wall in walls:
                         if proj.hitbox.colliderect(wall):
-                            sound_manager.play_projectile_sound()
-                            sound_events.append('arrow')
+                            wall_pos = (proj.hitbox.centerx, proj.hitbox.centery)
+                            sound_manager.play_spatial('shot', wall_pos, host_pos)
+                            sound_events.append({'sound': 'arrow', 'x': wall_pos[0], 'y': wall_pos[1]})
                             proj.kill(); break
 
 
@@ -1277,35 +1304,49 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 group.add(p)
                 client_particles_grp.add(p)
 
-        _SOUND_MAP = {
-            'sword':           sound_manager.play_sword_sound,
-            'arrow':           sound_manager.play_projectile_sound,
-            'enemy_death':     sound_manager.play_projectile_sound,
-            'dash':            sound_manager.play_dash_sound,
-            'rock_broke':      sound_manager.play_rock_broke,
-            'eureka':          sound_manager.play_eureka,
-            'boss_activation': sound_manager.play_boss_activation,
-            'boss_attack':     sound_manager.play_boss_attack,
-            'boss_death':      sound_manager.play_boss_death,
-            'boss_talk':       sound_manager.play_boss_talk,
+        # --- Sons spatialisés côté client ---
+        # Le joueur local est l'index 1 (client)
+        client_listener = (0, 0)
+        if local_player:
+            client_listener = (local_player.feet.centerx, local_player.feet.centery)
+
+        # Map des noms de sons vers les clés du SoundManager
+        _SPATIAL_SOUNDS = {
+            'sword': 'sword', 'arrow': 'shot', 'enemy_death': 'shot',
+            'dash': None,  # traité séparément (choix aléatoire)
+            'rock_broke': 'rock_broke', 'eureka': 'eureka',
+            'boss_activation': 'boss_activation', 'boss_attack': 'boss_attack',
+            'boss_death': 'boss_death', 'boss_talk': 'boss_talk',
         }
-        for snd in events_recv.get('sounds', []):
-            if snd == 'boss_bgm_start':
+
+        for snd_event in events_recv.get('sounds', []):
+            # Les événements sont maintenant des dicts {'sound': ..., 'x': ..., 'y': ...}
+            if isinstance(snd_event, dict):
+                snd_name = snd_event.get('sound', '')
+                src_pos = (snd_event.get('x', 0), snd_event.get('y', 0))
+            else:
+                # Compatibilité : anciennes chaînes sans position
+                snd_name = snd_event
+                src_pos = client_listener  # pas de position → volume max
+
+            if snd_name == 'boss_bgm_start':
                 try:
                     pygame.mixer.music.load("assets/sounds/boss1_soundtrack.mp3")
                     pygame.mixer.music.set_volume(global_music_vol)
                     pygame.mixer.music.play(-1)
                 except Exception:
                     pass
-            elif snd == 'boss_bgm_stop':
+            elif snd_name == 'boss_bgm_stop':
                 try:
                     pygame.mixer.music.fadeout(4000)
                 except Exception:
                     pass
+            elif snd_name == 'dash':
+                sound_manager.play_spatial_dash(src_pos, client_listener)
             else:
-                fn = _SOUND_MAP.get(snd)
-                if fn:
-                    fn()
+                sound_key = _SPATIAL_SOUNDS.get(snd_name)
+                if sound_key:
+                    sound_manager.play_spatial(sound_key, src_pos, client_listener)
 
         # --- Caméra sur le joueur local (index 1) ---
         if local_player:
@@ -1338,26 +1379,26 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         cur_weapon = lp_now.get('current_weapon')
         prev_weapon = prev_lp.get('current_weapon')
 
-        # Changement d'arme
+        # Changement d'arme (son UI personnel)
         if cur_weapon != prev_weapon and cur_weapon is not None:
             if cur_weapon == 'melee':
-                sound_manager.play_equip_sword()
+                sound_manager.play_ui_equip_sword()
             elif cur_weapon == 'ranged':
-                sound_manager.play_equip_bow()
+                sound_manager.play_ui_equip_bow()
 
-        # Nouvel objet obtenu
+        # Nouvel objet obtenu (son UI personnel)
         if lp_now.get('has_boots') and not prev_lp.get('has_boots'):
-            sound_manager.play_equipement()
+            sound_manager.play_ui_equipement()
         if lp_now.get('has_pickaxe') and not prev_lp.get('has_pickaxe'):
-            sound_manager.play_equipement()
+            sound_manager.play_ui_equipement()
 
         # Flèches ramassées (sans changement d'arme)
         if lp_now.get('arrows', 0) > prev_lp.get('arrows', 0) and cur_weapon == prev_weapon:
-            sound_manager.play_equip_bow()
+            sound_manager.play_ui_equip_bow()
 
         # Pomme mangée (santé augmente sans raison de combat)
         if lp_now.get('health', 0) > prev_lp.get('health', 0) and prev_lp.get('health', 0) > 0:
-            sound_manager.play_eating()
+            sound_manager.play_ui_eating()
 
         prev_lp = dict(lp_now)
 
@@ -1376,10 +1417,10 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         # --- Capturer et envoyer les inputs locaux ---
         keys = pygame.key.get_pressed()
 
-        # Son d'épée immédiat côté client (pas d'attente réseau)
+        # Son d'épée immédiat côté client (pas d'attente réseau) — spatialisé sur soi
         if keys[pygame.K_e] and lp_now.get('current_weapon') == 'melee' and lp_now.get('health', 0) > 0:
             if not getattr(run_game_mp_client, '_client_attacking', False):
-                sound_manager.play_sword_sound()
+                sound_manager.play_spatial('sword', client_listener, client_listener)
                 run_game_mp_client._client_attacking = True
         else:
             run_game_mp_client._client_attacking = False
@@ -1452,28 +1493,30 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 # =============================================================================
 
 def _pickup_item(player, item, sound_manager):
+    """Ramasse un item. sound_manager sert uniquement pour les sons UI du host.
+    Passer None pour player2 (le client gère ses propres sons)."""
     if item.item_type == 'melee':
         player.has_melee = True
         if player.current_weapon != 'melee':
             player.current_weapon = 'melee'
-            if sound_manager: sound_manager.play_equip_sword()
+            if sound_manager: sound_manager.play_ui_equip_sword()
     elif item.item_type == 'ranged':
         if not player.has_ranged: player.arrows += 10
         player.has_ranged = True
         if player.current_weapon != 'ranged':
             player.current_weapon = 'ranged'
-            if sound_manager: sound_manager.play_equip_bow()
+            if sound_manager: sound_manager.play_ui_equip_bow()
     elif item.item_type == 'pickaxe':
         player.has_pickaxe = True
     elif item.item_type == 'arrow':
         player.arrows += random.randint(1, 4)
-        if sound_manager: sound_manager.play_equip_bow()
+        if sound_manager: sound_manager.play_ui_equip_bow()
     elif item.item_type == 'apple':
         player.heal(player.max_health * 0.10)
-        if sound_manager: sound_manager.play_eating()
+        if sound_manager: sound_manager.play_ui_eating()
     elif item.item_type == 'boots':
         player.has_boots = True
-        if sound_manager: sound_manager.play_equipement()
+        if sound_manager: sound_manager.play_ui_equipement()
 
 
 def _handle_enemy_death(enemy, group, items_group, particles_group):

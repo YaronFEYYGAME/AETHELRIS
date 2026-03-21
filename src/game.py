@@ -563,8 +563,9 @@ def _serialize_enemy(e):
         'direction': getattr(e, 'facing',      'right'),
         'frame':     getattr(e, 'frame_index', 0),
         'health':    health,
-        'max_health': getattr(e, 'max_health', health),  # Spirit n'a pas max_health
+        'max_health': getattr(e, 'max_health', health),
         'etype':     etype,
+        'has_aggro': getattr(e, 'has_aggro', False),
     }
 
 
@@ -907,6 +908,10 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                         ns = Spirit(sx, sy); ns._mp_id = _next_id()
                         group.add(ns); enemies_group.add(ns)
                     e.pending_summons.clear()
+                # Collecter les sons des boss pour les envoyer au client
+                if hasattr(e, 'pending_sounds') and e.pending_sounds:
+                    sound_events.extend(e.pending_sounds)
+                    e.pending_sounds.clear()
 
             projectiles_group.update()
             particles_group.update()
@@ -1262,14 +1267,31 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 client_particles_grp.add(p)
 
         _SOUND_MAP = {
-            'sword':       sound_manager.play_sword_sound,
-            'arrow':       sound_manager.play_projectile_sound,
-            'enemy_death': sound_manager.play_projectile_sound,  # son générique
+            'sword':           sound_manager.play_sword_sound,
+            'arrow':           sound_manager.play_projectile_sound,
+            'enemy_death':     sound_manager.play_projectile_sound,
+            'boss_activation': sound_manager.play_boss_activation,
+            'boss_attack':     sound_manager.play_boss_attack,
+            'boss_death':      sound_manager.play_boss_death,
+            'boss_talk':       sound_manager.play_boss_talk,
         }
         for snd in events_recv.get('sounds', []):
-            fn = _SOUND_MAP.get(snd)
-            if fn:
-                fn()
+            if snd == 'boss_bgm_start':
+                try:
+                    pygame.mixer.music.load("assets/sounds/boss1_soundtrack.mp3")
+                    pygame.mixer.music.set_volume(global_music_vol)
+                    pygame.mixer.music.play(-1)
+                except Exception:
+                    pass
+            elif snd == 'boss_bgm_stop':
+                try:
+                    pygame.mixer.music.fadeout(4000)
+                except Exception:
+                    pass
+            else:
+                fn = _SOUND_MAP.get(snd)
+                if fn:
+                    fn()
 
         # --- Caméra sur le joueur local (index 1) ---
         if local_player:

@@ -289,11 +289,12 @@ class BigEnemy(pygame.sprite.Sprite):
         self.activation_played = False
         self.death_sound_played = False
         self.last_talk_time = 0
-        
-        self.talk_cooldown = 8000 
-        self.talk_count = 0       
-        self.max_talks = 3        
+
+        self.talk_cooldown = 8000
+        self.talk_count = 0
+        self.max_talks = 3
         self.bgm_playing = False
+        self.pending_sounds = []
 
     def load_animation(self, state_name, path, num_frames):
         try:
@@ -337,13 +338,15 @@ class BigEnemy(pygame.sprite.Sprite):
                 if not self.death_sound_played and self.sound_death:
                     self.sound_death.play()
                     self.death_sound_played = True
-                    
+                    self.pending_sounds.append('boss_death')
+
                 if self.bgm_playing:
                     try:
                         pygame.mixer.music.fadeout(4000)
                     except Exception:
                         pass
                     self.bgm_playing = False
+                    self.pending_sounds.append('boss_bgm_stop')
             else:
                 self.state = 'hit'
                 self.frame_index = 0
@@ -368,16 +371,18 @@ class BigEnemy(pygame.sprite.Sprite):
                 if not self.activation_played and self.sound_activation:
                     self.sound_activation.play()
                     self.activation_played = True
-                    
+                    self.pending_sounds.append('boss_activation')
+
                 if not self.bgm_playing:
                     try:
                         pygame.mixer.music.load("assets/sounds/boss1_soundtrack.mp3")
                         pygame.mixer.music.set_volume(0.5)
                         pygame.mixer.music.play(-1)
                         self.bgm_playing = True
+                        self.pending_sounds.append('boss_bgm_start')
                     except Exception as e:
                         print(f"⚠️ Erreur de chargement de la musique du Boss: {e}")
-                        
+
         elif player.health <= 0:
             self.has_aggro = False
             if self.bgm_playing:
@@ -386,6 +391,7 @@ class BigEnemy(pygame.sprite.Sprite):
                 except Exception:
                     pass
                 self.bgm_playing = False
+                self.pending_sounds.append('boss_bgm_stop')
 
         if self.has_aggro and self.health > 0 and self.talk_count < self.max_talks and player.health > 0:
             if current_time - self.last_talk_time > self.talk_cooldown:
@@ -393,6 +399,7 @@ class BigEnemy(pygame.sprite.Sprite):
                 if random.randint(1, 150) <= 1:
                     if self.sound_talk:
                         self.sound_talk.play()
+                    self.pending_sounds.append('boss_talk')
                     self.last_talk_time = current_time
                     self.talk_count += 1
 
@@ -417,7 +424,8 @@ class BigEnemy(pygame.sprite.Sprite):
             elif current_frame == 5 and not self.has_dealt_damage_2:
                 if self.sound_attack:
                     self.sound_attack.play()
-                    
+                    self.pending_sounds.append('boss_attack')
+
                 attack_area = self.get_attack_hitbox()
                 if attack_area.colliderect(player.feet.inflate(20, 20)) and player.health > 0:
                     player.damage(self.damage_amount)
@@ -443,10 +451,11 @@ class BigEnemy(pygame.sprite.Sprite):
                         
                         if self.sound_attack:
                             self.sound_attack.play()
+                            self.pending_sounds.append('boss_attack')
                     else:
                         self.state = 'idle'
                         self.velocity.xy = 0, 0
-                
+
                 elif distance < self.aggro_radius and distance > 0:
                     self.state = 'run'
                     norm_dir = target_vector.normalize()
@@ -761,6 +770,7 @@ class Necromancer(pygame.sprite.Sprite):
         
         self.slide_dir_x = 1
         self.slide_dir_y = 1
+        self.pending_sounds = []
 
         try:
             self.sound_attack = pygame.mixer.Sound("assets/sounds/boss1_attack.wav")
@@ -807,10 +817,12 @@ class Necromancer(pygame.sprite.Sprite):
                 self.is_attacking = False
                 self.velocity.xy = 0, 0
                 self._is_blinking = False
+                self.pending_sounds.append('boss_death')
                 if self.bgm_playing:
                     try: pygame.mixer.music.fadeout(4000)
                     except: pass
                     self.bgm_playing = False
+                    self.pending_sounds.append('boss_bgm_stop')
 
     def update(self, player, walls):
         if self.state == 'death':
@@ -832,6 +844,7 @@ class Necromancer(pygame.sprite.Sprite):
                     pygame.mixer.music.set_volume(0.5)
                     pygame.mixer.music.play(-1)
                     self.bgm_playing = True
+                    self.pending_sounds.append('boss_bgm_start')
                 except: pass
         elif player.health <= 0:
             self.has_aggro = False
@@ -840,6 +853,7 @@ class Necromancer(pygame.sprite.Sprite):
                 try: pygame.mixer.music.fadeout(4000)
                 except: pass
                 self.bgm_playing = False
+                self.pending_sounds.append('boss_bgm_stop')
 
         hit_x = False
         hit_y = False
@@ -859,7 +873,9 @@ class Necromancer(pygame.sprite.Sprite):
             current_frame = int(self.frame_index)
             # Frame 6 : la faux est au bas de son premier balayage (impact visuel)
             if current_frame == 6 and not self.has_dealt_damage_1:
-                if self.sound_attack: self.sound_attack.play()
+                if self.sound_attack:
+                    self.sound_attack.play()
+                    self.pending_sounds.append('boss_attack')
                 attack_area = self.get_attack_hitbox(salve=1)
                 if self._hits_player(attack_area, player) and player.health > 0:
                     player.damage(self.damage_amount)
@@ -867,7 +883,9 @@ class Necromancer(pygame.sprite.Sprite):
                 self.has_dealt_damage_1 = True
             # Frame 11 : second balayage, faux au plus bas
             elif current_frame == 11 and not self.has_dealt_damage_2:
-                if self.sound_attack: self.sound_attack.play()
+                if self.sound_attack:
+                    self.sound_attack.play()
+                    self.pending_sounds.append('boss_attack')
                 attack_area = self.get_attack_hitbox(salve=2)
                 if self._hits_player(attack_area, player) and player.health > 0:
                     player.damage(self.damage_amount)
@@ -1037,32 +1055,36 @@ class RemoteEnemy(pygame.sprite.Sprite):
             ],
         },
         'bigenemy': {
-            'scale': 1.5,
-            'empty_below': 0,
+            'scale': 2.5,
+            'empty_below': 12 * 2.5,
             'anims': [
-                ('idle',   "assets/images/idle.png",   5, 'strip'),
-                ('run',    "assets/images/run.png",    8, 'strip'),
-                ('attack', "assets/images/attack.png", 8, 'strip'),
-                ('death',  "assets/images/death.png",  5, 'strip'),
+                ('idle',   "assets/images/idle.png",   5, 'vstrip'),
+                ('run',    "assets/images/run.png",    8, 'vstrip'),
+                ('attack', "assets/images/attack.png", 8, 'vstrip'),
+                ('hit',    "assets/images/hit.png",    2, 'vstrip'),
+                ('death',  "assets/images/death.png",  5, 'vstrip'),
             ],
         },
         'necromancer': {
-            'scale': 1.5,
-            'empty_below': 0,
+            'scale': 2.0,
+            'empty_below': 25 * 2.0,
             'anims': [
                 ('idle',   "assets/images/necromancer_idle.png",       5,  'grid', 5, 1),
                 ('run',    "assets/images/necromancer_idle2.png",       8,  'grid', 4, 2),
                 ('attack', "assets/images/necromancer_attacking.png",  13, 'grid', 6, 3),
+                ('skill',  "assets/images/necromancer_skill1.png",    12, 'grid', 6, 2),
                 ('death',  "assets/images/necromancer_death.png",      20, 'grid', 10, 2),
             ],
         },
         'spirit': {
             'scale': 1.0,
-            'empty_below': 0,
+            'empty_below': 10 * 1.0,
             'anims': [
-                ('idle',   "assets/images/necromancer_summonIdle.png",  4, 'grid', 4, 1),
-                ('run',    "assets/images/necromancer_summonIdle.png",  4, 'grid', 4, 1),
-                ('death',  "assets/images/necromancer_summonDeath.png", 6, 'grid', 3, 2),
+                ('appear', "assets/images/necromancer_summonAppear.png", 6, 'grid', 3, 2),
+                ('idle',   "assets/images/necromancer_summonIdle.png",   4, 'grid', 4, 1),
+                ('run',    "assets/images/necromancer_summonIdle.png",   4, 'grid', 4, 1),
+                ('death',  "assets/images/necromancer_summonDeath.png",  6, 'grid', 3, 2),
+                ('explode',"assets/images/explosion_anim.png",          5, 'grid', 5, 1),
             ],
         },
     }
@@ -1078,6 +1100,8 @@ class RemoteEnemy(pygame.sprite.Sprite):
             name, path, num_frames, mode = anim_def[0], anim_def[1], anim_def[2], anim_def[3]
             if mode == 'strip':
                 self._load_strip(name, path, num_frames)
+            elif mode == 'vstrip':
+                self._load_vstrip(name, path, num_frames)
             else:
                 cols, rows = anim_def[4], anim_def[5]
                 self._load_grid(name, path, cols, rows, num_frames)
@@ -1103,6 +1127,24 @@ class RemoteEnemy(pygame.sprite.Sprite):
             rights, lefts = [], []
             for i in range(num_frames):
                 frame = sheet.subsurface((i * fw, 0, fw, fh))
+                nw, nh = int(fw * self.scale_factor), int(fh * self.scale_factor)
+                frame = pygame.transform.scale(frame, (nw, nh))
+                rights.append(frame)
+                lefts.append(pygame.transform.flip(frame, True, False))
+            self.animations['right'][state_name] = rights
+            self.animations['left'][state_name] = lefts
+        except FileNotFoundError:
+            pass
+
+    def _load_vstrip(self, state_name, path, num_frames):
+        """Charge un sprite sheet vertical (frames empilées en lignes)."""
+        try:
+            sheet = pygame.image.load(path).convert_alpha()
+            fw = sheet.get_width()
+            fh = sheet.get_height() // num_frames
+            rights, lefts = [], []
+            for i in range(num_frames):
+                frame = sheet.subsurface((0, i * fh, fw, fh))
                 nw, nh = int(fw * self.scale_factor), int(fh * self.scale_factor)
                 frame = pygame.transform.scale(frame, (nw, nh))
                 rights.append(frame)

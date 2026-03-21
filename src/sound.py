@@ -36,7 +36,13 @@ class SoundManager:
         load_sound('dash1', "assets/sounds/dash1.wav")
         load_sound('dash2', "assets/sounds/dash2.wav")
         load_sound('dash3', "assets/sounds/dash3.wav")
-        load_sound('equipement', "assets/sounds/equipement.wav") # NOUVEAU SON
+        load_sound('equipement', "assets/sounds/equipement.wav")
+
+        # --- SONS DES BOSS ---
+        load_sound('boss_activation', "assets/sounds/boss1_activation.wav")
+        load_sound('boss_attack', "assets/sounds/boss1_attack.wav")
+        load_sound('boss_death', "assets/sounds/boss1_death.wav")
+        load_sound('boss_talk', "assets/sounds/boss1_talk.wav")
 
         self.base_volumes = {
             'step': 0.4,
@@ -52,7 +58,11 @@ class SoundManager:
             'dash1': 0.6,
             'dash2': 0.6,
             'dash3': 0.6,
-            'equipement': 0.6 # Volume de base de l'équipement
+            'equipement': 0.6,
+            'boss_activation': 0.4,
+            'boss_attack': 0.4,
+            'boss_death': 0.45,
+            'boss_talk': 0.35,
         }
 
         self.update_sfx_volume(0.8)
@@ -100,6 +110,18 @@ class SoundManager:
         if dash_sounds:
             random.choice(dash_sounds).play()
 
-    # --- NOUVELLE FONCTION ---
     def play_equipement(self):
         if 'equipement' in self.sounds: self.sounds['equipement'].play()
+
+    # --- SONS DES BOSS ---
+    def play_boss_activation(self):
+        if 'boss_activation' in self.sounds: self.sounds['boss_activation'].play()
+
+    def play_boss_attack(self):
+        if 'boss_attack' in self.sounds: self.sounds['boss_attack'].play()
+
+    def play_boss_death(self):
+        if 'boss_death' in self.sounds: self.sounds['boss_death'].play()
+
+    def play_boss_talk(self):
+        if 'boss_talk' in self.sounds: self.sounds['boss_talk'].play()

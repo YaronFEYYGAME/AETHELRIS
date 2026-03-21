@@ -490,7 +490,7 @@ class BigEnemy(pygame.sprite.Sprite):
 
     def get_attack_hitbox(self):
         range_attack = 135
-        width_attack = 8
+        width_attack = 6
 
         attack_rect = pygame.Rect(0, 0, range_attack, width_attack)
 

@@ -804,7 +804,9 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                                         if rock.hitbox in walls: walls.remove(rock.hitbox)
                                         player.has_pickaxe = False
                                         sound_manager.play_rock_broke()
+                                        sound_events.append('rock_broke')
                                         pygame.time.set_timer(EUREKA_EVENT, 250, 1)
+                                        sound_events.append('eureka')
                                         break
 
             if not level_running:
@@ -850,11 +852,11 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                                              player2.feet.bottom + random.randint(-15, 5))
                         group.add(smoke); particles_group.add(smoke)
 
-            # Ramasser objet player2
+            # Ramasser objet player2 (sans son : le client joue ses propres sons)
             if net_inputs.get('interact') and player2.health > 0:
                 for item in list(items_group):
                     if player2.feet.colliderect(item.rect):
-                        _pickup_item(player2, item, sound_manager)
+                        _pickup_item(player2, item, None)
                         item.kill(); break
                 if player2.has_pickaxe:
                     for rock in list(rocks_group):
@@ -866,14 +868,16 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                             if rock.hitbox in walls: walls.remove(rock.hitbox)
                             player2.has_pickaxe = False
                             sound_manager.play_rock_broke()
+                            sound_events.append('rock_broke')
                             pygame.time.set_timer(EUREKA_EVENT, 250, 1)
+                            sound_events.append('eureka')
                             break
 
-            # Changement d'arme player2
+            # Changement d'arme player2 (sans son : le client joue ses propres sons)
             if net_inputs.get('weapon1') and player2.has_melee and player2.current_weapon != 'melee':
-                player2.switch_weapon('melee'); sound_manager.play_equip_sword()
+                player2.switch_weapon('melee')
             if net_inputs.get('weapon2') and player2.has_ranged and player2.current_weapon != 'ranged':
-                player2.switch_weapon('ranged'); sound_manager.play_equip_bow()
+                player2.switch_weapon('ranged')
 
             # Attaque à distance player2
             new_proj2 = player2.check_ranged_attack()
@@ -1110,6 +1114,11 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
     is_paused_client   = False
     pause_rects_client = {}
 
+    # État précédent du joueur local pour détecter les changements d'inventaire
+    prev_lp = {'current_weapon': None, 'has_melee': False, 'has_ranged': False,
+               'has_pickaxe': False, 'has_boots': False, 'arrows': 0, 'health': 100}
+    client_was_walking = False
+
     while True:
         if not client.connected:
             _show_disconnected(screen); return
@@ -1273,6 +1282,8 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             'arrow':           sound_manager.play_projectile_sound,
             'enemy_death':     sound_manager.play_projectile_sound,
             'dash':            sound_manager.play_dash_sound,
+            'rock_broke':      sound_manager.play_rock_broke,
+            'eureka':          sound_manager.play_eureka,
             'boss_activation': sound_manager.play_boss_activation,
             'boss_attack':     sound_manager.play_boss_attack,
             'boss_death':      sound_manager.play_boss_death,
@@ -1322,12 +1333,51 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             clock.tick(60)
             continue
 
+        # --- Sons d'inventaire personnels (détection de changements d'état) ---
+        lp_now = players_state[1] if len(players_state) >= 2 else {}
+        cur_weapon = lp_now.get('current_weapon')
+        prev_weapon = prev_lp.get('current_weapon')
+
+        # Changement d'arme
+        if cur_weapon != prev_weapon and cur_weapon is not None:
+            if cur_weapon == 'melee':
+                sound_manager.play_equip_sword()
+            elif cur_weapon == 'ranged':
+                sound_manager.play_equip_bow()
+
+        # Nouvel objet obtenu
+        if lp_now.get('has_boots') and not prev_lp.get('has_boots'):
+            sound_manager.play_equipement()
+        if lp_now.get('has_pickaxe') and not prev_lp.get('has_pickaxe'):
+            sound_manager.play_equipement()
+
+        # Flèches ramassées (sans changement d'arme)
+        if lp_now.get('arrows', 0) > prev_lp.get('arrows', 0) and cur_weapon == prev_weapon:
+            sound_manager.play_equip_bow()
+
+        # Pomme mangée (santé augmente sans raison de combat)
+        if lp_now.get('health', 0) > prev_lp.get('health', 0) and prev_lp.get('health', 0) > 0:
+            sound_manager.play_eating()
+
+        prev_lp = dict(lp_now)
+
+        # --- Son de pas personnel (client) ---
+        lp_moving = any([
+            lp_now.get('state') == 'run',
+            lp_now.get('state') == 'walk',
+        ])
+        if lp_moving and not client_was_walking:
+            sound_manager.play_step()
+            client_was_walking = True
+        elif not lp_moving and client_was_walking:
+            sound_manager.stop_step()
+            client_was_walking = False
+
         # --- Capturer et envoyer les inputs locaux ---
         keys = pygame.key.get_pressed()
-        lp_state_cur = players_state[1] if len(players_state) >= 2 else {}
 
         # Son d'épée immédiat côté client (pas d'attente réseau)
-        if keys[pygame.K_e] and lp_state_cur.get('current_weapon') == 'melee' and lp_state_cur.get('health', 0) > 0:
+        if keys[pygame.K_e] and lp_now.get('current_weapon') == 'melee' and lp_now.get('health', 0) > 0:
             if not getattr(run_game_mp_client, '_client_attacking', False):
                 sound_manager.play_sword_sound()
                 run_game_mp_client._client_attacking = True
@@ -1405,20 +1455,25 @@ def _pickup_item(player, item, sound_manager):
     if item.item_type == 'melee':
         player.has_melee = True
         if player.current_weapon != 'melee':
-            player.current_weapon = 'melee'; sound_manager.play_equip_sword()
+            player.current_weapon = 'melee'
+            if sound_manager: sound_manager.play_equip_sword()
     elif item.item_type == 'ranged':
         if not player.has_ranged: player.arrows += 10
         player.has_ranged = True
         if player.current_weapon != 'ranged':
-            player.current_weapon = 'ranged'; sound_manager.play_equip_bow()
+            player.current_weapon = 'ranged'
+            if sound_manager: sound_manager.play_equip_bow()
     elif item.item_type == 'pickaxe':
         player.has_pickaxe = True
     elif item.item_type == 'arrow':
-        player.arrows += random.randint(1, 4); sound_manager.play_equip_bow()
+        player.arrows += random.randint(1, 4)
+        if sound_manager: sound_manager.play_equip_bow()
     elif item.item_type == 'apple':
-        player.heal(player.max_health * 0.10); sound_manager.play_eating()
+        player.heal(player.max_health * 0.10)
+        if sound_manager: sound_manager.play_eating()
     elif item.item_type == 'boots':
-        player.has_boots = True; sound_manager.play_equipement()
+        player.has_boots = True
+        if sound_manager: sound_manager.play_equipement()
 
 
 def _handle_enemy_death(enemy, group, items_group, particles_group):

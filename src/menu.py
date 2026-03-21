@@ -45,9 +45,7 @@ def start_menu(screen):
     pause_rects = {}
 
     try:
-        pygame.mixer.music.load("assets/sounds/menu_music.mp3")
-        pygame.mixer.music.set_volume(music_vol)
-        pygame.mixer.music.play(-1)
+        pass  # Musique du menu désactivée
     except Exception:
         pass
 

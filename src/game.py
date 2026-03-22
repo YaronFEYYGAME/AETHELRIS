@@ -8,8 +8,10 @@ from sound import SoundManager
 from enemy import Enemy, BigEnemy, Necromancer, Spirit, RemoteEnemy
 from ui import UI
 from item import Item
-from projectile import Projectile
+from projectile import Projectile, HomingProjectile, HealEffect
 from obstacle import Rock, RockParticle, BloodParticle, SmokeParticle, DarkParticle
+from characters import get_character_def
+from character_select import character_select_screen_host, character_select_screen_client
 
 # Fonction utilitaire pour dessiner les hitboxes par-dessus le zoom de la caméra
 def draw_debug_rect(screen, world_rect, color, camera_x, camera_y, zoom, screen_width, screen_height):
@@ -554,6 +556,10 @@ def _serialize_player(p):
     dash_cr = min(1.0, max(0.0,
         (pygame.time.get_ticks() - p.last_dash_time) / p.dash_cooldown
     ))
+    # Cooldowns des compétences
+    skill_crs = {}
+    for sk_name in p.abilities:
+        skill_crs[sk_name] = p.get_skill_cooldown_ratio(sk_name)
     return {
         'x': p.feet.centerx,
         'y': p.feet.bottom,
@@ -562,7 +568,6 @@ def _serialize_player(p):
         'frame': p.frame_index,
         'health': p.health,
         'max_health': p.max_health,
-        # Inventaire pour le HUD côté client
         'current_weapon': p.current_weapon,
         'has_melee':      p.has_melee,
         'has_ranged':     p.has_ranged,
@@ -570,6 +575,8 @@ def _serialize_player(p):
         'has_boots':      p.has_boots,
         'arrows':         p.arrows,
         'dash_cr':        dash_cr,
+        'char_type':      getattr(p, 'char_type', 'soldier'),
+        'skill_cooldowns': skill_crs,
     }
 
 
@@ -628,14 +635,18 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
     clock = pygame.time.Clock()
     screen_width, screen_height = screen.get_size()
 
+    # --- Sélection de personnage ---
+    char_result = character_select_screen_host(screen, server)
+    if char_result is None:
+        return  # Annulé
+    host_char_type, client_char_type = char_result
+
     ui = UI(screen)
     sound_manager = SoundManager()
 
     levels = ["assets/maps/test_map.tmx", "assets/maps/map1.tmx"]
     current_level_index = 0
 
-    player_inventory  = {'melee': False, 'ranged': False, 'pickaxe': False, 'boots': False, 'current': None, 'arrows': 0}
-    player2_inventory = {'melee': False, 'ranged': False, 'pickaxe': False, 'boots': False, 'current': None, 'arrows': 0}
     player_health  = 100
     player2_health = 100
 
@@ -724,25 +735,13 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
             elif obj_type == "obstacle_rock":
                 r = Rock(obj.x, obj.y); group.add(r); rocks_group.add(r); walls.append(r.hitbox)
 
-        # Joueur local (serveur)
-        player = Player(player_x, player_y)
-        player.has_melee   = player_inventory['melee']
-        player.has_ranged  = player_inventory['ranged']
-        player.has_pickaxe = player_inventory['pickaxe']
-        player.has_boots   = player_inventory['boots']
-        player.current_weapon = player_inventory['current']
-        player.arrows = player_inventory['arrows']
+        # Joueur local (serveur) — avec le personnage choisi
+        player = Player(player_x, player_y, char_type=host_char_type)
         player.health = player_health
         group.add(player)
 
-        # Joueur distant (client, piloté par inputs réseau)
-        player2 = Player(player_x + 20, player_y)
-        player2.has_melee   = player2_inventory['melee']
-        player2.has_ranged  = player2_inventory['ranged']
-        player2.has_pickaxe = player2_inventory['pickaxe']
-        player2.has_boots   = player2_inventory['boots']
-        player2.current_weapon = player2_inventory['current']
-        player2.arrows = player2_inventory['arrows']
+        # Joueur distant (client, piloté par inputs réseau) — avec le personnage choisi
+        player2 = Player(player_x + 20, player_y, char_type=client_char_type)
         player2.health = player2_health
         group.add(player2)
 
@@ -803,17 +802,11 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                         is_paused = not is_paused
                         continue
                     if not is_paused and player.health > 0:
-                        if event.key == pygame.K_1 and player.has_melee and player.current_weapon != 'melee':
-                            player.switch_weapon('melee'); sound_manager.play_ui_equip_sword()
-                        if event.key == pygame.K_2 and player.has_ranged and player.current_weapon != 'ranged':
-                            player.switch_weapon('ranged'); sound_manager.play_ui_equip_bow()
+                        if event.key == pygame.K_1:
+                            _handle_weapon_switch(player, 1, sound_manager)
+                        if event.key == pygame.K_2:
+                            _handle_weapon_switch(player, 2, sound_manager)
                         if event.key == pygame.K_a and can_exit:
-                            player_inventory  = {'melee': player.has_melee, 'ranged': player.has_ranged,
-                                                 'pickaxe': player.has_pickaxe, 'boots': player.has_boots,
-                                                 'current': player.current_weapon, 'arrows': player.arrows}
-                            player2_inventory = {'melee': player2.has_melee, 'ranged': player2.has_ranged,
-                                                 'pickaxe': player2.has_pickaxe, 'boots': player2.has_boots,
-                                                 'current': player2.current_weapon, 'arrows': player2.arrows}
                             player_health  = player.health
                             player2_health = player2.health
                             current_level_index += 1
@@ -877,7 +870,6 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                     if typ == 'melee':
                         p2_pos = (player2.feet.centerx, player2.feet.centery)
                         sound_manager.play_spatial('sword', p2_pos, host_pos)
-                        # Ne pas envoyer 'sword' au client : il le joue déjà localement
                         for e in list(enemies_group):
                             if getattr(e, 'health', 0) > 0 and data.colliderect(e.feet):
                                 e.damage(player2.melee_damage)
@@ -885,6 +877,18 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                                     e_pos = (e.feet.centerx, e.feet.centery)
                                     sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
                                 _handle_enemy_death(e, group, items_group, particles_group)
+                    elif typ == 'skill':
+                        p2_pos = (player2.feet.centerx, player2.feet.centery)
+                        sound_manager.play_spatial('sword', p2_pos, host_pos)
+
+            # Vérifier les compétences actives de player2
+            if player2.is_attacking and player2.active_skill:
+                p2_pos = (player2.feet.centerx, player2.feet.centery)
+                skill_result = player2.check_skill_attack(
+                    player2.active_skill, enemies_group, ally_player=player)
+                _apply_skill_result(skill_result, player2, group, projectiles_group,
+                                    particles_group, enemies_group, items_group,
+                                    sound_manager, sound_events, host_pos, _next_id)
 
             # Dash player2
             if net_inputs.get('dash') and player2.has_boots:
@@ -920,17 +924,20 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                             sound_events.append({'sound': 'eureka', 'x': rx, 'y': ry})
                             break
 
-            # Changement d'arme player2 (sans son : le client joue ses propres sons)
-            if net_inputs.get('weapon1') and player2.has_melee and player2.current_weapon != 'melee':
-                player2.switch_weapon('melee')
-            if net_inputs.get('weapon2') and player2.has_ranged and player2.current_weapon != 'ranged':
-                player2.switch_weapon('ranged')
+            # Changement d'arme/compétence player2 (sans son : le client joue ses propres sons)
+            if net_inputs.get('weapon1'):
+                _handle_weapon_switch(player2, 1, None)
+            if net_inputs.get('weapon2'):
+                _handle_weapon_switch(player2, 2, None)
 
             # Attaque à distance player2
             new_proj2 = player2.check_ranged_attack()
             if new_proj2:
                 new_proj2._mp_id = _next_id()
                 group.add(new_proj2); projectiles_group.add(new_proj2)
+
+            # Régénération de flèches player2 (Archer)
+            player2.update_arrow_regen()
 
             # --- Joueur local ---
             player.update()
@@ -1005,13 +1012,52 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                                     e_pos = (e.feet.centerx, e.feet.centery)
                                     sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
                                 _handle_enemy_death(e, group, items_group, particles_group)
+                    elif typ == 'skill':
+                        sound_manager.play_spatial('sword', host_pos, host_pos)
+                        sound_events.append({'sound': 'sword', 'x': host_pos[0], 'y': host_pos[1]})
+
+            # Vérifier les compétences actives (serveur)
+            if player.is_attacking and player.active_skill:
+                skill_result = player.check_skill_attack(
+                    player.active_skill, enemies_group, ally_player=player2)
+                _apply_skill_result(skill_result, player, group, projectiles_group,
+                                    particles_group, enemies_group, items_group,
+                                    sound_manager, sound_events, host_pos, _next_id)
 
             new_proj = player.check_ranged_attack()
             if new_proj:
                 new_proj._mp_id = _next_id()
                 group.add(new_proj); projectiles_group.add(new_proj)
 
+            # Régénération de flèches (Archer)
+            player.update_arrow_regen()
+
             for proj in list(projectiles_group):
+                # HomingProjectile — dégâts en zone quand il explose
+                if isinstance(proj, HomingProjectile):
+                    if proj.has_exploded and not getattr(proj, '_damage_dealt', False):
+                        proj._damage_dealt = True
+                        for e in list(enemies_group):
+                            if getattr(e, 'health', 0) > 0:
+                                dist = pygame.math.Vector2(
+                                    e.feet.centerx - proj.rect.centerx,
+                                    e.feet.centery - proj.rect.centery
+                                ).length()
+                                if dist <= proj.explosion_radius:
+                                    e.damage(proj.damage_amount)
+                                    if e.health <= 0:
+                                        e_pos = (e.feet.centerx, e.feet.centery)
+                                        sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
+                                    _handle_enemy_death(e, group, items_group, particles_group)
+                    continue  # Le homing gère son propre mouvement/mort
+
+                # HealEffect — juste un visuel, pas de collision
+                if isinstance(proj, HealEffect):
+                    continue
+
+                # Projectiles linéaires classiques (flèches, boules de feu)
+                if not hasattr(proj, 'hitbox'):
+                    continue
                 for e in list(enemies_group):
                     if getattr(e, 'health', 0) > 0:
                         body = e.feet.copy(); body.height += 25; body.y -= 25
@@ -1074,11 +1120,12 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
 
             # --- HUD ---
             ui.draw_health_bar(player.health, player.max_health)
-            ui.draw_weapon_icon(player.current_weapon)
-            ui.draw_pickaxe_icon(player.has_pickaxe)
-            ui.draw_ammo_count(player.current_weapon, player.arrows)
             cr = min(1.0, max(0.0, (pygame.time.get_ticks() - player.last_dash_time) / player.dash_cooldown))
-            ui.draw_boots_icon(player.has_boots, cr)
+            skill_crs = {sk: player.get_skill_cooldown_ratio(sk) for sk in player.abilities}
+            ui.draw_character_hud(player.char_type, player.current_weapon,
+                                  skill_cooldowns=skill_crs, arrows=player.arrows,
+                                  has_pickaxe=player.has_pickaxe, has_boots=player.has_boots,
+                                  dash_cr=cr)
             # Barre de vie player2 (en haut à droite)
             _draw_remote_health(screen, player2.health, player2.max_health)
 
@@ -1130,7 +1177,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                 'players':     [_serialize_player(player), _serialize_player(player2)],
                 'enemies':     [_serialize_enemy(e)        for e    in enemies_group],
                 'items':       [_serialize_item(it)        for it   in items_group],
-                'projectiles': [_serialize_projectile(pr)  for pr   in projectiles_group],
+                'projectiles': [_serialize_projectile(pr)  for pr   in projectiles_group
+                                if not isinstance(pr, HealEffect)],
                 'game_over':   game_over,
                 'events':      {'dashes': dash_events, 'sounds': sound_events},
             }
@@ -1148,6 +1196,12 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
     """Boucle de jeu côté client. Rendu pur piloté par l'état serveur."""
     clock = pygame.time.Clock()
     screen_width, screen_height = screen.get_size()
+
+    # --- Sélection de personnage ---
+    char_result = character_select_screen_client(screen, client)
+    if char_result is None:
+        return
+    host_char_type, client_char_type = char_result
 
     ui = UI(screen)
     sound_manager = SoundManager()
@@ -1280,8 +1334,8 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             map_pixel_width  = tmx_data.width  * tmx_data.tilewidth
             map_pixel_height = tmx_data.height * tmx_data.tileheight
 
-            remote_player = RemotePlayer(100, 100)
-            local_player  = RemotePlayer(100, 100)
+            remote_player = RemotePlayer(100, 100, char_type=host_char_type)
+            local_player  = RemotePlayer(100, 100, char_type=client_char_type)
             group.add(remote_player)
             group.add(local_player)
             remote_enemies        = {}   # id → RemoteEnemy
@@ -1496,8 +1550,9 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         # --- Capturer et envoyer les inputs locaux ---
         keys = pygame.key.get_pressed()
 
-        # Son d'épée immédiat côté client (pas d'attente réseau) — spatialisé sur soi
-        if keys[pygame.K_e] and lp_now.get('current_weapon') == 'melee' and lp_now.get('health', 0) > 0:
+        # Son d'attaque immédiat côté client (pas d'attente réseau) — spatialisé sur soi
+        cur_wep = lp_now.get('current_weapon')
+        if keys[pygame.K_e] and cur_wep and lp_now.get('health', 0) > 0:
             if not getattr(run_game_mp_client, '_client_attacking', False):
                 sound_manager.play_spatial('sword', client_listener, client_listener)
                 run_game_mp_client._client_attacking = True
@@ -1520,10 +1575,13 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         # --- HUD joueur local (complet) ---
         lp_state = players_state[1] if len(players_state) >= 2 else {}
         ui.draw_health_bar(lp_state.get('health', 100), lp_state.get('max_health', 100))
-        ui.draw_weapon_icon(lp_state.get('current_weapon', None))
-        ui.draw_pickaxe_icon(lp_state.get('has_pickaxe', False))
-        ui.draw_ammo_count(lp_state.get('current_weapon', None), lp_state.get('arrows', 0))
-        ui.draw_boots_icon(lp_state.get('has_boots', False), lp_state.get('dash_cr', 1.0))
+        lp_char = lp_state.get('char_type', client_char_type)
+        ui.draw_character_hud(lp_char, lp_state.get('current_weapon'),
+                              skill_cooldowns=lp_state.get('skill_cooldowns', {}),
+                              arrows=lp_state.get('arrows', 0),
+                              has_pickaxe=lp_state.get('has_pickaxe', False),
+                              has_boots=lp_state.get('has_boots', False),
+                              dash_cr=lp_state.get('dash_cr', 1.0))
 
         # Barre de vie du joueur hôte (en haut à droite)
         rp_state = players_state[0] if len(players_state) >= 1 else {}
@@ -1572,6 +1630,93 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 # =============================================================================
 # HELPERS PARTAGÉS
 # =============================================================================
+
+def _handle_weapon_switch(player, slot, sound_manager):
+    """Gère le changement d'arme/compétence pour un joueur.
+    slot: 1 ou 2 (touche clavier)."""
+    char_def = player.char_def
+    abilities = char_def.get('abilities', {})
+
+    if slot == 1:
+        # Slot 1 : arme de mêlée, arc, ou skill1
+        if player.has_melee and player.current_weapon != 'melee':
+            player.switch_weapon('melee')
+            if sound_manager: sound_manager.play_ui_equip_sword()
+        elif player.has_ranged and not player.has_melee and player.current_weapon != 'ranged':
+            player.switch_weapon('ranged')
+            if sound_manager: sound_manager.play_ui_equip_bow()
+        elif 'skill1' in abilities and player.current_weapon != 'skill1' and not player.has_melee and not player.has_ranged:
+            player.switch_weapon('skill1')
+            if sound_manager: sound_manager.play_ui_equip_sword()
+    elif slot == 2:
+        # Slot 2 : arc, ou skill1/skill2
+        if player.has_ranged and player.has_melee and player.current_weapon != 'ranged':
+            # Soldier : slot2 = arc
+            player.switch_weapon('ranged')
+            if sound_manager: sound_manager.play_ui_equip_bow()
+        elif 'skill1' in abilities and 'slot2' in char_def.get('icons', {}):
+            # Classes avec 2 slots : archer slot2 = skill1, others slot2 = skill2
+            if player.char_type == 'archer':
+                if player.current_weapon != 'skill1':
+                    player.switch_weapon('skill1')
+                    if sound_manager: sound_manager.play_ui_equip_bow()
+            elif 'skill2' in abilities and player.current_weapon != 'skill2':
+                player.switch_weapon('skill2')
+                if sound_manager: sound_manager.play_ui_equip_sword()
+
+
+def _apply_skill_result(skill_result, caster, group, projectiles_group,
+                        particles_group, enemies_group, items_group,
+                        sound_manager, sound_events, listener_pos, next_id_fn):
+    """Applique les résultats d'une compétence active."""
+    # Dégâts de mêlée en zone (Swordsman)
+    for enemy, damage in skill_result.get('melee_hits', []):
+        enemy.damage(damage)
+        if enemy.health <= 0:
+            e_pos = (enemy.feet.centerx, enemy.feet.centery)
+            sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
+        _handle_enemy_death(enemy, group, items_group, particles_group)
+
+    # Projectile (Wizard fireball, Archer golden arrow)
+    proj = skill_result.get('projectile')
+    if proj:
+        proj._mp_id = next_id_fn()
+        group.add(proj)
+        projectiles_group.add(proj)
+        src_pos = (caster.feet.centerx, caster.feet.centery)
+        sound_manager.play_spatial('shot', src_pos, listener_pos)
+        sound_events.append({'sound': 'arrow', 'x': src_pos[0], 'y': src_pos[1]})
+
+    # Homing (orbe cristal, onde destructrice)
+    homing = skill_result.get('homing')
+    if homing:
+        hp = HomingProjectile(
+            homing['start_pos'][0], homing['start_pos'][1],
+            homing['target_pos'][0], homing['target_pos'][1],
+            damage=homing['damage'], explosion_radius=homing['radius'],
+            img_path=homing.get('effect_img'), effect_frames=homing.get('effect_frames', 5)
+        )
+        hp._mp_id = next_id_fn()
+        group.add(hp)
+        projectiles_group.add(hp)
+        src_pos = homing['start_pos']
+        sound_manager.play_spatial('shot', src_pos, listener_pos)
+        sound_events.append({'sound': 'arrow', 'x': src_pos[0], 'y': src_pos[1]})
+
+    # Heal (Priest)
+    heal_data = skill_result.get('heal')
+    if heal_data and heal_data.get('target'):
+        target = heal_data['target']
+        target.heal(heal_data['amount'])
+        # Effet visuel de soin
+        heal_fx = HealEffect(
+            heal_data['target_pos'][0], heal_data['target_pos'][1],
+            img_path=heal_data.get('effect_img'),
+            effect_frames=heal_data.get('effect_frames', 4)
+        )
+        group.add(heal_fx)
+        particles_group.add(heal_fx)
+
 
 def _pickup_item(player, item, sound_manager):
     """Ramasse un item. sound_manager sert uniquement pour les sons UI du host.

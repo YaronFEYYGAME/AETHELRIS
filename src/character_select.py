@@ -6,7 +6,7 @@ import pygame
 from characters import CHARACTER_DEFS, get_all_character_types
 
 
-def _load_preview(char_type, size=96):
+def _load_preview(char_type, size=160):
     """Charge la première frame idle d'un personnage en guise de preview."""
     char_def = CHARACTER_DEFS[char_type]
     path, num_frames = char_def['animations']['idle']
@@ -35,8 +35,8 @@ def character_select_screen_host(screen, server):
     previews = {ct: _load_preview(ct) for ct in char_types}
 
     # Disposition : 5 carrés en ligne
-    card_size = 140
-    gap = 20
+    card_size = 200
+    gap = 24
     total_w = len(char_types) * card_size + (len(char_types) - 1) * gap
     start_x = (sw - total_w) // 2
     start_y = (sh - card_size) // 2 - 30
@@ -182,8 +182,8 @@ def character_select_screen_client(screen, client):
     char_types = get_all_character_types()
     previews = {ct: _load_preview(ct) for ct in char_types}
 
-    card_size = 140
-    gap = 20
+    card_size = 200
+    gap = 24
     total_w = len(char_types) * card_size + (len(char_types) - 1) * gap
     start_x = (sw - total_w) // 2
     start_y = (sh - card_size) // 2 - 30

@@ -8,7 +8,7 @@ from sound import SoundManager
 from enemy import Enemy, BigEnemy, Necromancer, Spirit, RemoteEnemy
 from ui import UI
 from item import Item
-from projectile import Projectile, HomingProjectile, HealEffect
+from projectile import Projectile, HomingProjectile, HealEffect, InstantAOE
 from obstacle import Rock, RockParticle, BloodParticle, SmokeParticle, DarkParticle
 from characters import get_character_def
 from character_select import character_select_screen_host, character_select_screen_client
@@ -1051,6 +1051,24 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                                     _handle_enemy_death(e, group, items_group, particles_group)
                     continue  # Le homing gère son propre mouvement/mort
 
+                # InstantAOE — dégâts en zone immédiatement
+                if isinstance(proj, InstantAOE):
+                    if not getattr(proj, '_damage_dealt', False):
+                        proj._damage_dealt = True
+                        for e in list(enemies_group):
+                            if getattr(e, 'health', 0) > 0:
+                                dist = pygame.math.Vector2(
+                                    e.feet.centerx - proj.rect.centerx,
+                                    e.feet.centery - proj.rect.centery
+                                ).length()
+                                if dist <= proj.explosion_radius:
+                                    e.damage(proj.damage_amount)
+                                    if e.health <= 0:
+                                        e_pos = (e.feet.centerx, e.feet.centery)
+                                        sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
+                                    _handle_enemy_death(e, group, items_group, particles_group)
+                    continue
+
                 # HealEffect — juste un visuel, pas de collision
                 if isinstance(proj, HealEffect):
                     continue
@@ -1501,8 +1519,8 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         cur_weapon = lp_now.get('current_weapon')
         prev_weapon = prev_lp.get('current_weapon')
 
-        # Changement d'arme (son UI personnel)
-        if cur_weapon != prev_weapon and cur_weapon is not None:
+        # Changement d'arme (son UI personnel — soldier uniquement)
+        if client_char_type == 'soldier' and cur_weapon != prev_weapon and cur_weapon is not None:
             if cur_weapon == 'melee':
                 sound_manager.play_ui_equip_sword()
             elif cur_weapon == 'ranged':
@@ -1514,8 +1532,8 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         if lp_now.get('has_pickaxe') and not prev_lp.get('has_pickaxe'):
             sound_manager.play_ui_equipement()
 
-        # Flèches ramassées (sans changement d'arme)
-        if lp_now.get('arrows', 0) > prev_lp.get('arrows', 0) and cur_weapon == prev_weapon:
+        # Flèches ramassées (sans changement d'arme — soldier uniquement)
+        if client_char_type == 'soldier' and lp_now.get('arrows', 0) > prev_lp.get('arrows', 0) and cur_weapon == prev_weapon:
             sound_manager.play_ui_equip_bow()
 
         # Pomme mangée (santé augmente sans raison de combat)
@@ -1636,33 +1654,45 @@ def _handle_weapon_switch(player, slot, sound_manager):
     slot: 1 ou 2 (touche clavier)."""
     char_def = player.char_def
     abilities = char_def.get('abilities', {})
+    ct = player.char_type
 
-    if slot == 1:
-        # Slot 1 : arme de mêlée, arc, ou skill1
-        if player.has_melee and player.current_weapon != 'melee':
+    if ct == 'soldier':
+        # Soldier : 1 = épée, 2 = arc
+        if slot == 1 and player.has_melee and player.current_weapon != 'melee':
             player.switch_weapon('melee')
             if sound_manager: sound_manager.play_ui_equip_sword()
-        elif player.has_ranged and not player.has_melee and player.current_weapon != 'ranged':
+        elif slot == 2 and player.has_ranged and player.current_weapon != 'ranged':
             player.switch_weapon('ranged')
             if sound_manager: sound_manager.play_ui_equip_bow()
-        elif 'skill1' in abilities and player.current_weapon != 'skill1' and not player.has_melee and not player.has_ranged:
+
+    elif ct == 'swordsman':
+        # Swordsman : 1 = skill1 (3 salves), 2 = skill2 (5 salves)
+        # Activation directe — le melee de base reste sur E
+        if slot == 1 and 'skill1' in abilities:
+            player.use_skill('skill1')
+        elif slot == 2 and 'skill2' in abilities:
+            player.use_skill('skill2')
+
+    elif ct == 'archer':
+        # Archer : 1 = arc, 2 = flèche d'or (skill1)
+        if slot == 1 and player.has_ranged and player.current_weapon != 'ranged':
+            player.switch_weapon('ranged')
+        elif slot == 2 and 'skill1' in abilities and player.current_weapon != 'skill1':
             player.switch_weapon('skill1')
-            if sound_manager: sound_manager.play_ui_equip_sword()
-    elif slot == 2:
-        # Slot 2 : arc, ou skill1/skill2
-        if player.has_ranged and player.has_melee and player.current_weapon != 'ranged':
-            # Soldier : slot2 = arc
-            player.switch_weapon('ranged')
-            if sound_manager: sound_manager.play_ui_equip_bow()
-        elif 'skill1' in abilities and 'slot2' in char_def.get('icons', {}):
-            # Classes avec 2 slots : archer slot2 = skill1, others slot2 = skill2
-            if player.char_type == 'archer':
-                if player.current_weapon != 'skill1':
-                    player.switch_weapon('skill1')
-                    if sound_manager: sound_manager.play_ui_equip_bow()
-            elif 'skill2' in abilities and player.current_weapon != 'skill2':
-                player.switch_weapon('skill2')
-                if sound_manager: sound_manager.play_ui_equip_sword()
+
+    elif ct == 'wizard':
+        # Wizard : 1 = skill1 (fireball), 2 = skill2 (cristal)
+        if slot == 1 and 'skill1' in abilities and player.current_weapon != 'skill1':
+            player.switch_weapon('skill1')
+        elif slot == 2 and 'skill2' in abilities and player.current_weapon != 'skill2':
+            player.switch_weapon('skill2')
+
+    elif ct == 'priest':
+        # Priest : 1 = skill1 (onde), 2 = skill2 (heal)
+        if slot == 1 and 'skill1' in abilities and player.current_weapon != 'skill1':
+            player.switch_weapon('skill1')
+        elif slot == 2 and 'skill2' in abilities and player.current_weapon != 'skill2':
+            player.switch_weapon('skill2')
 
 
 def _apply_skill_result(skill_result, caster, group, projectiles_group,
@@ -1687,21 +1717,21 @@ def _apply_skill_result(skill_result, caster, group, projectiles_group,
         sound_manager.play_spatial('shot', src_pos, listener_pos)
         sound_events.append({'sound': 'arrow', 'x': src_pos[0], 'y': src_pos[1]})
 
-    # Homing (orbe cristal, onde destructrice)
+    # Instant AOE (orbe cristal, onde destructrice) — spawn directement sur l'ennemi
     homing = skill_result.get('homing')
     if homing:
-        hp = HomingProjectile(
-            homing['start_pos'][0], homing['start_pos'][1],
-            homing['target_pos'][0], homing['target_pos'][1],
+        target_pos = homing['target_pos']
+        # Créer l'effet d'explosion directement sur la cible
+        aoe = InstantAOE(
+            target_pos[0], target_pos[1],
             damage=homing['damage'], explosion_radius=homing['radius'],
             img_path=homing.get('effect_img'), effect_frames=homing.get('effect_frames', 5)
         )
-        hp._mp_id = next_id_fn()
-        group.add(hp)
-        projectiles_group.add(hp)
-        src_pos = homing['start_pos']
-        sound_manager.play_spatial('shot', src_pos, listener_pos)
-        sound_events.append({'sound': 'arrow', 'x': src_pos[0], 'y': src_pos[1]})
+        aoe._mp_id = next_id_fn()
+        group.add(aoe)
+        projectiles_group.add(aoe)
+        sound_manager.play_spatial('shot', target_pos, listener_pos)
+        sound_events.append({'sound': 'arrow', 'x': target_pos[0], 'y': target_pos[1]})
 
     # Heal (Priest)
     heal_data = skill_result.get('heal')

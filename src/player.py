@@ -359,13 +359,15 @@ class Player(pygame.sprite.Sprite):
                                   img_path=proj_img, damage=damage)
                 result['projectile'] = proj
 
-        # --- Homing (orbe de cristal wizard, onde priest) ---
+        # --- Instant AOE (orbe de cristal wizard, onde priest) ---
+        # Spawn directement sur l'ennemi le plus proche et explose en zone
         elif skill_type == 'homing':
             fire_frame = skill.get('fire_frame', 3)
             if current_frame == fire_frame and not self.skill_fired:
                 self.skill_fired = True
-                # Trouver l'ennemi le plus proche
+                # Trouver l'ennemi le plus proche (zone de détection élargie)
                 target_pos = None
+                detect_range = skill.get('detect_range', 400)
                 if enemies_group:
                     closest = None
                     closest_dist = float('inf')
@@ -375,7 +377,7 @@ class Player(pygame.sprite.Sprite):
                                 e.feet.centerx - self.feet.centerx,
                                 e.feet.centery - self.feet.centery
                             ).length()
-                            if dist < closest_dist:
+                            if dist < closest_dist and dist <= detect_range:
                                 closest_dist = dist
                                 closest = e
                     if closest:
@@ -383,12 +385,12 @@ class Player(pygame.sprite.Sprite):
 
                 if target_pos:
                     result['homing'] = {
-                        'start_pos': (self.feet.centerx, self.feet.centery),
                         'target_pos': target_pos,
                         'damage': skill.get('damage', 20),
                         'radius': skill.get('explosion_radius', 60),
                         'effect_img': skill.get('effect_img'),
                         'effect_frames': skill.get('effect_frames', 5),
+                        'instant': True,
                     }
 
         # --- Heal (Priest) ---

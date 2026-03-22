@@ -171,3 +171,53 @@ class HealEffect(pygame.sprite.Sprite):
         if self._frame_index >= len(self._frames):
             self._frame_index = len(self._frames) - 1
         self.image = self._frames[int(self._frame_index)]
+
+
+class InstantAOE(pygame.sprite.Sprite):
+    """Effet qui spawn directement sur une position et explose en zone."""
+
+    def __init__(self, x, y, damage=20, explosion_radius=60, img_path=None, effect_frames=5):
+        super().__init__()
+
+        self.damage_amount = damage
+        self.explosion_radius = explosion_radius
+        self.has_exploded = True  # Dégâts appliqués immédiatement
+        self.exploding = True
+
+        self._frames = []
+        if img_path:
+            try:
+                sheet = pygame.image.load(img_path).convert_alpha()
+                fh = sheet.get_height()
+                fw = fh
+                num = sheet.get_width() // fw
+                for i in range(num):
+                    frame = sheet.subsurface((i * fw, 0, fw, fh))
+                    frame = pygame.transform.scale(frame, (48, 48))
+                    self._frames.append(frame)
+            except FileNotFoundError:
+                pass
+
+        if not self._frames:
+            surf = pygame.Surface((32, 32), pygame.SRCALPHA)
+            pygame.draw.circle(surf, (255, 200, 100, 200), (16, 16), 16)
+            self._frames = [surf]
+
+        self._frame_index = 0
+        self._anim_speed = 0.15
+        self.image = self._frames[0]
+        self.rect = self.image.get_rect(center=(x, y))
+        self.hitbox = pygame.Rect(0, 0, explosion_radius * 2, explosion_radius * 2)
+        self.hitbox.center = self.rect.center
+        self.start_time = pygame.time.get_ticks()
+        self.duration = 400  # ms
+
+    def update(self):
+        elapsed = pygame.time.get_ticks() - self.start_time
+        if elapsed > self.duration:
+            self.kill()
+            return
+        self._frame_index += self._anim_speed
+        if self._frame_index >= len(self._frames):
+            self._frame_index = len(self._frames) - 1
+        self.image = self._frames[int(self._frame_index)]

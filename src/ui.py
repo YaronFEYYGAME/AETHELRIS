@@ -76,16 +76,30 @@ class UI:
         gap = 8
 
         # Slot 1 (touche 1 / attaque de base)
+        # Déterminer si slot1 est actif
+        if char_type == 'soldier':
+            slot1_active = (current_weapon == 'melee')
+        elif char_type == 'archer':
+            slot1_active = (current_weapon == 'ranged')
+        elif char_type == 'swordsman':
+            slot1_active = True  # Icône fixe, toujours active
+        else:
+            slot1_active = (current_weapon == 'skill1')
+
+        slot1_cooldown = 1.0
+        slot1_show_cd = False
+        if char_type not in ('soldier', 'archer', 'swordsman'):
+            slot1_cooldown = skill_cooldowns.get('skill1', 1.0) if skill_cooldowns else 1.0
+            slot1_show_cd = 'skill1' in abilities and abilities['skill1'].get('cooldown', 0) > 1000
+
         self._draw_slot(x_offset, y, slot_size, icons.get('slot1'),
-                        is_active=(current_weapon in ('melee', 'ranged', 'skill1')),
-                        cooldown_ratio=skill_cooldowns.get('skill1', 1.0) if skill_cooldowns else 1.0,
-                        show_cooldown='skill1' in abilities and abilities['skill1'].get('cooldown', 0) > 1000,
+                        is_active=slot1_active,
+                        cooldown_ratio=slot1_cooldown,
+                        show_cooldown=slot1_show_cd,
                         label='1')
 
-        # Afficher le nombre de flèches si archer/soldier avec arc
-        if char_type in ('soldier', 'archer') and current_weapon == 'ranged':
-            self._draw_counter(x_offset, y, slot_size, arrows)
-        elif char_type == 'archer' and current_weapon in ('ranged', 'skill1'):
+        # Afficher le nombre de flèches pour l'archer sur slot1
+        if char_type == 'archer' and current_weapon in ('ranged', 'skill1'):
             self._draw_counter(x_offset, y, slot_size, arrows)
 
         x_offset += slot_size + gap
@@ -99,7 +113,7 @@ class UI:
                                 is_active=(current_weapon == 'ranged'),
                                 cooldown_ratio=1.0, show_cooldown=False, label='2')
                 if current_weapon == 'ranged':
-                    self._draw_counter(x_offset - slot_size - gap, y, slot_size, arrows)
+                    self._draw_counter(x_offset, y, slot_size, arrows)
             elif char_type == 'archer':
                 cr = skill_cooldowns.get('skill1', 1.0) if skill_cooldowns else 1.0
                 self._draw_slot(x_offset, y, slot_size, icons.get('slot2'),

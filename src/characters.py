@@ -157,6 +157,7 @@ CHARACTER_DEFS = {
                 'type': 'homing',
                 'effect_frames': 10,
                 'explosion_radius': 60,
+                'detect_range': 400,  # zone de détection élargie
             },
         },
         'icons': {
@@ -196,6 +197,7 @@ CHARACTER_DEFS = {
                 'type': 'homing',
                 'effect_frames': 5,
                 'explosion_radius': 60,
+                'detect_range': 400,  # zone de détection élargie
             },
             'skill2': {
                 'cooldown': 16000,    # 16 secondes

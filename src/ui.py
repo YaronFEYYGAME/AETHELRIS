@@ -88,7 +88,11 @@ class UI:
 
         slot1_cooldown = 1.0
         slot1_show_cd = False
-        if char_type not in ('soldier', 'archer', 'swordsman'):
+        if char_type == 'swordsman':
+            # Swordsman slot1 = skill1 cooldown
+            slot1_cooldown = skill_cooldowns.get('skill1', 1.0) if skill_cooldowns else 1.0
+            slot1_show_cd = True
+        elif char_type not in ('soldier', 'archer'):
             slot1_cooldown = skill_cooldowns.get('skill1', 1.0) if skill_cooldowns else 1.0
             slot1_show_cd = 'skill1' in abilities and abilities['skill1'].get('cooldown', 0) > 1000
 
@@ -112,8 +116,8 @@ class UI:
                 self._draw_slot(x_offset, y, slot_size, icons.get('slot2'),
                                 is_active=(current_weapon == 'ranged'),
                                 cooldown_ratio=1.0, show_cooldown=False, label='2')
-                if current_weapon == 'ranged':
-                    self._draw_counter(x_offset, y, slot_size, arrows)
+                # Toujours afficher le compteur de flèches sur l'arc
+                self._draw_counter(x_offset, y, slot_size, arrows)
             elif char_type == 'archer':
                 cr = skill_cooldowns.get('skill1', 1.0) if skill_cooldowns else 1.0
                 self._draw_slot(x_offset, y, slot_size, icons.get('slot2'),

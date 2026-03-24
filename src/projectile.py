@@ -14,6 +14,7 @@ class Projectile(pygame.sprite.Sprite):
 
         if img_path is None:
             img_path = "assets/images/Arrow01(32x32).png"
+        self._img_path = img_path
 
         try:
             arrow_img = pygame.image.load(img_path).convert_alpha()
@@ -135,6 +136,7 @@ class HealEffect(pygame.sprite.Sprite):
 
     def __init__(self, x, y, img_path=None, effect_frames=4):
         super().__init__()
+        self._img_path = img_path
 
         self._frames = []
         if img_path:
@@ -176,13 +178,17 @@ class HealEffect(pygame.sprite.Sprite):
 class InstantAOE(pygame.sprite.Sprite):
     """Effet qui spawn directement sur une position et explose en zone."""
 
-    def __init__(self, x, y, damage=20, explosion_radius=60, img_path=None, effect_frames=5):
+    def __init__(self, x, y, damage=20, explosion_radius=60, img_path=None, effect_frames=5, target_size=48):
         super().__init__()
 
         self.damage_amount = damage
         self.explosion_radius = explosion_radius
+        self._img_path = img_path
         self.has_exploded = True  # Dégâts appliqués immédiatement
         self.exploding = True
+
+        # Taille de l'effet proportionnelle à la cible
+        render_size = max(48, int(target_size * 1.2))
 
         self._frames = []
         if img_path:
@@ -193,14 +199,14 @@ class InstantAOE(pygame.sprite.Sprite):
                 num = sheet.get_width() // fw
                 for i in range(num):
                     frame = sheet.subsurface((i * fw, 0, fw, fh))
-                    frame = pygame.transform.scale(frame, (48, 48))
+                    frame = pygame.transform.scale(frame, (render_size, render_size))
                     self._frames.append(frame)
             except FileNotFoundError:
                 pass
 
         if not self._frames:
-            surf = pygame.Surface((32, 32), pygame.SRCALPHA)
-            pygame.draw.circle(surf, (255, 200, 100, 200), (16, 16), 16)
+            surf = pygame.Surface((render_size, render_size), pygame.SRCALPHA)
+            pygame.draw.circle(surf, (255, 200, 100, 200), (render_size // 2, render_size // 2), render_size // 2)
             self._frames = [surf]
 
         self._frame_index = 0

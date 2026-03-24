@@ -5,7 +5,7 @@ import pygame
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
 from menu import start_menu
-from game import run_game, run_game_mp_server, run_game_mp_client
+from game import run_game, run_game_mp_server, run_game_mp_client, run_game_solo
 
 def show_splash_screen(screen, logo_path, total_duration_ms=3000):
     fade_in_time = 1000
@@ -75,7 +75,7 @@ def main():
         music_v, sfx_v, mode, net_obj = result
 
         if mode == 'solo':
-            run_game(screen, start_music_vol=music_v, start_sfx_vol=sfx_v)
+            run_game_solo(screen, start_music_vol=music_v, start_sfx_vol=sfx_v)
         elif mode == 'host' and net_obj is not None:
             run_game_mp_server(screen, net_obj, start_music_vol=music_v, start_sfx_vol=sfx_v)
             net_obj.stop()

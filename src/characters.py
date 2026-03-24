@@ -75,6 +75,7 @@ CHARACTER_DEFS = {
         },
         'icons': {
             'slot1': 'assets/images/sword2_icon.png',
+            'slot2': 'assets/images/sword2_icon.png',
         },
         'projectile_img': None,
     },

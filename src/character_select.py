@@ -296,3 +296,78 @@ def character_select_screen_client(screen, client):
 
         pygame.display.flip()
         clock.tick(60)
+
+
+def character_select_screen_solo(screen):
+    """Écran de sélection solo. Retourne le char_type choisi ou None."""
+    clock = pygame.time.Clock()
+    sw, sh = screen.get_size()
+    font = pygame.font.SysFont(None, 30)
+    font_big = pygame.font.SysFont(None, 40)
+
+    char_types = get_all_character_types()
+    previews = {ct: _load_preview(ct) for ct in char_types}
+
+    card_size = 200
+    gap = 24
+    total_w = len(char_types) * card_size + (len(char_types) - 1) * gap
+    start_x = (sw - total_w) // 2
+    start_y = (sh - card_size) // 2 - 30
+
+    cards = []
+    for i, ct in enumerate(char_types):
+        x = start_x + i * (card_size + gap)
+        cards.append({'type': ct, 'rect': pygame.Rect(x, start_y, card_size, card_size)})
+
+    hover_idx = -1
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                import sys; sys.exit()
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                return None
+            if event.type == pygame.MOUSEMOTION:
+                hover_idx = -1
+                for i, card in enumerate(cards):
+                    if card['rect'].collidepoint(event.pos):
+                        hover_idx = i
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                for i, card in enumerate(cards):
+                    if card['rect'].collidepoint(event.pos):
+                        return card['type']
+
+        screen.fill((15, 10, 25))
+        title = font_big.render("CHOISISSEZ VOTRE PERSONNAGE", True, (255, 255, 255))
+        screen.blit(title, title.get_rect(center=(sw // 2, start_y - 60)))
+
+        for i, card in enumerate(cards):
+            ct = card['type']
+            r = card['rect']
+            char_def = CHARACTER_DEFS[ct]
+
+            bg_color = (40, 40, 50)
+            border_color = (100, 100, 120)
+            if i == hover_idx:
+                bg_color = (50, 40, 70)
+                border_color = (150, 120, 200)
+
+            card_surf = pygame.Surface((r.width, r.height), pygame.SRCALPHA)
+            pygame.draw.rect(card_surf, bg_color, (0, 0, r.width, r.height), border_radius=12)
+            screen.blit(card_surf, r.topleft)
+            pygame.draw.rect(screen, border_color, r, 3, border_radius=12)
+
+            name = font.render(char_def['name'], True, (255, 255, 255))
+            screen.blit(name, name.get_rect(center=(r.centerx, r.top + 18)))
+
+            preview = previews[ct]
+            preview_rect = preview.get_rect(center=(r.centerx, r.centery + 12))
+            screen.blit(preview, preview_rect)
+
+        status = "Cliquez sur un personnage pour commencer"
+        status_surf = font.render(status, True, (200, 200, 200))
+        screen.blit(status_surf, status_surf.get_rect(center=(sw // 2, start_y + card_size + 40)))
+
+        pygame.display.flip()
+        clock.tick(60)

@@ -11,7 +11,7 @@ from item import Item
 from projectile import Projectile, HomingProjectile, HealEffect, InstantAOE
 from obstacle import Rock, RockParticle, BloodParticle, SmokeParticle, DarkParticle
 from characters import get_character_def
-from character_select import character_select_screen_host, character_select_screen_client
+from character_select import character_select_screen_host, character_select_screen_client, character_select_screen_solo
 
 # Fonction utilitaire pour dessiner les hitboxes par-dessus le zoom de la caméra
 def draw_debug_rect(screen, world_rect, color, camera_x, camera_y, zoom, screen_width, screen_height):
@@ -609,12 +609,30 @@ def _serialize_item(item):
 
 
 def _serialize_projectile(proj):
-    return {
+    data = {
         'id':        getattr(proj, '_mp_id', id(proj)),
         'x':         proj.rect.centerx,
         'y':         proj.rect.centery,
         'direction': getattr(proj, 'direction', 'right'),
     }
+    # Transmettre le type et l'image pour le rendu côté client
+    if isinstance(proj, InstantAOE):
+        data['type'] = 'instant_aoe'
+        data['img_path'] = getattr(proj, '_img_path', None)
+        data['radius'] = proj.explosion_radius
+        data['frame'] = proj._frame_index
+        data['duration'] = proj.duration
+        data['start_time'] = proj.start_time
+    elif isinstance(proj, HomingProjectile):
+        data['type'] = 'homing'
+    elif isinstance(proj, HealEffect):
+        data['type'] = 'heal_effect'
+        data['img_path'] = getattr(proj, '_img_path', None)
+        data['frame'] = proj._frame_index
+    else:
+        data['type'] = 'projectile'
+        data['img_path'] = getattr(proj, '_img_path', None)
+    return data
 
 
 def _load_level(level_path, screen_width, screen_height):
@@ -630,16 +648,32 @@ def _load_level(level_path, screen_width, screen_height):
 # BOUCLE SERVEUR MULTIJOUEUR
 # =============================================================================
 
-def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
-    """Boucle de jeu côté serveur. Autoritaire sur la simulation."""
+def run_game_solo(screen, start_music_vol=0.5, start_sfx_vol=0.8):
+    """Lance une partie solo en réutilisant la boucle serveur."""
+    char_type = character_select_screen_solo(screen)
+    if char_type is None:
+        return
+    run_game_mp_server(screen, server=None, start_music_vol=start_music_vol,
+                       start_sfx_vol=start_sfx_vol,
+                       solo_mode=True, solo_char_type=char_type)
+
+
+def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
+                       solo_mode=False, solo_char_type='soldier'):
+    """Boucle de jeu côté serveur. Autoritaire sur la simulation.
+    En mode solo (solo_mode=True), pas de réseau ni de player2."""
     clock = pygame.time.Clock()
     screen_width, screen_height = screen.get_size()
 
     # --- Sélection de personnage ---
-    char_result = character_select_screen_host(screen, server)
-    if char_result is None:
-        return  # Annulé
-    host_char_type, client_char_type = char_result
+    if solo_mode:
+        host_char_type = solo_char_type
+        client_char_type = None
+    else:
+        char_result = character_select_screen_host(screen, server)
+        if char_result is None:
+            return  # Annulé
+        host_char_type, client_char_type = char_result
 
     ui = UI(screen)
     sound_manager = SoundManager()
@@ -678,7 +712,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
             pass
 
     while current_level_index < len(levels):
-        if not server.connected:
+        if not solo_mode and not server.connected:
             _cleanup_audio(); return
 
         try:
@@ -741,9 +775,11 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
         group.add(player)
 
         # Joueur distant (client, piloté par inputs réseau) — avec le personnage choisi
-        player2 = Player(player_x + 20, player_y, char_type=client_char_type)
-        player2.health = player2_health
-        group.add(player2)
+        player2 = None
+        if not solo_mode and client_char_type:
+            player2 = Player(player_x + 20, player_y, char_type=client_char_type)
+            player2.health = player2_health
+            group.add(player2)
 
         map_pixel_width  = tmx_data.width  * tmx_data.tilewidth
         map_pixel_height = tmx_data.height * tmx_data.tileheight
@@ -762,7 +798,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
 
         while level_running:
             # --- Déconnexion client ---
-            if not server.connected:
+            if not solo_mode and not server.connected:
                 _cleanup_audio()
                 _show_disconnected(screen)
                 return
@@ -772,7 +808,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    _cleanup_audio(); server.stop()
+                    _cleanup_audio()
+                    if server: server.stop()
                     return
                 elif event.type == EUREKA_EVENT:
                     if not is_paused:
@@ -808,7 +845,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                             _handle_weapon_switch(player, 2, sound_manager)
                         if event.key == pygame.K_a and can_exit:
                             player_health  = player.health
-                            player2_health = player2.health
+                            if player2: player2_health = player2.health
                             current_level_index += 1
                             level_running = False
                             break
@@ -856,88 +893,91 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                 continue
 
             # --- Inputs réseau → player2 ---
-            net_inputs = server.get_inputs()
-            player2.apply_network_inputs(net_inputs)
-            player2.animate()
-            player2.move(walls)
-
-            # Attaque player2
             host_pos = (player.feet.centerx, player.feet.centery)
-            if net_inputs.get('attack') and player2.current_weapon and player2.health > 0:
-                res = player2.attack()
-                if res:
-                    typ, data = res
-                    if typ == 'melee':
-                        p2_pos = (player2.feet.centerx, player2.feet.centery)
-                        sound_manager.play_spatial('sword', p2_pos, host_pos)
-                        for e in list(enemies_group):
-                            if getattr(e, 'health', 0) > 0 and data.colliderect(e.feet):
-                                e.damage(player2.melee_damage)
-                                if e.health <= 0:
-                                    e_pos = (e.feet.centerx, e.feet.centery)
-                                    sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
-                                _handle_enemy_death(e, group, items_group, particles_group)
-                    elif typ == 'skill':
-                        p2_pos = (player2.feet.centerx, player2.feet.centery)
-                        sound_manager.play_spatial('sword', p2_pos, host_pos)
+            net_inputs = {}
+            if not solo_mode and player2:
+                net_inputs = server.get_inputs()
+                player2.apply_network_inputs(net_inputs)
+                player2.animate()
+                player2.move(walls)
 
-            # Vérifier les compétences actives de player2
-            if player2.is_attacking and player2.active_skill:
-                p2_pos = (player2.feet.centerx, player2.feet.centery)
-                skill_result = player2.check_skill_attack(
-                    player2.active_skill, enemies_group, ally_player=player)
-                _apply_skill_result(skill_result, player2, group, projectiles_group,
-                                    particles_group, enemies_group, items_group,
-                                    sound_manager, sound_events, host_pos, _next_id)
+                # Attaque player2
+                if net_inputs.get('attack') and player2.current_weapon and player2.health > 0:
+                    res = player2.attack()
+                    if res:
+                        typ, data = res
+                        if typ == 'melee':
+                            p2_pos = (player2.feet.centerx, player2.feet.centery)
+                            sound_manager.play_spatial('sword', p2_pos, host_pos)
+                            for e in list(enemies_group):
+                                if getattr(e, 'health', 0) > 0 and data.colliderect(e.feet):
+                                    e.damage(player2.melee_damage)
+                                    if e.health <= 0:
+                                        e_pos = (e.feet.centerx, e.feet.centery)
+                                        sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
+                                    _handle_enemy_death(e, group, items_group, particles_group)
+                        elif typ == 'skill':
+                            p2_pos = (player2.feet.centerx, player2.feet.centery)
+                            sound_manager.play_spatial('sword', p2_pos, host_pos)
 
-            # Dash player2
-            if net_inputs.get('dash') and player2.has_boots:
-                if player2.dash(walls):
+                # Vérifier les compétences actives de player2
+                if player2.is_attacking and player2.active_skill:
                     p2_pos = (player2.feet.centerx, player2.feet.centery)
-                    sound_manager.play_spatial_dash(p2_pos, host_pos)
-                    sound_events.append({'sound': 'dash', 'x': p2_pos[0], 'y': p2_pos[1]})
-                    dash_events.append({'player': 1, 'x': player2.feet.centerx, 'y': player2.feet.bottom})
-                    for _ in range(20):
-                        smoke = SmokeParticle(player2.feet.centerx + random.randint(-15, 15),
-                                             player2.feet.bottom + random.randint(-15, 5))
-                        group.add(smoke); particles_group.add(smoke)
+                    skill_result = player2.check_skill_attack(
+                        player2.active_skill, enemies_group, ally_player=player)
+                    _apply_skill_result(skill_result, player2, group, projectiles_group,
+                                        particles_group, enemies_group, items_group,
+                                        sound_manager, sound_events, host_pos, _next_id)
 
-            # Ramasser objet player2 (sans son : le client joue ses propres sons)
-            if net_inputs.get('interact') and player2.health > 0:
-                for item in list(items_group):
-                    if player2.feet.colliderect(item.rect):
-                        _pickup_item(player2, item, None)
-                        item.kill(); break
-                if player2.has_pickaxe:
-                    for rock in list(rocks_group):
-                        if player2.feet.colliderect(rock.hitbox.inflate(40, 40)):
-                            for _ in range(15):
-                                p = RockParticle(rock.rect.centerx, rock.rect.centery)
-                                group.add(p); particles_group.add(p)
-                            rx, ry = rock.rect.centerx, rock.rect.centery
-                            rock.kill()
-                            if rock.hitbox in walls: walls.remove(rock.hitbox)
-                            player2.has_pickaxe = False
-                            sound_manager.play_spatial('rock_broke', (rx, ry), host_pos)
-                            sound_events.append({'sound': 'rock_broke', 'x': rx, 'y': ry})
-                            pygame.time.set_timer(EUREKA_EVENT, 250, 1)
-                            sound_events.append({'sound': 'eureka', 'x': rx, 'y': ry})
-                            break
+            if not solo_mode and player2:
+                # Dash player2
+                if net_inputs.get('dash') and player2.has_boots:
+                    if player2.dash(walls):
+                        p2_pos = (player2.feet.centerx, player2.feet.centery)
+                        sound_manager.play_spatial_dash(p2_pos, host_pos)
+                        sound_events.append({'sound': 'dash', 'x': p2_pos[0], 'y': p2_pos[1]})
+                        dash_events.append({'player': 1, 'x': player2.feet.centerx, 'y': player2.feet.bottom})
+                        for _ in range(20):
+                            smoke = SmokeParticle(player2.feet.centerx + random.randint(-15, 15),
+                                                 player2.feet.bottom + random.randint(-15, 5))
+                            group.add(smoke); particles_group.add(smoke)
 
-            # Changement d'arme/compétence player2 (sans son : le client joue ses propres sons)
-            if net_inputs.get('weapon1'):
-                _handle_weapon_switch(player2, 1, None)
-            if net_inputs.get('weapon2'):
-                _handle_weapon_switch(player2, 2, None)
+                # Ramasser objet player2 (sans son : le client joue ses propres sons)
+                if net_inputs.get('interact') and player2.health > 0:
+                    for item in list(items_group):
+                        if player2.feet.colliderect(item.rect):
+                            _pickup_item(player2, item, None)
+                            item.kill(); break
+                    if player2.has_pickaxe:
+                        for rock in list(rocks_group):
+                            if player2.feet.colliderect(rock.hitbox.inflate(40, 40)):
+                                for _ in range(15):
+                                    p = RockParticle(rock.rect.centerx, rock.rect.centery)
+                                    group.add(p); particles_group.add(p)
+                                rx, ry = rock.rect.centerx, rock.rect.centery
+                                rock.kill()
+                                if rock.hitbox in walls: walls.remove(rock.hitbox)
+                                player2.has_pickaxe = False
+                                sound_manager.play_spatial('rock_broke', (rx, ry), host_pos)
+                                sound_events.append({'sound': 'rock_broke', 'x': rx, 'y': ry})
+                                pygame.time.set_timer(EUREKA_EVENT, 250, 1)
+                                sound_events.append({'sound': 'eureka', 'x': rx, 'y': ry})
+                                break
 
-            # Attaque à distance player2
-            new_proj2 = player2.check_ranged_attack()
-            if new_proj2:
-                new_proj2._mp_id = _next_id()
-                group.add(new_proj2); projectiles_group.add(new_proj2)
+                # Changement d'arme/compétence player2
+                if net_inputs.get('weapon1'):
+                    _handle_weapon_switch(player2, 1, None)
+                if net_inputs.get('weapon2'):
+                    _handle_weapon_switch(player2, 2, None)
 
-            # Régénération de flèches player2 (Archer)
-            player2.update_arrow_regen()
+                # Attaque à distance player2
+                new_proj2 = player2.check_ranged_attack()
+                if new_proj2:
+                    new_proj2._mp_id = _next_id()
+                    group.add(new_proj2); projectiles_group.add(new_proj2)
+
+                # Régénération de flèches player2 (Archer)
+                player2.update_arrow_regen()
 
             # --- Joueur local ---
             player.update()
@@ -946,23 +986,25 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
             # --- Ennemis ---
             for e in list(enemies_group):
                 # Ciblage : seulement les joueurs vivants
-                live = [p for p in [player, player2] if p.health > 0]
+                all_players = [player] + ([player2] if player2 else [])
+                live = [p for p in all_players if p.health > 0]
                 if live:
                     target = min(live, key=lambda p: (
                         pygame.math.Vector2(p.feet.center) - pygame.math.Vector2(e.feet.center)
                     ).length())
                 else:
-                    target = player  # les deux morts, peu importe
+                    target = player  # tous morts, peu importe
                 e.update(target, walls)
-                # Dégâts sur le joueur non-ciblé (boss avec get_attack_hitbox), une fois par cooldown
-                other = player2 if target is player else player
-                if hasattr(e, 'get_attack_hitbox') and getattr(e, 'is_attacking', False) and other.health > 0:
-                    atk = e.get_attack_hitbox()
-                    now = pygame.time.get_ticks()
-                    last_mp = getattr(e, '_mp_other_dmg_time', 0)
-                    if atk and atk.colliderect(other.feet) and now - last_mp > getattr(e, 'attack_cooldown', 1500):
-                        other.damage(getattr(e, 'damage_amount', 10))
-                        e._mp_other_dmg_time = now
+                # Dégâts sur le joueur non-ciblé (boss avec get_attack_hitbox)
+                if player2:
+                    other = player2 if target is player else player
+                    if hasattr(e, 'get_attack_hitbox') and getattr(e, 'is_attacking', False) and other.health > 0:
+                        atk = e.get_attack_hitbox()
+                        now = pygame.time.get_ticks()
+                        last_mp = getattr(e, '_mp_other_dmg_time', 0)
+                        if atk and atk.colliderect(other.feet) and now - last_mp > getattr(e, 'attack_cooldown', 1500):
+                            other.damage(getattr(e, 'damage_amount', 10))
+                            e._mp_other_dmg_time = now
                 if hasattr(e, 'pending_summons') and e.pending_summons:
                     for sx, sy in e.pending_summons:
                         ns = Spirit(sx, sy); ns._mp_id = _next_id()
@@ -1111,7 +1153,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                 sound_manager.stop_step(); was_walking = False
 
             # Pas spatialisés du joueur distant (player2)
-            p2_moving = player2.is_moving() if hasattr(player2, 'is_moving') else False
+            p2_moving = (player2.is_moving() if player2 and hasattr(player2, 'is_moving') else False)
             if p2_moving and not p2_was_walking:
                 p2_pos = (player2.feet.centerx, player2.feet.centery)
                 sound_manager.play_remote_step(p2_pos, host_pos)
@@ -1145,7 +1187,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                                   has_pickaxe=player.has_pickaxe, has_boots=player.has_boots,
                                   dash_cr=cr)
             # Barre de vie player2 (en haut à droite)
-            _draw_remote_health(screen, player2.health, player2.max_health)
+            if player2:
+                _draw_remote_health(screen, player2.health, player2.max_health)
 
             for e in enemies_group:
                 if getattr(e, 'has_aggro', False) and getattr(e, 'health', 0) > 0:
@@ -1157,14 +1200,15 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
             if show_exit_dialogue:
                 ui.draw_dialogue("Voulez vous rentrer ? (A)")
 
-            # --- Indicateur "multijoueur" ---
-            mp_surf = pygame.font.SysFont(None, 24).render("● MULTIJOUEUR", True, (80, 200, 80))
-            screen.blit(mp_surf, (screen_width - mp_surf.get_width() - 10, 10))
+            # --- Indicateur mode ---
+            if not solo_mode:
+                mp_surf = pygame.font.SysFont(None, 24).render("● MULTIJOUEUR", True, (80, 200, 80))
+                screen.blit(mp_surf, (screen_width - mp_surf.get_width() - 10, 10))
 
-            # --- Mort joueur local (serveur) ---
+            # --- Mort joueur local ---
             server_dead = player.health <= 0
-            client_dead = player2.health <= 0
-            game_over   = server_dead and client_dead
+            client_dead = player2.health <= 0 if player2 else True
+            game_over = server_dead if solo_mode else (server_dead and client_dead)
 
             if server_dead:
                 if death_time is None: death_time = pygame.time.get_ticks()
@@ -1183,24 +1227,30 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8):
                 death_time = None
                 death_sound_played = False
 
-            # Fin de partie : les DEUX joueurs sont morts
+            # Fin de partie
             if game_over:
                 if both_dead_time is None: both_dead_time = pygame.time.get_ticks()
                 if pygame.time.get_ticks() - both_dead_time > 5000:
-                    _cleanup_audio(); server.stop(); return
+                    _cleanup_audio()
+                    if server: server.stop()
+                    return
 
-            # --- Envoi état au client ---
-            state = {
-                'level':       current_level_index,
-                'players':     [_serialize_player(player), _serialize_player(player2)],
-                'enemies':     [_serialize_enemy(e)        for e    in enemies_group],
-                'items':       [_serialize_item(it)        for it   in items_group],
-                'projectiles': [_serialize_projectile(pr)  for pr   in projectiles_group
-                                if not isinstance(pr, HealEffect)],
-                'game_over':   game_over,
-                'events':      {'dashes': dash_events, 'sounds': sound_events},
-            }
-            server.send_state(state)
+            # --- Envoi état au client (multijoueur uniquement) ---
+            if not solo_mode and server:
+                players_list = [_serialize_player(player)]
+                if player2:
+                    players_list.append(_serialize_player(player2))
+                state = {
+                    'level':       current_level_index,
+                    'players':     players_list,
+                    'enemies':     [_serialize_enemy(e)        for e    in enemies_group],
+                    'items':       [_serialize_item(it)        for it   in items_group],
+                    'projectiles': [_serialize_projectile(pr)  for pr   in projectiles_group
+                                    if not isinstance(pr, HealEffect)],
+                    'game_over':   game_over,
+                    'events':      {'dashes': dash_events, 'sounds': sound_events},
+                }
+                server.send_state(state)
 
             pygame.display.flip()
             clock.tick(60)
@@ -1423,15 +1473,29 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         for pdata in projs_state:
             pid = pdata['id']
             if pid not in remote_projectiles:
-                rp = Projectile(pdata['x'], pdata['y'], pdata['direction'])
+                ptype = pdata.get('type', 'projectile')
+                if ptype == 'instant_aoe':
+                    rp = InstantAOE(pdata['x'], pdata['y'],
+                                    img_path=pdata.get('img_path'),
+                                    explosion_radius=pdata.get('radius', 60))
+                elif ptype == 'heal_effect':
+                    rp = HealEffect(pdata['x'], pdata['y'],
+                                    img_path=pdata.get('img_path'))
+                elif ptype == 'homing':
+                    # Le homing arrive déjà en explosion côté client
+                    rp = Projectile(pdata['x'], pdata['y'], pdata['direction'])
+                else:
+                    rp = Projectile(pdata['x'], pdata['y'], pdata['direction'],
+                                    img_path=pdata.get('img_path'))
                 group.add(rp)
                 remote_projectiles[pid] = rp
             else:
                 rp = remote_projectiles[pid]
-                rp.rect.centerx   = pdata['x']
-                rp.rect.centery   = pdata['y']
-                rp.hitbox.centerx = pdata['x']
-                rp.hitbox.centery = pdata['y']
+                rp.rect.centerx = pdata['x']
+                rp.rect.centery = pdata['y']
+                if hasattr(rp, 'hitbox'):
+                    rp.hitbox.centerx = pdata['x']
+                    rp.hitbox.centery = pdata['y']
 
         # --- Événements serveur (particules + sons) ---
         events_recv = state.get('events', {})
@@ -1725,7 +1789,8 @@ def _apply_skill_result(skill_result, caster, group, projectiles_group,
         aoe = InstantAOE(
             target_pos[0], target_pos[1],
             damage=homing['damage'], explosion_radius=homing['radius'],
-            img_path=homing.get('effect_img'), effect_frames=homing.get('effect_frames', 5)
+            img_path=homing.get('effect_img'), effect_frames=homing.get('effect_frames', 5),
+            target_size=homing.get('target_size', 48)
         )
         aoe._mp_id = next_id_fn()
         group.add(aoe)
@@ -1744,8 +1809,10 @@ def _apply_skill_result(skill_result, caster, group, projectiles_group,
             img_path=heal_data.get('effect_img'),
             effect_frames=heal_data.get('effect_frames', 4)
         )
+        heal_fx._mp_id = next_id_fn()
         group.add(heal_fx)
         particles_group.add(heal_fx)
+        projectiles_group.add(heal_fx)  # pour la sérialisation réseau
 
 
 def _pickup_item(player, item, sound_manager):

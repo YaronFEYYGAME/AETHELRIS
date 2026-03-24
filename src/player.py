@@ -384,6 +384,10 @@ class Player(pygame.sprite.Sprite):
                         target_pos = (closest.feet.centerx, closest.feet.centery)
 
                 if target_pos:
+                    # Taille de l'effet proportionnelle à la taille de l'ennemi
+                    target_size = 48  # taille par défaut
+                    if closest and hasattr(closest, 'rect'):
+                        target_size = max(closest.rect.width, closest.rect.height)
                     result['homing'] = {
                         'target_pos': target_pos,
                         'damage': skill.get('damage', 20),
@@ -391,6 +395,7 @@ class Player(pygame.sprite.Sprite):
                         'effect_img': skill.get('effect_img'),
                         'effect_frames': skill.get('effect_frames', 5),
                         'instant': True,
+                        'target_size': target_size,
                     }
 
         # --- Heal (Priest) ---

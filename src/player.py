@@ -291,6 +291,10 @@ class Player(pygame.sprite.Sprite):
         self.skill_hit_flags = {}
         return ('skill', skill_name)
 
+    def reset_skill_cooldown(self, skill_name):
+        """Annule le cooldown d'une compétence (utilisé quand elle échoue)."""
+        self.skill_cooldowns[skill_name] = -999999
+
     def check_ranged_attack(self):
         """Vérifie si un projectile doit être tiré (attaque à distance standard)."""
         fire_frame = self.char_def.get('ranged_fire_frame', 6)
@@ -354,9 +358,9 @@ class Player(pygame.sprite.Sprite):
                 self.skill_fired = True
                 proj_img = skill.get('projectile_img')
                 damage = skill.get('damage', 15)
-                # Créer le projectile avec l'image de l'effet
+                piercing = skill.get('piercing', False)
                 proj = Projectile(self.feet.centerx, self.feet.centery, self.facing,
-                                  img_path=proj_img, damage=damage)
+                                  img_path=proj_img, damage=damage, piercing=piercing)
                 result['projectile'] = proj
 
         # --- Instant AOE (orbe de cristal wizard, onde priest) ---
@@ -396,7 +400,11 @@ class Player(pygame.sprite.Sprite):
                         'effect_frames': skill.get('effect_frames', 5),
                         'instant': True,
                         'target_size': target_size,
+                        'render_scale': skill.get('render_scale', 1.2),
                     }
+                else:
+                    # Aucun ennemi à portée → signaler l'échec
+                    result['fail'] = True
 
         # --- Heal (Priest) ---
         elif skill_type == 'heal':

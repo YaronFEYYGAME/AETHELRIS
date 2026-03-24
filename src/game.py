@@ -8,7 +8,7 @@ from sound import SoundManager
 from enemy import Enemy, BigEnemy, Necromancer, Spirit, RemoteEnemy
 from ui import UI
 from item import Item
-from projectile import Projectile, HomingProjectile, HealEffect, InstantAOE
+from projectile import Projectile, HomingProjectile, HealEffect, InstantAOE, FloatingText
 from obstacle import Rock, RockParticle, BloodParticle, SmokeParticle, DarkParticle
 from characters import get_character_def
 from character_select import character_select_screen_host, character_select_screen_client, character_select_screen_solo
@@ -398,13 +398,21 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                 group.add(new_projectile)
                 projectiles_group.add(new_projectile)
 
-            for projectile in projectiles_group:
+            for projectile in list(projectiles_group):
+                if not hasattr(projectile, 'hitbox'):
+                    continue
                 for enemy in enemies_group:
                     if getattr(enemy, 'health', 0) > 0:
                         body_hitbox = enemy.feet.copy()
                         body_hitbox.height += 25
                         body_hitbox.y -= 25
                         if projectile.hitbox.colliderect(body_hitbox):
+                            # Piercing : skip les ennemis déjà touchés
+                            if getattr(projectile, 'piercing', False):
+                                if id(enemy) in projectile._hit_enemies:
+                                    continue
+                                projectile._hit_enemies.add(id(enemy))
+
                             hit_pos = (projectile.hitbox.centerx, projectile.hitbox.centery)
                             sound_manager.play_spatial('shot', hit_pos, ppos)
                             enemy.damage(projectile.damage_amount)
@@ -416,15 +424,15 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                                 enemy.pending_drop = None
 
                             if enemy.health <= 0:
-                                # --- PARTICULES SOMBRES ICI AUSSI ---
                                 ParticleClass = DarkParticle if isinstance(enemy, (Necromancer, Spirit)) else BloodParticle
                                 for _ in range(20):
                                     particle = ParticleClass(enemy.rect.centerx, enemy.rect.centery)
                                     group.add(particle)
                                     particles_group.add(particle)
 
-                            projectile.kill()
-                            break
+                            if not getattr(projectile, 'piercing', False):
+                                projectile.kill()
+                                break
 
                 if projectile.alive():
                     for wall in walls:
@@ -1123,6 +1131,12 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                     if getattr(e, 'health', 0) > 0:
                         body = e.feet.copy(); body.height += 25; body.y -= 25
                         if proj.hitbox.colliderect(body):
+                            # Piercing : skip les ennemis déjà touchés
+                            if getattr(proj, 'piercing', False):
+                                if id(e) in proj._hit_enemies:
+                                    continue
+                                proj._hit_enemies.add(id(e))
+
                             hit_pos = (proj.hitbox.centerx, proj.hitbox.centery)
                             sound_manager.play_spatial('shot', hit_pos, host_pos)
                             sound_events.append({'sound': 'arrow', 'x': hit_pos[0], 'y': hit_pos[1]})
@@ -1131,7 +1145,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                 e_pos = (e.feet.centerx, e.feet.centery)
                                 sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
                             _handle_enemy_death(e, group, items_group, particles_group)
-                            proj.kill(); break
+                            if not getattr(proj, 'piercing', False):
+                                proj.kill(); break
                 if proj.alive():
                     for wall in walls:
                         if proj.hitbox.colliderect(wall):
@@ -1791,7 +1806,8 @@ def _apply_skill_result(skill_result, caster, group, projectiles_group,
             target_pos[0], target_pos[1],
             damage=homing['damage'], explosion_radius=homing['radius'],
             img_path=homing.get('effect_img'), effect_frames=homing.get('effect_frames', 5),
-            target_size=homing.get('target_size', 48)
+            target_size=homing.get('target_size', 48),
+            render_scale=homing.get('render_scale', 1.2)
         )
         aoe._mp_id = next_id_fn()
         group.add(aoe)
@@ -1814,6 +1830,20 @@ def _apply_skill_result(skill_result, caster, group, projectiles_group,
         group.add(heal_fx)
         particles_group.add(heal_fx)
         projectiles_group.add(heal_fx)  # pour la sérialisation réseau
+
+    # Échec de compétence homing (aucun ennemi à portée)
+    if skill_result.get('fail'):
+        # Annuler le cooldown pour que le joueur puisse réessayer
+        if caster.active_skill:
+            # Trouver le skill_name correspondant à l'animation active
+            for sk_name, sk_def in caster.abilities.items():
+                if sk_def.get('anim') == caster.active_skill:
+                    caster.reset_skill_cooldown(sk_name)
+                    break
+        # Texte flottant "fail..."
+        ft = FloatingText(caster.feet.centerx, caster.feet.centery)
+        group.add(ft)
+        particles_group.add(ft)
 
 
 def _pickup_item(player, item, sound_manager):

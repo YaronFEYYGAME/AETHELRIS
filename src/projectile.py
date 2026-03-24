@@ -5,16 +5,22 @@ import math
 class Projectile(pygame.sprite.Sprite):
     """Projectile linéaire (flèche, boule de feu, etc.)."""
 
-    def __init__(self, x, y, direction, img_path=None, damage=10.5):
+    def __init__(self, x, y, direction, img_path=None, damage=10.5, piercing=False):
         super().__init__()
 
         self.speed = 8
         self.damage_amount = damage
         self.direction = direction
+        self.piercing = piercing
+        self._hit_enemies = set()  # pour les projectiles traversants
 
         if img_path is None:
             img_path = "assets/images/Arrow01(32x32).png"
         self._img_path = img_path
+
+        # Déterminer la taille d'affichage selon le type de projectile
+        is_effect = 'Effect' in img_path or 'effect' in img_path
+        display_size = 64 if is_effect else 32
 
         try:
             arrow_img = pygame.image.load(img_path).convert_alpha()
@@ -22,7 +28,7 @@ class Projectile(pygame.sprite.Sprite):
             if arrow_img.get_width() > arrow_img.get_height() * 1.5:
                 frame_size = arrow_img.get_height()
                 arrow_img = arrow_img.subsurface((0, 0, frame_size, frame_size))
-                arrow_img = pygame.transform.scale(arrow_img, (32, 32))
+                arrow_img = pygame.transform.scale(arrow_img, (display_size, display_size))
             if self.direction == "left":
                 self.image = pygame.transform.flip(arrow_img, True, False)
                 self.velocity_x = -self.speed
@@ -178,7 +184,7 @@ class HealEffect(pygame.sprite.Sprite):
 class InstantAOE(pygame.sprite.Sprite):
     """Effet qui spawn directement sur une position et explose en zone."""
 
-    def __init__(self, x, y, damage=20, explosion_radius=60, img_path=None, effect_frames=5, target_size=48):
+    def __init__(self, x, y, damage=20, explosion_radius=60, img_path=None, effect_frames=5, target_size=48, render_scale=1.2):
         super().__init__()
 
         self.damage_amount = damage
@@ -188,7 +194,7 @@ class InstantAOE(pygame.sprite.Sprite):
         self.exploding = True
 
         # Taille de l'effet proportionnelle à la cible
-        render_size = max(48, int(target_size * 1.2))
+        render_size = max(48, int(target_size * render_scale))
 
         self._frames = []
         if img_path:
@@ -227,3 +233,28 @@ class InstantAOE(pygame.sprite.Sprite):
         if self._frame_index >= len(self._frames):
             self._frame_index = len(self._frames) - 1
         self.image = self._frames[int(self._frame_index)]
+
+
+class FloatingText(pygame.sprite.Sprite):
+    """Texte flottant qui apparaît brièvement au-dessus d'un personnage."""
+
+    def __init__(self, x, y, text="fail...", duration=700):
+        super().__init__()
+        self._font = pygame.font.SysFont(None, 22)
+        self._text = text
+        self._base_y = y
+        self.start_time = pygame.time.get_ticks()
+        self.duration = duration
+        self.image = self._font.render(text, True, (255, 100, 100))
+        self.rect = self.image.get_rect(center=(x, y - 40))
+
+    def update(self):
+        elapsed = pygame.time.get_ticks() - self.start_time
+        if elapsed > self.duration:
+            self.kill()
+            return
+        progress = elapsed / self.duration
+        self.rect.centery = self._base_y - 40 - int(15 * progress)
+        alpha = max(0, int(255 * (1.0 - progress)))
+        self.image = self._font.render(self._text, True, (255, 100, 100))
+        self.image.set_alpha(alpha)

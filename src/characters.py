@@ -110,6 +110,7 @@ CHARACTER_DEFS = {
                 'projectile_img': 'assets/images/Arrow02(32x32).png',
                 'fire_frame': 8,
                 'type': 'projectile',
+                'piercing': True,     # traverse les ennemis
             },
         },
         'icons': {
@@ -141,7 +142,7 @@ CHARACTER_DEFS = {
         'ranged_fire_frame': -1,
         'abilities': {
             'skill1': {
-                'cooldown': 800,      # pas de vrai cooldown, attaque de base
+                'cooldown': 1500,     # 1.5 secondes
                 'damage': 12,
                 'anim': 'skill1',
                 'projectile_img': 'assets/images/Wizard-Attack02_Effect.png',
@@ -158,7 +159,8 @@ CHARACTER_DEFS = {
                 'type': 'homing',
                 'effect_frames': 10,
                 'explosion_radius': 60,
-                'detect_range': 400,  # zone de détection élargie
+                'detect_range': 200,
+                'render_scale': 0.6,  # effet visuel réduit pour le wizard
             },
         },
         'icons': {
@@ -190,7 +192,7 @@ CHARACTER_DEFS = {
         'ranged_fire_frame': -1,
         'abilities': {
             'skill1': {
-                'cooldown': 800,      # attaque de base
+                'cooldown': 1500,     # 1.5 secondes
                 'damage': 20,
                 'anim': 'skill1',
                 'effect_img': 'assets/images/Priest-Attack_effect.png',
@@ -198,7 +200,7 @@ CHARACTER_DEFS = {
                 'type': 'homing',
                 'effect_frames': 5,
                 'explosion_radius': 60,
-                'detect_range': 400,  # zone de détection élargie
+                'detect_range': 200,
             },
             'skill2': {
                 'cooldown': 16000,    # 16 secondes

@@ -25,11 +25,19 @@ class UI:
 
             self.boots_img = pygame.image.load("assets/images/hermesboots.png").convert_alpha()
             self.boots_img = pygame.transform.scale(self.boots_img, (64, 64))
+
+            self.redgem_img = pygame.image.load("assets/images/redgem.png").convert_alpha()
+            self.redgem_img = pygame.transform.scale(self.redgem_img, (64, 64))
+
+            self.bluegem_img = pygame.image.load("assets/images/bluegem.png").convert_alpha()
+            self.bluegem_img = pygame.transform.scale(self.bluegem_img, (64, 64))
         except FileNotFoundError:
             self.sword_img = pygame.Surface((64, 64)); self.sword_img.fill((200, 200, 200))
             self.bow_img = pygame.Surface((64, 64)); self.bow_img.fill((150, 100, 50))
             self.pickaxe_img = pygame.Surface((64, 64)); self.pickaxe_img.fill((100, 100, 100))
             self.boots_img = pygame.Surface((64, 64)); self.boots_img.fill((100, 150, 200))
+            self.redgem_img = pygame.Surface((64, 64)); self.redgem_img.fill((200, 50, 50))
+            self.bluegem_img = pygame.Surface((64, 64)); self.bluegem_img.fill((50, 50, 200))
 
     def load_character_icons(self, char_type):
         """Charge les icônes spécifiques à un personnage."""
@@ -64,7 +72,8 @@ class UI:
         pygame.draw.rect(self.screen, (255, 255, 255), (x, y, bar_width, bar_height), 2)
 
     def draw_character_hud(self, char_type, current_weapon, skill_cooldowns=None,
-                           arrows=0, has_pickaxe=False, has_boots=False, dash_cr=1.0):
+                           arrows=0, has_pickaxe=False, has_boots=False, dash_cr=1.0,
+                           has_red_gem=False, has_blue_gem=False, blue_gem_cr=1.0):
         """Dessine le HUD complet d'un personnage (icônes + cooldowns)."""
         icons = self.load_character_icons(char_type)
         char_def = CHARACTER_DEFS.get(char_type, CHARACTER_DEFS['soldier'])
@@ -141,6 +150,19 @@ class UI:
             self._draw_slot(x_offset, y, slot_size, self.boots_img,
                             is_active=False, cooldown_ratio=dash_cr,
                             show_cooldown=True)
+            x_offset += slot_size + gap
+
+        # Red Gem (passif, pas de cooldown)
+        if has_red_gem:
+            self._draw_slot(x_offset, y, slot_size, self.redgem_img,
+                            is_active=False, cooldown_ratio=1.0, show_cooldown=False)
+            x_offset += slot_size + gap
+
+        # Blue Gem (actif, cooldown 30s)
+        if has_blue_gem:
+            self._draw_slot(x_offset, y, slot_size, self.bluegem_img,
+                            is_active=False, cooldown_ratio=blue_gem_cr,
+                            show_cooldown=True, label='3')
 
     def _draw_slot(self, x, y, size, icon, is_active=False, cooldown_ratio=1.0,
                    show_cooldown=False, label=None):

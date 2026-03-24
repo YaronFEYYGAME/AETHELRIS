@@ -60,6 +60,15 @@ class Player(pygame.sprite.Sprite):
         self.dash_cooldown = 4000
         self.last_dash_time = 0
 
+        # Gems
+        self.has_red_gem = False
+        self.red_gem_triggered = False  # flag pour l'animation fullscreen
+        self.has_blue_gem = False
+        self.blue_gem_active = False
+        self.blue_gem_end_time = 0
+        self.blue_gem_cooldown = 30000  # 30 secondes
+        self.last_blue_gem_time = -30000  # prêt immédiatement
+
         self.is_hit = False
         self.last_hit_time = 0
 
@@ -232,6 +241,15 @@ class Player(pygame.sprite.Sprite):
                 self.image.blit(red_overlay, (0, 0))
             else:
                 self.is_hit = False
+
+        # Blue Gem : teinte bleue pendant l'invincibilité
+        if self.blue_gem_active:
+            if pygame.time.get_ticks() < self.blue_gem_end_time:
+                mask = pygame.mask.from_surface(self.image)
+                blue_overlay = mask.to_surface(setcolor=(50, 100, 255, 120), unsetcolor=(0, 0, 0, 0))
+                self.image.blit(blue_overlay, (0, 0))
+            else:
+                self.blue_gem_active = False
 
     def attack(self):
         """Attaque de base (E). Retourne ('melee', rect), ('ranged', None), ou None."""
@@ -458,12 +476,36 @@ class Player(pygame.sprite.Sprite):
 
     def damage(self, amount):
         if self.state != 'death':
+            # Blue Gem : invincibilité active → ignore les dégâts
+            if self.blue_gem_active and pygame.time.get_ticks() < self.blue_gem_end_time:
+                return
             self.health -= amount
             self.is_hit = True
             self.last_hit_time = pygame.time.get_ticks()
             if self.health <= 0:
+                # Red Gem : empêche la mort et restaure 100% PV
+                if self.has_red_gem:
+                    self.health = self.max_health
+                    self.has_red_gem = False
+                    self.red_gem_triggered = True
+                    return
                 self.health = 0
                 self.frame_index = 0
+
+    def activate_blue_gem(self):
+        """Active la Blue Gem : 5 secondes d'invincibilité."""
+        current_time = pygame.time.get_ticks()
+        if current_time - self.last_blue_gem_time < self.blue_gem_cooldown:
+            return False
+        self.last_blue_gem_time = current_time
+        self.blue_gem_active = True
+        self.blue_gem_end_time = current_time + 5000
+        return True
+
+    def get_blue_gem_cooldown_ratio(self):
+        """Retourne le ratio de cooldown de la blue gem (0.0 = vient d'être utilisé, 1.0 = prêt)."""
+        elapsed = pygame.time.get_ticks() - self.last_blue_gem_time
+        return min(1.0, max(0.0, elapsed / self.blue_gem_cooldown))
 
     def heal(self, amount):
         if self.state != 'death':
@@ -559,7 +601,13 @@ class RemotePlayer(pygame.sprite.Sprite):
         if anim_state not in anims:
             anim_state = 'idle'
         frames = anims[anim_state]
-        self.image = frames[int(frame) % len(frames)]
+        self.image = frames[int(frame) % len(frames)].copy()
+
+        # Blue Gem : teinte bleue si invincibilité active
+        if state.get('blue_gem_active', False):
+            mask = pygame.mask.from_surface(self.image)
+            blue_overlay = mask.to_surface(setcolor=(50, 100, 255, 120), unsetcolor=(0, 0, 0, 0))
+            self.image.blit(blue_overlay, (0, 0))
 
     def update(self):
         pass

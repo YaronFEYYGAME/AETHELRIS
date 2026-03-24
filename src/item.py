@@ -25,6 +25,12 @@ class Item(pygame.sprite.Sprite):
             elif self.item_type == 'boots':
                 img = pygame.image.load("assets/images/hermesboots.png").convert_alpha()
                 self.image = pygame.transform.scale(img, (24, 24))
+            elif self.item_type == 'redgem':
+                img = pygame.image.load("assets/images/redgem.png").convert_alpha()
+                self.image = pygame.transform.scale(img, (20, 20))
+            elif self.item_type == 'bluegem':
+                img = pygame.image.load("assets/images/bluegem.png").convert_alpha()
+                self.image = pygame.transform.scale(img, (20, 20))
         except FileNotFoundError:
             self.image = pygame.Surface((32, 32))
             self.image.fill((255, 255, 0)) 

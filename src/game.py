@@ -35,7 +35,8 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
     levels = ["assets/maps/test_map.tmx", "assets/maps/map1.tmx"] 
     current_level_index = 0
     
-    player_inventory = {'melee': False, 'ranged': False, 'pickaxe': False, 'boots': False, 'current': None, 'arrows': 0}
+    player_inventory = {'melee': False, 'ranged': False, 'pickaxe': False, 'boots': False,
+                        'red_gem': False, 'blue_gem': False, 'current': None, 'arrows': 0}
     player_health = 100
     
     global_music_vol = start_music_vol
@@ -123,6 +124,14 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                 new_item = Item(obj.x, obj.y, 'boots')
                 group.add(new_item)
                 items_group.add(new_item)
+            elif obj_type == "redgem":
+                new_item = Item(obj.x, obj.y, 'redgem')
+                group.add(new_item)
+                items_group.add(new_item)
+            elif obj_type == "bluegem":
+                new_item = Item(obj.x, obj.y, 'bluegem')
+                group.add(new_item)
+                items_group.add(new_item)
             elif obj_type == "obstacle_rock":
                 new_rock = Rock(obj.x, obj.y)
                 group.add(new_rock)
@@ -134,8 +143,10 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
         player.has_ranged = player_inventory['ranged']
         player.has_pickaxe = player_inventory['pickaxe']
         player.has_boots = player_inventory['boots']
+        player.has_red_gem = player_inventory['red_gem']
+        player.has_blue_gem = player_inventory['blue_gem']
         player.current_weapon = player_inventory['current']
-        player.arrows = player_inventory['arrows'] 
+        player.arrows = player_inventory['arrows']
         player.health = player_health
         
         group.add(player)
@@ -211,14 +222,19 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                                 player_inventory['ranged'] = player.has_ranged
                                 player_inventory['pickaxe'] = player.has_pickaxe
                                 player_inventory['boots'] = player.has_boots
+                                player_inventory['red_gem'] = player.has_red_gem
+                                player_inventory['blue_gem'] = player.has_blue_gem
                                 player_inventory['current'] = player.current_weapon
-                                player_inventory['arrows'] = player.arrows 
+                                player_inventory['arrows'] = player.arrows
                                 player_health = player.health
                                 
                                 current_level_index += 1
                                 level_running = False 
                                 break
                                 
+                            if event.key == pygame.K_3:
+                                if player.has_blue_gem:
+                                    player.activate_blue_gem()
                             if event.key == pygame.K_LSHIFT:
                                 if player.has_boots:
                                     if player.dash(walls):
@@ -259,6 +275,12 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                                             sound_manager.play_ui_eating()
                                         elif item.item_type == 'boots':
                                             player.has_boots = True
+                                            sound_manager.play_ui_equipement()
+                                        elif item.item_type == 'redgem':
+                                            player.has_red_gem = True
+                                            sound_manager.play_ui_equipement()
+                                        elif item.item_type == 'bluegem':
+                                            player.has_blue_gem = True
                                             sound_manager.play_ui_equipement()
 
                                         item.kill()
@@ -581,6 +603,11 @@ def _serialize_player(p):
         'has_ranged':     p.has_ranged,
         'has_pickaxe':    p.has_pickaxe,
         'has_boots':      p.has_boots,
+        'has_red_gem':    p.has_red_gem,
+        'has_blue_gem':   p.has_blue_gem,
+        'blue_gem_active': p.blue_gem_active,
+        'blue_gem_cr':    p.get_blue_gem_cooldown_ratio(),
+        'red_gem_triggered': getattr(p, 'red_gem_triggered', False),
         'arrows':         p.arrows,
         'dash_cr':        dash_cr,
         'char_type':      getattr(p, 'char_type', 'soldier'),
@@ -774,6 +801,10 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 it = Item(obj.x, obj.y, 'apple'); group.add(it); items_group.add(it)
             elif obj_type == "item_boots":
                 it = Item(obj.x, obj.y, 'boots'); group.add(it); items_group.add(it)
+            elif obj_type == "redgem":
+                it = Item(obj.x, obj.y, 'redgem'); group.add(it); items_group.add(it)
+            elif obj_type == "bluegem":
+                it = Item(obj.x, obj.y, 'bluegem'); group.add(it); items_group.add(it)
             elif obj_type == "obstacle_rock":
                 r = Rock(obj.x, obj.y); group.add(r); rocks_group.add(r); walls.append(r.hitbox)
 
@@ -800,6 +831,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
         both_dead_time = None
         can_exit       = False
         show_exit_dialogue = False
+        red_gem_animating = False
+        red_gem_anim_start = 0
 
         death_font = pygame.font.SysFont("old english text mt, garamond, times new roman, serif", 120)
         EUREKA_EVENT = pygame.USEREVENT + 1
@@ -858,6 +891,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                             current_level_index += 1
                             level_running = False
                             break
+                        if event.key == pygame.K_3 and player.has_blue_gem:
+                            player.activate_blue_gem()
                         if event.key == pygame.K_LSHIFT and player.has_boots:
                             if player.dash(walls):
                                 host_pos = (player.feet.centerx, player.feet.centery)
@@ -939,6 +974,9 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                         sound_manager, sound_events, host_pos, _next_id)
 
             if not solo_mode and player2:
+                # Blue gem player2
+                if net_inputs.get('gem_blue') and player2.has_blue_gem:
+                    player2.activate_blue_gem()
                 # Dash player2
                 if net_inputs.get('dash') and player2.has_boots:
                     if player2.dash(walls):
@@ -991,6 +1029,14 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             # --- Joueur local ---
             player.update()
             player.move(walls)
+
+            # Red gem animation (host) — détecter le déclenchement
+            if getattr(player, 'red_gem_triggered', False):
+                player.red_gem_triggered = False
+                red_gem_anim_start = pygame.time.get_ticks()
+                red_gem_animating = True
+            if player2 and getattr(player2, 'red_gem_triggered', False):
+                player2.red_gem_triggered = False
 
             # --- Ennemis ---
             for e in list(enemies_group):
@@ -1201,7 +1247,10 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             ui.draw_character_hud(player.char_type, player.current_weapon,
                                   skill_cooldowns=skill_crs, arrows=player.arrows,
                                   has_pickaxe=player.has_pickaxe, has_boots=player.has_boots,
-                                  dash_cr=cr)
+                                  dash_cr=cr,
+                                  has_red_gem=player.has_red_gem,
+                                  has_blue_gem=player.has_blue_gem,
+                                  blue_gem_cr=player.get_blue_gem_cooldown_ratio())
             # Barre de vie player2 (en haut à droite)
             if player2:
                 _draw_remote_health(screen, player2.health, player2.max_health)
@@ -1250,6 +1299,34 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                     _cleanup_audio()
                     if server: server.stop()
                     return
+
+            # --- Animation Red Gem (fullscreen) ---
+            if red_gem_animating:
+                elapsed_rg = pygame.time.get_ticks() - red_gem_anim_start
+                if elapsed_rg < 1000:
+                    # Phase 1 : apparition (0-300ms)
+                    if elapsed_rg < 300:
+                        alpha = int(255 * (elapsed_rg / 300.0))
+                    # Phase 2 : visible (300-700ms)
+                    elif elapsed_rg < 700:
+                        alpha = 255
+                    # Phase 3 : fade out (700-1000ms)
+                    else:
+                        alpha = int(255 * (1.0 - (elapsed_rg - 700) / 300.0))
+                    try:
+                        gem_img = pygame.image.load("assets/images/redgem.png").convert_alpha()
+                        gem_img = pygame.transform.scale(gem_img, (128, 128))
+                        gem_img.set_alpha(alpha)
+                        gem_rect = gem_img.get_rect(center=(screen_width // 2, screen_height // 2))
+                        # Flash rouge léger en fond
+                        overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+                        overlay.fill((255, 50, 50, int(alpha * 0.4)))
+                        screen.blit(overlay, (0, 0))
+                        screen.blit(gem_img, gem_rect)
+                    except Exception:
+                        pass
+                else:
+                    red_gem_animating = False
 
             # --- Envoi état au client (multijoueur uniquement) ---
             if not solo_mode and server:
@@ -1348,9 +1425,12 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 
     # État précédent du joueur local pour détecter les changements d'inventaire
     prev_lp = {'current_weapon': None, 'has_melee': False, 'has_ranged': False,
-               'has_pickaxe': False, 'has_boots': False, 'arrows': 0, 'health': 100}
+               'has_pickaxe': False, 'has_boots': False, 'has_red_gem': False,
+               'has_blue_gem': False, 'arrows': 0, 'health': 100}
     client_was_walking = False
     client_rp_was_walking = False
+    client_red_gem_animating = False
+    client_red_gem_anim_start = 0
 
     while True:
         if not client.connected:
@@ -1611,6 +1691,15 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             sound_manager.play_ui_equipement()
         if lp_now.get('has_pickaxe') and not prev_lp.get('has_pickaxe'):
             sound_manager.play_ui_equipement()
+        if lp_now.get('has_red_gem') and not prev_lp.get('has_red_gem'):
+            sound_manager.play_ui_equipement()
+        if lp_now.get('has_blue_gem') and not prev_lp.get('has_blue_gem'):
+            sound_manager.play_ui_equipement()
+
+        # Red gem triggered → lancer l'animation fullscreen côté client
+        if lp_now.get('red_gem_triggered', False):
+            client_red_gem_animating = True
+            client_red_gem_anim_start = pygame.time.get_ticks()
 
         # Flèches ramassées (sans changement d'arme — soldier uniquement)
         if client_char_type == 'soldier' and lp_now.get('arrows', 0) > prev_lp.get('arrows', 0) and cur_weapon == prev_weapon:
@@ -1658,15 +1747,16 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             run_game_mp_client._client_attacking = False
 
         inputs = {
-            'up':      bool(keys[pygame.K_z]),
-            'down':    bool(keys[pygame.K_s]),
-            'left':    bool(keys[pygame.K_q]),
-            'right':   bool(keys[pygame.K_d]),
-            'attack':  bool(keys[pygame.K_e]),
+            'up':       bool(keys[pygame.K_z]),
+            'down':     bool(keys[pygame.K_s]),
+            'left':     bool(keys[pygame.K_q]),
+            'right':    bool(keys[pygame.K_d]),
+            'attack':   bool(keys[pygame.K_e]),
             'interact': bool(keys[pygame.K_f]),
-            'dash':    bool(keys[pygame.K_LSHIFT]),
-            'weapon1': bool(keys[pygame.K_1]),
-            'weapon2': bool(keys[pygame.K_2]),
+            'dash':     bool(keys[pygame.K_LSHIFT]),
+            'weapon1':  bool(keys[pygame.K_1]),
+            'weapon2':  bool(keys[pygame.K_2]),
+            'gem_blue': bool(keys[pygame.K_3]),
         }
         client.send_inputs(inputs)
 
@@ -1679,7 +1769,10 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                               arrows=lp_state.get('arrows', 0),
                               has_pickaxe=lp_state.get('has_pickaxe', False),
                               has_boots=lp_state.get('has_boots', False),
-                              dash_cr=lp_state.get('dash_cr', 1.0))
+                              dash_cr=lp_state.get('dash_cr', 1.0),
+                              has_red_gem=lp_state.get('has_red_gem', False),
+                              has_blue_gem=lp_state.get('has_blue_gem', False),
+                              blue_gem_cr=lp_state.get('blue_gem_cr', 1.0))
 
         # Barre de vie du joueur hôte (en haut à droite)
         rp_state = players_state[0] if len(players_state) >= 1 else {}
@@ -1720,6 +1813,30 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         else:
             death_time = None
             death_sound_played = False
+
+        # --- Animation Red Gem (fullscreen côté client) ---
+        if client_red_gem_animating:
+            elapsed_rg = pygame.time.get_ticks() - client_red_gem_anim_start
+            if elapsed_rg < 1000:
+                if elapsed_rg < 300:
+                    alpha = int(255 * (elapsed_rg / 300.0))
+                elif elapsed_rg < 700:
+                    alpha = 255
+                else:
+                    alpha = int(255 * (1.0 - (elapsed_rg - 700) / 300.0))
+                try:
+                    gem_img = pygame.image.load("assets/images/redgem.png").convert_alpha()
+                    gem_img = pygame.transform.scale(gem_img, (128, 128))
+                    gem_img.set_alpha(alpha)
+                    gem_rect = gem_img.get_rect(center=(screen_width // 2, screen_height // 2))
+                    overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+                    overlay.fill((255, 50, 50, int(alpha * 0.4)))
+                    screen.blit(overlay, (0, 0))
+                    screen.blit(gem_img, gem_rect)
+                except Exception:
+                    pass
+            else:
+                client_red_gem_animating = False
 
         pygame.display.flip()
         clock.tick(60)
@@ -1870,6 +1987,12 @@ def _pickup_item(player, item, sound_manager):
         if sound_manager: sound_manager.play_ui_eating()
     elif item.item_type == 'boots':
         player.has_boots = True
+        if sound_manager: sound_manager.play_ui_equipement()
+    elif item.item_type == 'redgem':
+        player.has_red_gem = True
+        if sound_manager: sound_manager.play_ui_equipement()
+    elif item.item_type == 'bluegem':
+        player.has_blue_gem = True
         if sound_manager: sound_manager.play_ui_equipement()
 
 

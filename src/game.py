@@ -832,7 +832,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                         elif "resume" in pause_rects and pause_rects["resume"].collidepoint(pos):
                             is_paused = False
                         elif pause_rects.get("quit") and pause_rects["quit"].collidepoint(pos):
-                            _cleanup_audio(); server.stop()
+                            _cleanup_audio()
+                            if server: server.stop()
                             return
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:

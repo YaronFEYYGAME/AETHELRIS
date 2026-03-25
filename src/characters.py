@@ -100,7 +100,7 @@ CHARACTER_DEFS = {
         'attack_cooldown_melee': 0,
         'attack_cooldown_ranged': 700,
         'ranged_fire_frame': 6,
-        'arrow_regen_time': 10000,  # 10 secondes pour regagner 10 flèches
+        'arrow_regen_time': 6000,  # 6 secondes pour regagner 10 flèches
         'arrow_regen_amount': 10,
         'abilities': {
             'skill1': {

@@ -455,12 +455,14 @@ class BigEnemy(pygame.sprite.Sprite):
         if distance < self.aggro_radius and player.health > 0:
             if not self.has_aggro:
                 self.has_aggro = True
-                if not self.activation_played:
-                    self.activation_played = True
-                    self.pending_sounds.append('boss_activation')
-                if not self.bgm_playing:
-                    self.bgm_playing = True
-                    self.pending_sounds.append('boss_bgm_start')
+                # Sons uniquement si pas de dialogue prévu (sinon c'est le dialogue qui les déclenche)
+                if not self.dialogue_lines or self.dialogue_finished:
+                    if not self.activation_played:
+                        self.activation_played = True
+                        self.pending_sounds.append('boss_activation')
+                    if not self.bgm_playing:
+                        self.bgm_playing = True
+                        self.pending_sounds.append('boss_bgm_start')
 
         elif player.health <= 0:
             self.has_aggro = False

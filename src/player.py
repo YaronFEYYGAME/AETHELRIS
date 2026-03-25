@@ -508,9 +508,9 @@ class Player(pygame.sprite.Sprite):
         return min(1.0, max(0.0, elapsed / self.arrow_regen_time))
 
     def lifesteal(self, damage_dealt):
-        """Vol de vie : récupère 30% des dégâts infligés (swordsman uniquement)."""
+        """Vol de vie : récupère 8% des dégâts infligés (swordsman uniquement)."""
         if self.char_type == 'swordsman' and damage_dealt > 0:
-            heal = damage_dealt * 0.3
+            heal = damage_dealt * 0.08
             self.health = min(self.max_health, self.health + heal)
 
     def is_moving(self):

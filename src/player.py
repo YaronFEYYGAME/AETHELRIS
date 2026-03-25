@@ -567,7 +567,7 @@ class Player(pygame.sprite.Sprite):
         if self.cursed_brand_active and pygame.time.get_ticks() < self.cursed_brand_end_time:
             mult *= 1.5
         if target_enemy and self.has_kitsune_mask:
-            if getattr(target_enemy, 'health', 0) > 0 and target_enemy.health <= target_enemy.max_health * 0.3:
+            if getattr(target_enemy, 'health', 0) > 0 and target_enemy.health <= target_enemy.max_health * 0.4:
                 mult *= 1.5
         return mult
 

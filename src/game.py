@@ -1323,12 +1323,12 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             group.center((cam_x, cam_y))
             group.draw(screen)
 
-            # --- Marque Kitsune : griffe au-dessus des ennemis sous 30% PV ---
+            # --- Marque Kitsune : griffe au-dessus des ennemis sous 40% PV ---
             if player.has_kitsune_mask:
                 for e in enemies_group:
-                    if getattr(e, 'health', 0) > 0 and e.health <= e.max_health * 0.3:
-                        ex = (e.feet.centerx - cam_x) * zoom_level + screen_width / 2
-                        ey = (e.feet.top - 5 - cam_y) * zoom_level + screen_height / 2
+                    if getattr(e, 'health', 0) > 0 and e.health <= e.max_health * 0.4:
+                        ex = (e.rect.centerx - cam_x) * zoom_level + screen_width / 2
+                        ey = (e.feet.top + 5 - cam_y) * zoom_level + screen_height / 2
                         mark_size = max(36, int(max(e.rect.width, e.rect.height) * 0.6))
                         mark = _get_kitsune_mark(mark_size)
                         screen.blit(mark, (ex - mark_size // 2, ey - mark_size // 2))
@@ -1822,10 +1822,10 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             if map_pixel_height < _view_h: _cam_y = map_pixel_height // 2
             else: _cam_y = max(_view_h // 2, min(_cam_y, map_pixel_height - _view_h // 2))
             for edata in enemies_state:
-                if edata.get('health', 0) > 0 and edata['health'] <= edata.get('max_health', 1) * 0.3:
+                if edata.get('health', 0) > 0 and edata['health'] <= edata.get('max_health', 1) * 0.4:
                     ex = (edata['x'] - _cam_x) * zoom_level + screen_width / 2
                     # edata['y'] = feet.bottom, donc feet.top ≈ y - 15
-                    ey_world = edata['y'] - 30
+                    ey_world = edata['y'] - 20
                     ey = (ey_world - _cam_y) * zoom_level + screen_height / 2
                     mark_size = 40
                     mark = _get_kitsune_mark(mark_size)

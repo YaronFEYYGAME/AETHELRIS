@@ -498,6 +498,21 @@ class Player(pygame.sprite.Sprite):
         else:
             self._arrow_empty_time = 0
 
+    def get_arrow_regen_cooldown_ratio(self):
+        """Retourne le ratio de cooldown de la regen de flèches (0.0 = vient de tomber à 0, 1.0 = prêt)."""
+        if self.arrow_regen_time <= 0 or self.arrows > 0:
+            return 1.0
+        if self._arrow_empty_time == 0:
+            return 0.0
+        elapsed = pygame.time.get_ticks() - self._arrow_empty_time
+        return min(1.0, max(0.0, elapsed / self.arrow_regen_time))
+
+    def lifesteal(self, damage_dealt):
+        """Vol de vie : récupère 30% des dégâts infligés (swordsman uniquement)."""
+        if self.char_type == 'swordsman' and damage_dealt > 0:
+            heal = damage_dealt * 0.3
+            self.health = min(self.max_health, self.health + heal)
+
     def is_moving(self):
         return self.velocity.length() > 0
 

@@ -94,7 +94,7 @@ CHARACTER_DEFS = {
         'has_melee': False,
         'has_ranged': True,
         'current_weapon': 'ranged',
-        'arrows': 15,
+        'arrows': 10,
         'melee_damage': 0,
         'ranged_damage': 10.5,
         'attack_cooldown_melee': 0,

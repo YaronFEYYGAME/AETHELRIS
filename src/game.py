@@ -418,7 +418,8 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                         for enemy in enemies_group:
                             if getattr(enemy, 'health', 0) > 0 and data.colliderect(enemy.feet):
                                 enemy.damage(player.melee_damage)
-                                
+                                player.lifesteal(player.melee_damage)
+
                                 if hasattr(enemy, 'pending_drop') and enemy.pending_drop:
                                     drop = Item(enemy.rect.centerx, enemy.rect.centery, enemy.pending_drop)
                                     group.add(drop)
@@ -642,6 +643,7 @@ def _serialize_player(p):
         'cursed_brand_triggered': getattr(p, 'cursed_brand_triggered', False),
         'arrows':         p.arrows,
         'dash_cr':        dash_cr,
+        'arrow_regen_cr': p.get_arrow_regen_cooldown_ratio(),
         'char_type':      getattr(p, 'char_type', 'soldier'),
         'skill_cooldowns': skill_crs,
     }
@@ -1019,6 +1021,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                 if getattr(e, 'health', 0) > 0 and data.colliderect(e.feet):
                                     dmg2 = player2.melee_damage * player2.get_damage_multiplier(target_enemy=e)
                                     e.damage(dmg2)
+                                    player2.lifesteal(dmg2)
                                     if e.health <= 0:
                                         e_pos = (e.feet.centerx, e.feet.centery)
                                         sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
@@ -1190,6 +1193,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                             if getattr(e, 'health', 0) > 0 and data.colliderect(e.feet):
                                 dmg = player.melee_damage * player.get_damage_multiplier(target_enemy=e)
                                 e.damage(dmg)
+                                player.lifesteal(dmg)
                                 if e.health <= 0:
                                     e_pos = (e.feet.centerx, e.feet.centery)
                                     sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
@@ -1293,6 +1297,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                             if owner:
                                 proj_dmg *= owner.get_damage_multiplier(target_enemy=e)
                             e.damage(proj_dmg)
+                            if owner and hasattr(owner, 'lifesteal'):
+                                owner.lifesteal(proj_dmg)
                             if e.health <= 0:
                                 e_pos = (e.feet.centerx, e.feet.centery)
                                 sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
@@ -1370,7 +1376,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                   has_mirror=player.has_mirror,
                                   has_kitsune_mask=player.has_kitsune_mask,
                                   has_cursed_brand=player.has_cursed_brand,
-                                  cursed_brand_cr=player.get_cursed_brand_cooldown_ratio())
+                                  cursed_brand_cr=player.get_cursed_brand_cooldown_ratio(),
+                                  arrow_regen_cr=player.get_arrow_regen_cooldown_ratio())
             # Barre de vie player2 (en haut à droite)
             if player2:
                 _draw_remote_health(screen, player2.health, player2.max_health)
@@ -2012,7 +2019,8 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                               has_mirror=lp_state.get('has_mirror', False),
                               has_kitsune_mask=lp_state.get('has_kitsune_mask', False),
                               has_cursed_brand=lp_state.get('has_cursed_brand', False),
-                              cursed_brand_cr=lp_state.get('cursed_brand_cr', 1.0))
+                              cursed_brand_cr=lp_state.get('cursed_brand_cr', 1.0),
+                              arrow_regen_cr=lp_state.get('arrow_regen_cr', 1.0))
 
         # Barre de vie du joueur hôte (en haut à droite)
         rp_state = players_state[0] if len(players_state) >= 1 else {}
@@ -2245,6 +2253,7 @@ def _apply_skill_result(skill_result, caster, group, projectiles_group,
     for enemy, damage in skill_result.get('melee_hits', []):
         dmg = damage * caster.get_damage_multiplier(target_enemy=enemy)
         enemy.damage(dmg)
+        caster.lifesteal(dmg)
         if enemy.health <= 0:
             e_pos = (enemy.feet.centerx, enemy.feet.centery)
             sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})

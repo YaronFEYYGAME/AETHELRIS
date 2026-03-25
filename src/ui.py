@@ -89,7 +89,8 @@ class UI:
                            arrows=0, has_pickaxe=False, has_boots=False, dash_cr=1.0,
                            has_red_gem=False, has_blue_gem=False, blue_gem_cr=1.0,
                            has_mirror=False, has_kitsune_mask=False,
-                           has_cursed_brand=False, cursed_brand_cr=1.0):
+                           has_cursed_brand=False, cursed_brand_cr=1.0,
+                           arrow_regen_cr=1.0):
         """Dessine le HUD complet d'un personnage (icônes + cooldowns).
         Ordre : slots arme (1,2) → items actifs → items passifs."""
         icons = self.load_character_icons(char_type)
@@ -116,7 +117,11 @@ class UI:
         if char_type == 'swordsman':
             slot1_cooldown = skill_cooldowns.get('skill1', 1.0) if skill_cooldowns else 1.0
             slot1_show_cd = True
-        elif char_type not in ('soldier', 'archer'):
+        elif char_type == 'archer':
+            if arrows <= 0:
+                slot1_cooldown = arrow_regen_cr
+                slot1_show_cd = True
+        elif char_type not in ('soldier',):
             slot1_cooldown = skill_cooldowns.get('skill1', 1.0) if skill_cooldowns else 1.0
             slot1_show_cd = 'skill1' in abilities and abilities['skill1'].get('cooldown', 0) > 1000
 

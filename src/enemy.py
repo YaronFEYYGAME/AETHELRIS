@@ -119,28 +119,32 @@ class Enemy(pygame.sprite.Sprite):
             self.state = 'walk'
         else:
             self.state = 'idle'
-            
+
         animation = self.animations[self.facing][self.state]
-        
+
+        # Paralysie : frame figée + teinte bleue
+        if self.paralyzed:
+            idx = max(0, min(int(self.frame_index), len(animation) - 1))
+            self.image = self._get_blue_tinted(animation[idx])
+            return
+
         speed = self.animation_speed
         if self.state == 'attack': speed *= 1.5
-            
+
         self.frame_index += speed
-        
+
         if self.frame_index >= len(animation):
             if self.state == 'death':
-                self.frame_index = len(animation) - 1 
+                self.frame_index = len(animation) - 1
             elif self.state == 'attack':
                 self.is_attacking = False
                 self.frame_index = 0
             else:
-                self.frame_index = 0 
-                
+                self.frame_index = 0
+
         self.image = animation[int(self.frame_index)]
 
-        if self.paralyzed:
-            self.image = self._get_blue_tinted(self.image)
-        elif not self.is_dead and pygame.time.get_ticks() - self.hit_time < 150:
+        if not self.is_dead and pygame.time.get_ticks() - self.hit_time < 150:
             self.image = self.image.copy()
             self.image.fill((255, 50, 50, 255), special_flags=pygame.BLEND_RGBA_MULT)
 
@@ -424,9 +428,6 @@ class BigEnemy(pygame.sprite.Sprite):
                     self.invulnerable = True
                     self.dialogue_index = 0
                     self.dialogue_start_time = current_time
-                    if not self.activation_played:
-                        self.activation_played = True
-                        self.pending_sounds.append('boss_activation')
             if self.in_dialogue:
                 self.velocity.xy = 0, 0
                 self.state = 'idle'
@@ -443,7 +444,9 @@ class BigEnemy(pygame.sprite.Sprite):
                         self.dialogue_finished = True
                         self.invulnerable = False
                         self.has_aggro = True
+                        self.activation_played = True
                         self.bgm_playing = True
+                        self.pending_sounds.append('boss_activation')
                         self.pending_sounds.append('boss_bgm_start')
                 self.animate()
                 return
@@ -604,36 +607,40 @@ class BigEnemy(pygame.sprite.Sprite):
 
     def animate(self):
         animation = self.animations[self.facing][self.state]
-        
+
+        # Paralysie : frame figée + teinte bleue
+        if self.paralyzed:
+            idx = max(0, min(int(self.frame_index), len(animation) - 1))
+            self.image = self._get_blue_tinted(animation[idx])
+            return
+
         speed = self.animation_speed
         if self.state in ['hit', 'death']: speed = 0.1
-        
+
         self.frame_index += speed
-        
+
         if self.frame_index >= len(animation):
             if self.state == 'death':
-                self.frame_index = len(animation) - 1 
-                self._is_blinking = False 
+                self.frame_index = len(animation) - 1
+                self._is_blinking = False
             elif self.state == 'hit':
                 self.state = 'idle'
                 self.frame_index = 0
-                self._is_blinking = False 
+                self._is_blinking = False
             elif self.state == 'attack':
                 self.is_attacking = False
                 self.state = 'idle'
                 self.frame_index = 0
             else:
                 self.frame_index = 0
-                
+
         animation = self.animations[self.facing][self.state]
         self.image = animation[int(self.frame_index)].copy()
-        
+
         if self.state == 'death':
             self._is_blinking = False
 
-        if self.paralyzed:
-            self.image = self._get_blue_tinted(animation[int(self.frame_index)])
-        elif self.state == 'hit' or self._is_blinking:
+        if self.state == 'hit' or self._is_blinking:
             mask = pygame.mask.from_surface(self.image)
             red_overlay = mask.to_surface(setcolor=(255, 0, 0, 150), unsetcolor=(0, 0, 0, 0))
             self.image.blit(red_overlay, (0, 0))
@@ -785,6 +792,15 @@ class Spirit(pygame.sprite.Sprite):
 
     def animate(self):
         animation = self.animations[self.facing][self.state]
+
+        # Paralysie : frame figée + teinte bleue
+        if self.paralyzed:
+            idx = max(0, min(int(self.frame_index), len(animation) - 1))
+            self.image = self._get_blue_tinted(animation[idx])
+            self.rect.centerx = self.feet.centerx
+            self.rect.bottom = self.feet.bottom + self.y_offset
+            return
+
         self.frame_index += self.animation_speed
         if self.frame_index >= len(animation):
             if self.state in ['death', 'appear', 'explode']:
@@ -792,9 +808,6 @@ class Spirit(pygame.sprite.Sprite):
             else:
                 self.frame_index = 0
         self.image = animation[int(self.frame_index)].copy()
-
-        if self.paralyzed:
-            self.image = self._get_blue_tinted(animation[int(self.frame_index)])
 
         if self.state == 'explode':
             self.rect = self.image.get_rect()
@@ -1106,9 +1119,16 @@ class Necromancer(pygame.sprite.Sprite):
 
     def animate(self):
         animation = self.animations[self.facing][self.state]
+
+        # Paralysie : frame figée + teinte bleue
+        if self.paralyzed:
+            idx = max(0, min(int(self.frame_index), len(animation) - 1))
+            self.image = self._get_blue_tinted(animation[idx])
+            return
+
         speed = self.animation_speed
         if self.state == 'death': speed = 0.1
-        
+
         self.frame_index += speed
         if self.frame_index >= len(animation):
             if self.state == 'death':
@@ -1126,9 +1146,7 @@ class Necromancer(pygame.sprite.Sprite):
 
         if self.state == 'death': self._is_blinking = False
 
-        if self.paralyzed:
-            self.image = self._get_blue_tinted(animation[int(self.frame_index)])
-        elif self._is_blinking:
+        if self._is_blinking:
             if pygame.time.get_ticks() - self.hit_time < 150:
                 mask = pygame.mask.from_surface(self.image)
                 red_overlay = mask.to_surface(setcolor=(255, 0, 0, 150), unsetcolor=(0, 0, 0, 0))

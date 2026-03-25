@@ -1002,9 +1002,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                             sound_manager.play_spatial('sword', p2_pos, host_pos)
                             for e in list(enemies_group):
                                 if getattr(e, 'health', 0) > 0 and data.colliderect(e.feet):
-                                    dmg2 = player2.melee_damage * player2.get_damage_multiplier()
-                                    if player2.has_kitsune_mask and e.health <= e.max_health * 0.3:
-                                        dmg2 *= 1.5
+                                    dmg2 = player2.melee_damage * player2.get_damage_multiplier(target_enemy=e)
                                     e.damage(dmg2)
                                     if e.health <= 0:
                                         e_pos = (e.feet.centerx, e.feet.centery)
@@ -1175,9 +1173,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                         sound_events.append({'sound': 'sword', 'x': host_pos[0], 'y': host_pos[1]})
                         for e in list(enemies_group):
                             if getattr(e, 'health', 0) > 0 and data.colliderect(e.feet):
-                                dmg = player.melee_damage * player.get_damage_multiplier()
-                                if player.has_kitsune_mask and e.health <= e.max_health * 0.3:
-                                    dmg *= 1.5
+                                dmg = player.melee_damage * player.get_damage_multiplier(target_enemy=e)
                                 e.damage(dmg)
                                 if e.health <= 0:
                                     e_pos = (e.feet.centerx, e.feet.centery)
@@ -1219,9 +1215,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                 if dist <= proj.explosion_radius:
                                     aoe_dmg = proj.damage_amount
                                     if owner:
-                                        aoe_dmg *= owner.get_damage_multiplier()
-                                        if owner.has_kitsune_mask and e.health <= e.max_health * 0.3:
-                                            aoe_dmg *= 1.5
+                                        aoe_dmg *= owner.get_damage_multiplier(target_enemy=e)
                                     e.damage(aoe_dmg)
                                     if e.health <= 0:
                                         e_pos = (e.feet.centerx, e.feet.centery)
@@ -1243,9 +1237,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                 if dist <= proj.explosion_radius:
                                     aoe_dmg = proj.damage_amount
                                     if owner:
-                                        aoe_dmg *= owner.get_damage_multiplier()
-                                        if owner.has_kitsune_mask and e.health <= e.max_health * 0.3:
-                                            aoe_dmg *= 1.5
+                                        aoe_dmg *= owner.get_damage_multiplier(target_enemy=e)
                                     e.damage(aoe_dmg)
                                     if e.health <= 0:
                                         e_pos = (e.feet.centerx, e.feet.centery)
@@ -1276,9 +1268,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                             proj_dmg = proj.damage_amount
                             owner = getattr(proj, '_owner', None)
                             if owner:
-                                proj_dmg *= owner.get_damage_multiplier()
-                                if owner.has_kitsune_mask and e.health <= e.max_health * 0.3:
-                                    proj_dmg *= 1.5
+                                proj_dmg *= owner.get_damage_multiplier(target_enemy=e)
                             e.damage(proj_dmg)
                             if e.health <= 0:
                                 e_pos = (e.feet.centerx, e.feet.centery)
@@ -1338,10 +1328,11 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 for e in enemies_group:
                     if getattr(e, 'health', 0) > 0 and e.health <= e.max_health * 0.3:
                         ex = (e.feet.centerx - cam_x) * zoom_level + screen_width / 2
-                        ey = (e.rect.top - cam_y) * zoom_level + screen_height / 2
+                        # Positionner juste au-dessus du pied de l'ennemi (pas du rect complet)
+                        ey = (e.feet.top - 15 - cam_y) * zoom_level + screen_height / 2
                         mark_size = max(28, int(max(e.rect.width, e.rect.height) * 0.5))
                         mark = _get_kitsune_mark(mark_size)
-                        screen.blit(mark, (ex - mark_size // 2, ey - mark_size - 4))
+                        screen.blit(mark, (ex - mark_size // 2, ey - mark_size // 2))
 
             # --- HUD ---
             ui.draw_health_bar(player.health, player.max_health)
@@ -1834,9 +1825,10 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             for edata in enemies_state:
                 if edata.get('health', 0) > 0 and edata['health'] <= edata.get('max_health', 1) * 0.3:
                     ex = (edata['x'] - _cam_x) * zoom_level + screen_width / 2
-                    ey_world = edata['y'] - 40
+                    # edata['y'] = feet.bottom, donc feet.top ≈ y - 15
+                    ey_world = edata['y'] - 30
                     ey = (ey_world - _cam_y) * zoom_level + screen_height / 2
-                    mark_size = 40  # taille par défaut client (pas de rect dispo)
+                    mark_size = 40
                     mark = _get_kitsune_mark(mark_size)
                     screen.blit(mark, (ex - mark_size // 2, ey - mark_size // 2))
 
@@ -2208,9 +2200,7 @@ def _apply_skill_result(skill_result, caster, group, projectiles_group,
     """Applique les résultats d'une compétence active."""
     # Dégâts de mêlée en zone (Swordsman)
     for enemy, damage in skill_result.get('melee_hits', []):
-        dmg = damage * caster.get_damage_multiplier()
-        if caster.has_kitsune_mask and enemy.health <= enemy.max_health * 0.3:
-            dmg *= 1.5
+        dmg = damage * caster.get_damage_multiplier(target_enemy=enemy)
         enemy.damage(dmg)
         if enemy.health <= 0:
             e_pos = (enemy.feet.centerx, enemy.feet.centery)

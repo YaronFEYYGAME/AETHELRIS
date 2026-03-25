@@ -35,8 +35,10 @@ class UI:
             self.mirror_img = pygame.image.load("assets/images/mirror.png").convert_alpha()
             self.mirror_img = pygame.transform.scale(self.mirror_img, (64, 64))
 
-            self.kitsune_mask_img = pygame.image.load("assets/images/kitsune_mask.png").convert_alpha()
-            self.kitsune_mask_img = pygame.transform.scale(self.kitsune_mask_img, (52, 52))
+            _km_raw = pygame.image.load("assets/images/kitsune_mask.png").convert_alpha()
+            _km_raw = pygame.transform.scale(_km_raw, (48, 48))
+            self.kitsune_mask_img = pygame.Surface((64, 64), pygame.SRCALPHA)
+            self.kitsune_mask_img.blit(_km_raw, (8, 8))  # centré dans le slot 64x64
 
             self.cursed_brand_img = pygame.image.load("assets/images/cursed_brand.png").convert_alpha()
             self.cursed_brand_img = pygame.transform.scale(self.cursed_brand_img, (64, 64))

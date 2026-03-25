@@ -280,6 +280,29 @@ class UI:
                 crop_rect = pygame.Rect(0, 64 - fill_height, 64, fill_height)
                 self.screen.blit(self.boots_img, (x, y + 64 - fill_height), area=crop_rect)
 
+    def draw_boss_dialogue(self, text):
+        """Boîte de dialogue RPG en bas de l'écran pour les dialogues de boss."""
+        sw = self.screen.get_width()
+        sh = self.screen.get_height()
+        box_w = min(700, sw - 60)
+        box_h = 90
+        x = (sw - box_w) // 2
+        y = sh - box_h - 30
+
+        bg = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+        bg.fill((10, 10, 20, 210))
+        self.screen.blit(bg, (x, y))
+
+        pygame.draw.rect(self.screen, (180, 150, 100), (x, y, box_w, box_h), 2, border_radius=4)
+        pygame.draw.rect(self.screen, (120, 100, 70), (x + 2, y + 2, box_w - 4, box_h - 4), 1, border_radius=3)
+
+        if not hasattr(self, '_boss_dialogue_font'):
+            self._boss_dialogue_font = pygame.font.SysFont(
+                "garamond, times new roman, serif", 26)
+        text_surf = self._boss_dialogue_font.render(text, True, (255, 255, 240))
+        text_rect = text_surf.get_rect(center=(x + box_w // 2, y + box_h // 2))
+        self.screen.blit(text_surf, text_rect)
+
     def draw_dialogue(self, text):
         screen_width = self.screen.get_width()
         screen_height = self.screen.get_height()

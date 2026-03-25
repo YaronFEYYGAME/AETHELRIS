@@ -341,7 +341,13 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                             ui.draw_boss_health_bar(enemy.health, enemy.max_health, "Gardien des profondeurs")
                         elif isinstance(enemy, Necromancer):
                             ui.draw_boss_health_bar(enemy.health, enemy.max_health, "La Faucheuse")
-                
+
+                for enemy in enemies_group:
+                    dialogue_text = getattr(enemy, 'get_current_dialogue', lambda: None)()
+                    if dialogue_text:
+                        ui.draw_boss_dialogue(dialogue_text)
+                        break
+
                 pause_rects = ui.draw_pause_menu(global_music_vol, global_sfx_vol)
                 pygame.display.flip()
                 clock.tick(60)
@@ -545,6 +551,13 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                     elif isinstance(enemy, Necromancer):
                         ui.draw_boss_health_bar(enemy.health, enemy.max_health, "La Faucheuse")
 
+            # Dialogues de boss
+            for enemy in enemies_group:
+                dialogue_text = getattr(enemy, 'get_current_dialogue', lambda: None)()
+                if dialogue_text:
+                    ui.draw_boss_dialogue(dialogue_text)
+                    break
+
             if show_exit_dialogue:
                 ui.draw_dialogue("Voulez vous rentrer ? (A)")
             elif show_rock_dialogue:
@@ -656,6 +669,7 @@ def _serialize_enemy(e):
         'etype':     etype,
         'has_aggro': getattr(e, 'has_aggro', False),
         'paralyzed': getattr(e, 'paralyzed', False),
+        'dialogue_text': getattr(e, 'get_current_dialogue', lambda: None)(),
     }
 
 
@@ -1368,6 +1382,13 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                     elif isinstance(e, Necromancer):
                         ui.draw_boss_health_bar(e.health, e.max_health, "La Faucheuse")
 
+            # Dialogues de boss (serveur multi)
+            for e in enemies_group:
+                dialogue_text = getattr(e, 'get_current_dialogue', lambda: None)()
+                if dialogue_text:
+                    ui.draw_boss_dialogue(dialogue_text)
+                    break
+
             if show_exit_dialogue:
                 ui.draw_dialogue("Voulez vous rentrer ? (A)")
 
@@ -2005,6 +2026,13 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 boss_name = "Gardien des profondeurs" if edata['etype'] == 'bigenemy' else "La Faucheuse"
                 ui.draw_boss_health_bar(edata['health'], edata['max_health'], boss_name)
                 break  # un seul boss à la fois
+
+        # Dialogues de boss (côté client)
+        for edata in enemies_state:
+            dtxt = edata.get('dialogue_text')
+            if dtxt:
+                ui.draw_boss_dialogue(dtxt)
+                break
 
         # Indicateur multijoueur
         mp_surf = font_small.render("● MULTIJOUEUR (CLIENT)", True, (80, 200, 80))

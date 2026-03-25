@@ -250,7 +250,7 @@ class Enemy(pygame.sprite.Sprite):
 class BigEnemy(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
-        self.scale_factor = 2.5 
+        self.scale_factor = 3.5
         self.animations = {'right': {}, 'left': {}}
         self.state = 'idle'
         self.frame_index = 0
@@ -300,6 +300,19 @@ class BigEnemy(pygame.sprite.Sprite):
         self.has_aggro = False
         self.pending_drop = None
 
+        # Système de dialogue de boss (générique)
+        self.dialogue_lines = [
+            ("Des visiteurs... ?", 2000),
+            ("Votre chemin s'arrête ici.", 2500),
+            ("Vous disparaîtrez avec les secrets que renferme ce temple.", 4000),
+        ]
+        self.dialogue_zone = int(self.aggro_radius * 0.75)
+        self.in_dialogue = False
+        self.dialogue_finished = False
+        self.dialogue_index = 0
+        self.dialogue_start_time = 0
+        self.invulnerable = False
+
         # Paralysie
         self.paralyzed = False
         self.paralyze_end_time = 0
@@ -308,11 +321,6 @@ class BigEnemy(pygame.sprite.Sprite):
         # Sons gérés via pending_sounds → SpatialAudioManager dans game.py
         self.activation_played = False
         self.death_sound_played = False
-        self.last_talk_time = 0
-
-        self.talk_cooldown = 8000
-        self.talk_count = 0
-        self.max_talks = 3
         self.bgm_playing = False
         self.pending_sounds = []
 
@@ -339,14 +347,12 @@ class BigEnemy(pygame.sprite.Sprite):
             print(f"⚠️ Erreur: Fichier {path} introuvable.")
 
     def damage(self, amount):
+        if self.in_dialogue or self.invulnerable:
+            return
         if self.health > 0 and self.state != 'hit':
             self.health -= amount
             self._is_blinking = True
-            
-            import random
-            if random.randint(1, 100) <= 15:
-                self.pending_drop = random.choice(['apple', 'arrow'])
-            
+
             if self.health <= 0:
                 self.health = 0
                 self.state = 'death'
@@ -367,6 +373,12 @@ class BigEnemy(pygame.sprite.Sprite):
                 self.frame_index = 0
                 self.is_attacking = False 
                 self.velocity.xy = 0, 0
+
+    def get_current_dialogue(self):
+        """Retourne le texte de la ligne de dialogue en cours, ou None."""
+        if self.in_dialogue and self.dialogue_index < len(self.dialogue_lines):
+            return self.dialogue_lines[self.dialogue_index][0]
+        return None
 
     def paralyze(self, duration_ms):
         """Paralyse le boss pour une durée donnée (en ms). Réinitialise si déjà paralysé."""
@@ -404,13 +416,45 @@ class BigEnemy(pygame.sprite.Sprite):
         target_vector = target_center - my_center
         distance = target_vector.length()
 
+        # --- Système de dialogue avant le combat ---
+        if not self.dialogue_finished and self.dialogue_lines:
+            if not self.in_dialogue:
+                if distance < self.dialogue_zone and player.health > 0:
+                    self.in_dialogue = True
+                    self.invulnerable = True
+                    self.dialogue_index = 0
+                    self.dialogue_start_time = current_time
+                    if not self.activation_played:
+                        self.activation_played = True
+                        self.pending_sounds.append('boss_activation')
+            if self.in_dialogue:
+                self.velocity.xy = 0, 0
+                self.state = 'idle'
+                if player.feet.centerx > self.feet.centerx:
+                    self.facing = 'right'
+                else:
+                    self.facing = 'left'
+                _, duration = self.dialogue_lines[self.dialogue_index]
+                if current_time - self.dialogue_start_time >= duration:
+                    self.dialogue_index += 1
+                    self.dialogue_start_time = current_time
+                    if self.dialogue_index >= len(self.dialogue_lines):
+                        self.in_dialogue = False
+                        self.dialogue_finished = True
+                        self.invulnerable = False
+                        self.has_aggro = True
+                        self.bgm_playing = True
+                        self.pending_sounds.append('boss_bgm_start')
+                self.animate()
+                return
+
+        # --- Aggro classique (après dialogues terminés ou si pas de dialogues) ---
         if distance < self.aggro_radius and player.health > 0:
             if not self.has_aggro:
                 self.has_aggro = True
                 if not self.activation_played:
                     self.activation_played = True
                     self.pending_sounds.append('boss_activation')
-
                 if not self.bgm_playing:
                     self.bgm_playing = True
                     self.pending_sounds.append('boss_bgm_start')
@@ -420,14 +464,6 @@ class BigEnemy(pygame.sprite.Sprite):
             if self.bgm_playing:
                 self.bgm_playing = False
                 self.pending_sounds.append('boss_bgm_stop')
-
-        if self.has_aggro and self.health > 0 and self.talk_count < self.max_talks and player.health > 0:
-            if current_time - self.last_talk_time > self.talk_cooldown:
-                import random
-                if random.randint(1, 150) <= 1:
-                    self.pending_sounds.append('boss_talk')
-                    self.last_talk_time = current_time
-                    self.talk_count += 1
 
         hit_x = False
         hit_y = False
@@ -443,17 +479,21 @@ class BigEnemy(pygame.sprite.Sprite):
             if current_frame == 1 and not self.has_dealt_damage_1:
                 attack_area = self.get_attack_hitbox()
                 if attack_area.colliderect(player.feet.inflate(20, 20)) and player.health > 0:
+                    hp_before = player.health
                     player.damage(self.damage_amount, source_enemy=self)
-                    self.health = min(self.max_health, self.health + (self.damage_amount * 0.3))
-                self.has_dealt_damage_1 = True 
-                
+                    if player.health < hp_before:
+                        self.health = min(self.max_health, self.health + (self.damage_amount * 0.3))
+                self.has_dealt_damage_1 = True
+
             elif current_frame == 5 and not self.has_dealt_damage_2:
                 self.pending_sounds.append('boss_attack')
 
                 attack_area = self.get_attack_hitbox()
                 if attack_area.colliderect(player.feet.inflate(20, 20)) and player.health > 0:
+                    hp_before = player.health
                     player.damage(self.damage_amount, source_enemy=self)
-                    self.health = min(self.max_health, self.health + (self.damage_amount * 0.3))
+                    if player.health < hp_before:
+                        self.health = min(self.max_health, self.health + (self.damage_amount * 0.3))
                 self.has_dealt_damage_2 = True
         
         else:
@@ -549,18 +589,17 @@ class BigEnemy(pygame.sprite.Sprite):
         self.animate()
 
     def get_attack_hitbox(self):
-        range_attack = 135
-        width_attack = 6
+        range_attack = 189
+        width_attack = 8
 
         attack_rect = pygame.Rect(0, 0, range_attack, width_attack)
 
         if self.facing == 'right':
-            attack_rect.left = self.feet.left - 10
+            attack_rect.left = self.feet.left - 14
         else:
-            attack_rect.right = self.feet.right + 10
+            attack_rect.right = self.feet.right + 14
 
-        # Ancrer le bas sur les pieds, hitbox étroite verticalement
-        attack_rect.bottom = self.feet.centery + 15
+        attack_rect.bottom = self.feet.centery + 21
         return attack_rect
 
     def animate(self):
@@ -940,16 +979,20 @@ class Necromancer(pygame.sprite.Sprite):
                 self.pending_sounds.append('boss_attack')
                 attack_area = self.get_attack_hitbox(salve=1)
                 if self._hits_player(attack_area, player) and player.health > 0:
+                    hp_before = player.health
                     player.damage(self.damage_amount, source_enemy=self)
-                    self.health = min(self.max_health, self.health + (self.damage_amount * 0.5))
+                    if player.health < hp_before:
+                        self.health = min(self.max_health, self.health + (self.damage_amount * 0.5))
                 self.has_dealt_damage_1 = True
             # Frame 11 : second balayage, faux au plus bas
             elif current_frame == 11 and not self.has_dealt_damage_2:
                 self.pending_sounds.append('boss_attack')
                 attack_area = self.get_attack_hitbox(salve=2)
                 if self._hits_player(attack_area, player) and player.health > 0:
+                    hp_before = player.health
                     player.damage(self.damage_amount, source_enemy=self)
-                    self.health = min(self.max_health, self.health + (self.damage_amount * 0.5))
+                    if player.health < hp_before:
+                        self.health = min(self.max_health, self.health + (self.damage_amount * 0.5))
                 self.has_dealt_damage_2 = True
         else:
             if player.health > 0 and self.has_aggro:
@@ -1117,8 +1160,8 @@ class RemoteEnemy(pygame.sprite.Sprite):
             ],
         },
         'bigenemy': {
-            'scale': 2.5,
-            'empty_below': 12 * 2.5,
+            'scale': 3.5,
+            'empty_below': 12 * 3.5,
             'anims': [
                 ('idle',   "assets/images/idle.png",   5, 'vstrip'),
                 ('run',    "assets/images/run.png",    8, 'vstrip'),

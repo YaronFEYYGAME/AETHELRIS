@@ -213,7 +213,7 @@ class Enemy(pygame.sprite.Sprite):
                 self.last_attack_time = current_time
                 self.is_attacking = True
                 self.frame_index = 0
-                player.damage(self.damage_amount)
+                player.damage(self.damage_amount, source_enemy=self)
 
 
 class BigEnemy(pygame.sprite.Sprite):
@@ -383,7 +383,7 @@ class BigEnemy(pygame.sprite.Sprite):
             if current_frame == 1 and not self.has_dealt_damage_1:
                 attack_area = self.get_attack_hitbox()
                 if attack_area.colliderect(player.feet.inflate(20, 20)) and player.health > 0:
-                    player.damage(self.damage_amount)
+                    player.damage(self.damage_amount, source_enemy=self)
                     self.health = min(self.max_health, self.health + (self.damage_amount * 0.3))
                 self.has_dealt_damage_1 = True 
                 
@@ -392,7 +392,7 @@ class BigEnemy(pygame.sprite.Sprite):
 
                 attack_area = self.get_attack_hitbox()
                 if attack_area.colliderect(player.feet.inflate(20, 20)) and player.health > 0:
-                    player.damage(self.damage_amount)
+                    player.damage(self.damage_amount, source_enemy=self)
                     self.health = min(self.max_health, self.health + (self.damage_amount * 0.3))
                 self.has_dealt_damage_2 = True
         
@@ -632,7 +632,7 @@ class Spirit(pygame.sprite.Sprite):
         distance = target_vector.length()
 
         if distance < 25 and player.health > 0:
-            player.damage(self.damage_amount)
+            player.damage(self.damage_amount, source_enemy=self)
             self.state = 'explode'
             self.frame_index = 0
             self.velocity.xy = 0, 0
@@ -823,7 +823,7 @@ class Necromancer(pygame.sprite.Sprite):
                 self.pending_sounds.append('boss_attack')
                 attack_area = self.get_attack_hitbox(salve=1)
                 if self._hits_player(attack_area, player) and player.health > 0:
-                    player.damage(self.damage_amount)
+                    player.damage(self.damage_amount, source_enemy=self)
                     self.health = min(self.max_health, self.health + (self.damage_amount * 0.5))
                 self.has_dealt_damage_1 = True
             # Frame 11 : second balayage, faux au plus bas
@@ -831,7 +831,7 @@ class Necromancer(pygame.sprite.Sprite):
                 self.pending_sounds.append('boss_attack')
                 attack_area = self.get_attack_hitbox(salve=2)
                 if self._hits_player(attack_area, player) and player.health > 0:
-                    player.damage(self.damage_amount)
+                    player.damage(self.damage_amount, source_enemy=self)
                     self.health = min(self.max_health, self.health + (self.damage_amount * 0.5))
                 self.has_dealt_damage_2 = True
         else:

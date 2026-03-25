@@ -132,6 +132,18 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                 new_item = Item(obj.x, obj.y, 'bluegem')
                 group.add(new_item)
                 items_group.add(new_item)
+            elif obj_type == "mirror":
+                new_item = Item(obj.x, obj.y, 'mirror')
+                group.add(new_item)
+                items_group.add(new_item)
+            elif obj_type == "kitsune_mask":
+                new_item = Item(obj.x, obj.y, 'kitsune_mask')
+                group.add(new_item)
+                items_group.add(new_item)
+            elif obj_type == "cursed_brand":
+                new_item = Item(obj.x, obj.y, 'cursed_brand')
+                group.add(new_item)
+                items_group.add(new_item)
             elif obj_type == "obstacle_rock":
                 new_rock = Rock(obj.x, obj.y)
                 group.add(new_rock)
@@ -608,6 +620,13 @@ def _serialize_player(p):
         'blue_gem_active': p.blue_gem_active,
         'blue_gem_cr':    p.get_blue_gem_cooldown_ratio(),
         'red_gem_triggered': getattr(p, 'red_gem_triggered', False),
+        'has_mirror':     p.has_mirror,
+        'mirror_triggered': getattr(p, 'mirror_triggered', False),
+        'has_kitsune_mask': p.has_kitsune_mask,
+        'has_cursed_brand': p.has_cursed_brand,
+        'cursed_brand_active': p.cursed_brand_active,
+        'cursed_brand_cr': p.get_cursed_brand_cooldown_ratio(),
+        'cursed_brand_triggered': getattr(p, 'cursed_brand_triggered', False),
         'arrows':         p.arrows,
         'dash_cr':        dash_cr,
         'char_type':      getattr(p, 'char_type', 'soldier'),
@@ -805,6 +824,12 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 it = Item(obj.x, obj.y, 'redgem'); group.add(it); items_group.add(it)
             elif obj_type == "bluegem":
                 it = Item(obj.x, obj.y, 'bluegem'); group.add(it); items_group.add(it)
+            elif obj_type == "mirror":
+                it = Item(obj.x, obj.y, 'mirror'); group.add(it); items_group.add(it)
+            elif obj_type == "kitsune_mask":
+                it = Item(obj.x, obj.y, 'kitsune_mask'); group.add(it); items_group.add(it)
+            elif obj_type == "cursed_brand":
+                it = Item(obj.x, obj.y, 'cursed_brand'); group.add(it); items_group.add(it)
             elif obj_type == "obstacle_rock":
                 r = Rock(obj.x, obj.y); group.add(r); rocks_group.add(r); walls.append(r.hitbox)
 
@@ -833,6 +858,10 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
         show_exit_dialogue = False
         red_gem_animating = False
         red_gem_anim_start = 0
+        mirror_animating = False
+        mirror_anim_start = 0
+        cursed_brand_animating = False
+        cursed_brand_anim_start = 0
 
         death_font = pygame.font.SysFont("old english text mt, garamond, times new roman, serif", 120)
         EUREKA_EVENT = pygame.USEREVENT + 1
@@ -891,8 +920,25 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                             current_level_index += 1
                             level_running = False
                             break
-                        if event.key == pygame.K_3 and player.has_blue_gem:
-                            player.activate_blue_gem()
+                        # Items actifs : touches dynamiques (3, 4, 5...)
+                        active_items_keys = _get_active_item_keys(player)
+                        for key_num, item_name in active_items_keys:
+                            if event.key == getattr(pygame, f'K_{key_num}', None):
+                                if item_name == 'boots':
+                                    if player.dash(walls):
+                                        host_pos = (player.feet.centerx, player.feet.centery)
+                                        sound_manager.play_spatial_dash(host_pos, host_pos)
+                                        sound_events.append({'sound': 'dash', 'x': player.feet.centerx, 'y': player.feet.centery})
+                                        dash_events.append({'player': 0, 'x': player.feet.centerx, 'y': player.feet.bottom})
+                                        for _ in range(20):
+                                            smoke = SmokeParticle(player.feet.centerx + random.randint(-15, 15),
+                                                                  player.feet.bottom + random.randint(-15, 5))
+                                            group.add(smoke); particles_group.add(smoke)
+                                elif item_name == 'bluegem':
+                                    player.activate_blue_gem()
+                                elif item_name == 'cursed_brand':
+                                    ally = player2 if (not solo_mode and player2 and player2.health > 0) else None
+                                    player.activate_cursed_brand(ally)
                         if event.key == pygame.K_LSHIFT and player.has_boots:
                             if player.dash(walls):
                                 host_pos = (player.feet.centerx, player.feet.centery)
@@ -906,8 +952,9 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                         if event.key == pygame.K_f:
                             for item in list(items_group):
                                 if player.feet.colliderect(item.rect):
-                                    _pickup_item(player, item, sound_manager)
-                                    item.kill(); break
+                                    if _pickup_item(player, item, sound_manager):
+                                        item.kill()
+                                    break
                             if player.has_pickaxe:
                                 for rock in list(rocks_group):
                                     if player.feet.colliderect(rock.hitbox.inflate(40, 40)):
@@ -955,7 +1002,10 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                             sound_manager.play_spatial('sword', p2_pos, host_pos)
                             for e in list(enemies_group):
                                 if getattr(e, 'health', 0) > 0 and data.colliderect(e.feet):
-                                    e.damage(player2.melee_damage)
+                                    dmg2 = player2.melee_damage * player2.get_damage_multiplier()
+                                    if player2.has_kitsune_mask and e.health <= e.max_health * 0.3:
+                                        dmg2 *= 1.5
+                                    e.damage(dmg2)
                                     if e.health <= 0:
                                         e_pos = (e.feet.centerx, e.feet.centery)
                                         sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
@@ -977,6 +1027,9 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 # Blue gem player2
                 if net_inputs.get('gem_blue') and player2.has_blue_gem:
                     player2.activate_blue_gem()
+                # Cursed brand player2
+                if net_inputs.get('cursed_brand') and player2.has_cursed_brand:
+                    player2.activate_cursed_brand(ally_player=player)
                 # Dash player2
                 if net_inputs.get('dash') and player2.has_boots:
                     if player2.dash(walls):
@@ -993,8 +1046,9 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 if net_inputs.get('interact') and player2.health > 0:
                     for item in list(items_group):
                         if player2.feet.colliderect(item.rect):
-                            _pickup_item(player2, item, None)
-                            item.kill(); break
+                            if _pickup_item(player2, item, None):
+                                item.kill()
+                            break
                     if player2.has_pickaxe:
                         for rock in list(rocks_group):
                             if player2.feet.colliderect(rock.hitbox.inflate(40, 40)):
@@ -1021,6 +1075,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 new_proj2 = player2.check_ranged_attack()
                 if new_proj2:
                     new_proj2._mp_id = _next_id()
+                    new_proj2._owner = player2
                     group.add(new_proj2); projectiles_group.add(new_proj2)
 
                 # Régénération de flèches player2 (Archer)
@@ -1037,6 +1092,22 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 red_gem_animating = True
             if player2 and getattr(player2, 'red_gem_triggered', False):
                 player2.red_gem_triggered = False
+
+            # Mirror animation (host)
+            if getattr(player, 'mirror_triggered', False):
+                player.mirror_triggered = False
+                mirror_anim_start = pygame.time.get_ticks()
+                mirror_animating = True
+            if player2 and getattr(player2, 'mirror_triggered', False):
+                player2.mirror_triggered = False
+
+            # Cursed brand animation (host) — l'animation joue sur le joueur qui a subi les dégâts
+            if getattr(player, 'cursed_brand_triggered', False):
+                player.cursed_brand_triggered = False
+                cursed_brand_anim_start = pygame.time.get_ticks()
+                cursed_brand_animating = True
+            if player2 and getattr(player2, 'cursed_brand_triggered', False):
+                player2.cursed_brand_triggered = False
 
             # --- Ennemis ---
             for e in list(enemies_group):
@@ -1058,7 +1129,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                         now = pygame.time.get_ticks()
                         last_mp = getattr(e, '_mp_other_dmg_time', 0)
                         if atk and atk.colliderect(other.feet) and now - last_mp > getattr(e, 'attack_cooldown', 1500):
-                            other.damage(getattr(e, 'damage_amount', 10))
+                            other.damage(getattr(e, 'damage_amount', 10), source_enemy=e)
                             e._mp_other_dmg_time = now
                 if hasattr(e, 'pending_summons') and e.pending_summons:
                     for sx, sy in e.pending_summons:
@@ -1104,7 +1175,10 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                         sound_events.append({'sound': 'sword', 'x': host_pos[0], 'y': host_pos[1]})
                         for e in list(enemies_group):
                             if getattr(e, 'health', 0) > 0 and data.colliderect(e.feet):
-                                e.damage(player.melee_damage)
+                                dmg = player.melee_damage * player.get_damage_multiplier()
+                                if player.has_kitsune_mask and e.health <= e.max_health * 0.3:
+                                    dmg *= 1.5
+                                e.damage(dmg)
                                 if e.health <= 0:
                                     e_pos = (e.feet.centerx, e.feet.centery)
                                     sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
@@ -1124,6 +1198,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             new_proj = player.check_ranged_attack()
             if new_proj:
                 new_proj._mp_id = _next_id()
+                new_proj._owner = player
                 group.add(new_proj); projectiles_group.add(new_proj)
 
             # Régénération de flèches (Archer)
@@ -1134,6 +1209,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 if isinstance(proj, HomingProjectile):
                     if proj.has_exploded and not getattr(proj, '_damage_dealt', False):
                         proj._damage_dealt = True
+                        owner = getattr(proj, '_owner', None)
                         for e in list(enemies_group):
                             if getattr(e, 'health', 0) > 0:
                                 dist = pygame.math.Vector2(
@@ -1141,17 +1217,23 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                     e.feet.centery - proj.rect.centery
                                 ).length()
                                 if dist <= proj.explosion_radius:
-                                    e.damage(proj.damage_amount)
+                                    aoe_dmg = proj.damage_amount
+                                    if owner:
+                                        aoe_dmg *= owner.get_damage_multiplier()
+                                        if owner.has_kitsune_mask and e.health <= e.max_health * 0.3:
+                                            aoe_dmg *= 1.5
+                                    e.damage(aoe_dmg)
                                     if e.health <= 0:
                                         e_pos = (e.feet.centerx, e.feet.centery)
                                         sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
                                     _handle_enemy_death(e, group, items_group, particles_group)
-                    continue  # Le homing gère son propre mouvement/mort
+                    continue
 
                 # InstantAOE — dégâts en zone immédiatement
                 if isinstance(proj, InstantAOE):
                     if not getattr(proj, '_damage_dealt', False):
                         proj._damage_dealt = True
+                        owner = getattr(proj, '_owner', None)
                         for e in list(enemies_group):
                             if getattr(e, 'health', 0) > 0:
                                 dist = pygame.math.Vector2(
@@ -1159,7 +1241,12 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                     e.feet.centery - proj.rect.centery
                                 ).length()
                                 if dist <= proj.explosion_radius:
-                                    e.damage(proj.damage_amount)
+                                    aoe_dmg = proj.damage_amount
+                                    if owner:
+                                        aoe_dmg *= owner.get_damage_multiplier()
+                                        if owner.has_kitsune_mask and e.health <= e.max_health * 0.3:
+                                            aoe_dmg *= 1.5
+                                    e.damage(aoe_dmg)
                                     if e.health <= 0:
                                         e_pos = (e.feet.centerx, e.feet.centery)
                                         sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
@@ -1186,7 +1273,13 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                             hit_pos = (proj.hitbox.centerx, proj.hitbox.centery)
                             sound_manager.play_spatial('shot', hit_pos, host_pos)
                             sound_events.append({'sound': 'arrow', 'x': hit_pos[0], 'y': hit_pos[1]})
-                            e.damage(proj.damage_amount)
+                            proj_dmg = proj.damage_amount
+                            owner = getattr(proj, '_owner', None)
+                            if owner:
+                                proj_dmg *= owner.get_damage_multiplier()
+                                if owner.has_kitsune_mask and e.health <= e.max_health * 0.3:
+                                    proj_dmg *= 1.5
+                            e.damage(proj_dmg)
                             if e.health <= 0:
                                 e_pos = (e.feet.centerx, e.feet.centery)
                                 sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
@@ -1240,6 +1333,20 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             group.center((cam_x, cam_y))
             group.draw(screen)
 
+            # --- Marque Kitsune : griffe au-dessus des ennemis sous 30% PV ---
+            if player.has_kitsune_mask:
+                for e in enemies_group:
+                    if getattr(e, 'health', 0) > 0 and e.health <= e.max_health * 0.3:
+                        # Position écran de l'ennemi
+                        ex = (e.feet.centerx - cam_x) * zoom_level + screen_width / 2
+                        ey = (e.rect.top - cam_y) * zoom_level + screen_height / 2
+                        try:
+                            mark = pygame.image.load("assets/images/griffe_passif.png").convert_alpha()
+                            mark = pygame.transform.scale(mark, (24, 24))
+                            screen.blit(mark, (ex - 12, ey - 28))
+                        except Exception:
+                            pass
+
             # --- HUD ---
             ui.draw_health_bar(player.health, player.max_health)
             cr = min(1.0, max(0.0, (pygame.time.get_ticks() - player.last_dash_time) / player.dash_cooldown))
@@ -1250,7 +1357,11 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                   dash_cr=cr,
                                   has_red_gem=player.has_red_gem,
                                   has_blue_gem=player.has_blue_gem,
-                                  blue_gem_cr=player.get_blue_gem_cooldown_ratio())
+                                  blue_gem_cr=player.get_blue_gem_cooldown_ratio(),
+                                  has_mirror=player.has_mirror,
+                                  has_kitsune_mask=player.has_kitsune_mask,
+                                  has_cursed_brand=player.has_cursed_brand,
+                                  cursed_brand_cr=player.get_cursed_brand_cooldown_ratio())
             # Barre de vie player2 (en haut à droite)
             if player2:
                 _draw_remote_health(screen, player2.health, player2.max_health)
@@ -1327,6 +1438,54 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                         pass
                 else:
                     red_gem_animating = False
+
+            # --- Animation Mirror (fullscreen) ---
+            if mirror_animating:
+                elapsed_m = pygame.time.get_ticks() - mirror_anim_start
+                if elapsed_m < 800:
+                    if elapsed_m < 200:
+                        alpha = int(255 * (elapsed_m / 200.0))
+                    elif elapsed_m < 500:
+                        alpha = 255
+                    else:
+                        alpha = int(255 * (1.0 - (elapsed_m - 500) / 300.0))
+                    try:
+                        mir_img = pygame.image.load("assets/images/mirror.png").convert_alpha()
+                        mir_img = pygame.transform.scale(mir_img, (128, 128))
+                        mir_img.set_alpha(alpha)
+                        mir_rect = mir_img.get_rect(center=(screen_width // 2, screen_height // 2))
+                        overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+                        overlay.fill((180, 180, 255, int(alpha * 0.3)))
+                        screen.blit(overlay, (0, 0))
+                        screen.blit(mir_img, mir_rect)
+                    except Exception:
+                        pass
+                else:
+                    mirror_animating = False
+
+            # --- Animation Cursed Brand (fullscreen) ---
+            if cursed_brand_animating:
+                elapsed_cb = pygame.time.get_ticks() - cursed_brand_anim_start
+                if elapsed_cb < 800:
+                    if elapsed_cb < 200:
+                        alpha = int(255 * (elapsed_cb / 200.0))
+                    elif elapsed_cb < 500:
+                        alpha = 255
+                    else:
+                        alpha = int(255 * (1.0 - (elapsed_cb - 500) / 300.0))
+                    try:
+                        cb_img = pygame.image.load("assets/images/cursed_brand.png").convert_alpha()
+                        cb_img = pygame.transform.scale(cb_img, (128, 128))
+                        cb_img.set_alpha(alpha)
+                        cb_rect = cb_img.get_rect(center=(screen_width // 2, screen_height // 2))
+                        overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+                        overlay.fill((150, 50, 150, int(alpha * 0.3)))
+                        screen.blit(overlay, (0, 0))
+                        screen.blit(cb_img, cb_rect)
+                    except Exception:
+                        pass
+                else:
+                    cursed_brand_animating = False
 
             # --- Envoi état au client (multijoueur uniquement) ---
             if not solo_mode and server:
@@ -1426,7 +1585,8 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
     # État précédent du joueur local pour détecter les changements d'inventaire
     prev_lp = {'current_weapon': None, 'has_melee': False, 'has_ranged': False,
                'has_pickaxe': False, 'has_boots': False, 'has_red_gem': False,
-               'has_blue_gem': False, 'arrows': 0, 'health': 100}
+               'has_blue_gem': False, 'has_mirror': False, 'has_kitsune_mask': False,
+               'has_cursed_brand': False, 'arrows': 0, 'health': 100}
     client_was_walking = False
     client_rp_was_walking = False
     client_red_gem_animating = False
@@ -1662,6 +1822,31 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 
         group.draw(screen)
 
+        # --- Marque Kitsune côté client ---
+        if lp_now.get('has_kitsune_mask', False) and local_player:
+            lp_cx = local_player.feet.centerx
+            lp_cy = local_player.feet.centery - 30
+            # Recalculer la caméra
+            _view_w = screen_width / zoom_level
+            _view_h = screen_height / zoom_level
+            _cam_x = lp_cx
+            _cam_y = lp_cy
+            if map_pixel_width < _view_w: _cam_x = map_pixel_width // 2
+            else: _cam_x = max(_view_w // 2, min(_cam_x, map_pixel_width - _view_w // 2))
+            if map_pixel_height < _view_h: _cam_y = map_pixel_height // 2
+            else: _cam_y = max(_view_h // 2, min(_cam_y, map_pixel_height - _view_h // 2))
+            for edata in enemies_state:
+                if edata.get('health', 0) > 0 and edata['health'] <= edata.get('max_health', 1) * 0.3:
+                    ex = (edata['x'] - _cam_x) * zoom_level + screen_width / 2
+                    ey_world = edata['y'] - 40  # au-dessus de l'ennemi
+                    ey = (ey_world - _cam_y) * zoom_level + screen_height / 2
+                    try:
+                        mark = pygame.image.load("assets/images/griffe_passif.png").convert_alpha()
+                        mark = pygame.transform.scale(mark, (24, 24))
+                        screen.blit(mark, (ex - 12, ey - 12))
+                    except Exception:
+                        pass
+
         # Animer les particules locales (sang, fumée, etc.)
         client_particles_grp.update()
 
@@ -1695,11 +1880,31 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             sound_manager.play_ui_equipement()
         if lp_now.get('has_blue_gem') and not prev_lp.get('has_blue_gem'):
             sound_manager.play_ui_equipement()
+        if lp_now.get('has_mirror') and not prev_lp.get('has_mirror'):
+            sound_manager.play_ui_equipement()
+        if lp_now.get('has_kitsune_mask') and not prev_lp.get('has_kitsune_mask'):
+            sound_manager.play_ui_equipement()
+        if lp_now.get('has_cursed_brand') and not prev_lp.get('has_cursed_brand'):
+            sound_manager.play_ui_equipement()
 
         # Red gem triggered → lancer l'animation fullscreen côté client
         if lp_now.get('red_gem_triggered', False):
             client_red_gem_animating = True
             client_red_gem_anim_start = pygame.time.get_ticks()
+
+        # Mirror triggered
+        if lp_now.get('mirror_triggered', False):
+            if not hasattr(run_game_mp_client, '_client_mirror_animating'):
+                run_game_mp_client._client_mirror_animating = False
+            run_game_mp_client._client_mirror_animating = True
+            run_game_mp_client._client_mirror_anim_start = pygame.time.get_ticks()
+
+        # Cursed brand triggered (sur le joueur client = il subit les dégâts)
+        if lp_now.get('cursed_brand_triggered', False):
+            if not hasattr(run_game_mp_client, '_client_cb_animating'):
+                run_game_mp_client._client_cb_animating = False
+            run_game_mp_client._client_cb_animating = True
+            run_game_mp_client._client_cb_anim_start = pygame.time.get_ticks()
 
         # Flèches ramassées (sans changement d'arme — soldier uniquement)
         if client_char_type == 'soldier' and lp_now.get('arrows', 0) > prev_lp.get('arrows', 0) and cur_weapon == prev_weapon:
@@ -1746,6 +1951,25 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         else:
             run_game_mp_client._client_attacking = False
 
+        # Construire les inputs avec touches dynamiques pour items actifs
+        # Ordre items actifs : boots, blue_gem, cursed_brand → touches 3, 4, 5...
+        gem_blue_pressed = False
+        cursed_brand_pressed = False
+        dash_pressed = bool(keys[pygame.K_LSHIFT])
+        active_key = 3
+        if lp_now.get('has_boots'):
+            if keys[getattr(pygame, f'K_{active_key}', 0)]:
+                dash_pressed = True
+            active_key += 1
+        if lp_now.get('has_blue_gem'):
+            if keys[getattr(pygame, f'K_{active_key}', 0)]:
+                gem_blue_pressed = True
+            active_key += 1
+        if lp_now.get('has_cursed_brand'):
+            if keys[getattr(pygame, f'K_{active_key}', 0)]:
+                cursed_brand_pressed = True
+            active_key += 1
+
         inputs = {
             'up':       bool(keys[pygame.K_z]),
             'down':     bool(keys[pygame.K_s]),
@@ -1753,10 +1977,11 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             'right':    bool(keys[pygame.K_d]),
             'attack':   bool(keys[pygame.K_e]),
             'interact': bool(keys[pygame.K_f]),
-            'dash':     bool(keys[pygame.K_LSHIFT]),
+            'dash':     dash_pressed,
             'weapon1':  bool(keys[pygame.K_1]),
             'weapon2':  bool(keys[pygame.K_2]),
-            'gem_blue': bool(keys[pygame.K_3]),
+            'gem_blue': gem_blue_pressed,
+            'cursed_brand': cursed_brand_pressed,
         }
         client.send_inputs(inputs)
 
@@ -1772,7 +1997,11 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                               dash_cr=lp_state.get('dash_cr', 1.0),
                               has_red_gem=lp_state.get('has_red_gem', False),
                               has_blue_gem=lp_state.get('has_blue_gem', False),
-                              blue_gem_cr=lp_state.get('blue_gem_cr', 1.0))
+                              blue_gem_cr=lp_state.get('blue_gem_cr', 1.0),
+                              has_mirror=lp_state.get('has_mirror', False),
+                              has_kitsune_mask=lp_state.get('has_kitsune_mask', False),
+                              has_cursed_brand=lp_state.get('has_cursed_brand', False),
+                              cursed_brand_cr=lp_state.get('cursed_brand_cr', 1.0))
 
         # Barre de vie du joueur hôte (en haut à droite)
         rp_state = players_state[0] if len(players_state) >= 1 else {}
@@ -1838,6 +2067,48 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             else:
                 client_red_gem_animating = False
 
+        # --- Animation Mirror (fullscreen côté client) ---
+        if getattr(run_game_mp_client, '_client_mirror_animating', False):
+            elapsed_m = pygame.time.get_ticks() - run_game_mp_client._client_mirror_anim_start
+            if elapsed_m < 800:
+                if elapsed_m < 200: alpha = int(255 * (elapsed_m / 200.0))
+                elif elapsed_m < 500: alpha = 255
+                else: alpha = int(255 * (1.0 - (elapsed_m - 500) / 300.0))
+                try:
+                    mir_img = pygame.image.load("assets/images/mirror.png").convert_alpha()
+                    mir_img = pygame.transform.scale(mir_img, (128, 128))
+                    mir_img.set_alpha(alpha)
+                    mir_rect = mir_img.get_rect(center=(screen_width // 2, screen_height // 2))
+                    overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+                    overlay.fill((180, 180, 255, int(alpha * 0.3)))
+                    screen.blit(overlay, (0, 0))
+                    screen.blit(mir_img, mir_rect)
+                except Exception:
+                    pass
+            else:
+                run_game_mp_client._client_mirror_animating = False
+
+        # --- Animation Cursed Brand (fullscreen côté client) ---
+        if getattr(run_game_mp_client, '_client_cb_animating', False):
+            elapsed_cb = pygame.time.get_ticks() - run_game_mp_client._client_cb_anim_start
+            if elapsed_cb < 800:
+                if elapsed_cb < 200: alpha = int(255 * (elapsed_cb / 200.0))
+                elif elapsed_cb < 500: alpha = 255
+                else: alpha = int(255 * (1.0 - (elapsed_cb - 500) / 300.0))
+                try:
+                    cb_img = pygame.image.load("assets/images/cursed_brand.png").convert_alpha()
+                    cb_img = pygame.transform.scale(cb_img, (128, 128))
+                    cb_img.set_alpha(alpha)
+                    cb_rect = cb_img.get_rect(center=(screen_width // 2, screen_height // 2))
+                    overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+                    overlay.fill((150, 50, 150, int(alpha * 0.3)))
+                    screen.blit(overlay, (0, 0))
+                    screen.blit(cb_img, cb_rect)
+                except Exception:
+                    pass
+            else:
+                run_game_mp_client._client_cb_animating = False
+
         pygame.display.flip()
         clock.tick(60)
 
@@ -1845,6 +2116,33 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 # =============================================================================
 # HELPERS PARTAGÉS
 # =============================================================================
+
+def _get_active_item_keys(player):
+    """Retourne la liste des items actifs avec leur touche assignée.
+    Ordre : boots, blue_gem, cursed_brand. Touches : 3, 4, 5..."""
+    items = []
+    key_num = 3
+    if player.has_boots:
+        items.append((key_num, 'boots')); key_num += 1
+    if player.has_blue_gem:
+        items.append((key_num, 'bluegem')); key_num += 1
+    if player.has_cursed_brand:
+        items.append((key_num, 'cursed_brand')); key_num += 1
+    return items
+
+
+def _count_inventory_items(player):
+    """Compte le nombre total d'items dans l'inventaire."""
+    count = 0
+    if player.has_pickaxe: count += 1
+    if player.has_boots: count += 1
+    if player.has_red_gem: count += 1
+    if player.has_blue_gem: count += 1
+    if player.has_mirror: count += 1
+    if player.has_kitsune_mask: count += 1
+    if player.has_cursed_brand: count += 1
+    return count
+
 
 def _handle_weapon_switch(player, slot, sound_manager):
     """Gère le changement d'arme/compétence pour un joueur.
@@ -1898,7 +2196,10 @@ def _apply_skill_result(skill_result, caster, group, projectiles_group,
     """Applique les résultats d'une compétence active."""
     # Dégâts de mêlée en zone (Swordsman)
     for enemy, damage in skill_result.get('melee_hits', []):
-        enemy.damage(damage)
+        dmg = damage * caster.get_damage_multiplier()
+        if caster.has_kitsune_mask and enemy.health <= enemy.max_health * 0.3:
+            dmg *= 1.5
+        enemy.damage(dmg)
         if enemy.health <= 0:
             e_pos = (enemy.feet.centerx, enemy.feet.centery)
             sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
@@ -1908,6 +2209,7 @@ def _apply_skill_result(skill_result, caster, group, projectiles_group,
     proj = skill_result.get('projectile')
     if proj:
         proj._mp_id = next_id_fn()
+        proj._owner = caster
         group.add(proj)
         projectiles_group.add(proj)
         src_pos = (caster.feet.centerx, caster.feet.centery)
@@ -1927,6 +2229,7 @@ def _apply_skill_result(skill_result, caster, group, projectiles_group,
             render_scale=homing.get('render_scale', 1.2)
         )
         aoe._mp_id = next_id_fn()
+        aoe._owner = caster
         group.add(aoe)
         projectiles_group.add(aoe)
         sound_manager.play_spatial('shot', target_pos, listener_pos)
@@ -1965,26 +2268,37 @@ def _apply_skill_result(skill_result, caster, group, projectiles_group,
 
 def _pickup_item(player, item, sound_manager):
     """Ramasse un item. sound_manager sert uniquement pour les sons UI du host.
-    Passer None pour player2 (le client gère ses propres sons)."""
-    if item.item_type == 'melee':
+    Passer None pour player2 (le client gère ses propres sons).
+    Retourne True si l'item a été ramassé, False sinon."""
+    # Items consommables (pas de slot d'inventaire) : toujours ramassables
+    if item.item_type == 'arrow':
+        player.arrows += random.randint(1, 4)
+        if sound_manager: sound_manager.play_ui_equip_bow()
+        return True
+    elif item.item_type == 'apple':
+        player.heal(player.max_health * 0.10)
+        if sound_manager: sound_manager.play_ui_eating()
+        return True
+    elif item.item_type == 'melee':
         player.has_melee = True
         if player.current_weapon != 'melee':
             player.current_weapon = 'melee'
             if sound_manager: sound_manager.play_ui_equip_sword()
+        return True
     elif item.item_type == 'ranged':
         if not player.has_ranged: player.arrows += 10
         player.has_ranged = True
         if player.current_weapon != 'ranged':
             player.current_weapon = 'ranged'
             if sound_manager: sound_manager.play_ui_equip_bow()
-    elif item.item_type == 'pickaxe':
+        return True
+
+    # Items d'inventaire : vérifier la limite de 8 slots
+    if _count_inventory_items(player) >= 8:
+        return False  # Inventaire plein
+
+    if item.item_type == 'pickaxe':
         player.has_pickaxe = True
-    elif item.item_type == 'arrow':
-        player.arrows += random.randint(1, 4)
-        if sound_manager: sound_manager.play_ui_equip_bow()
-    elif item.item_type == 'apple':
-        player.heal(player.max_health * 0.10)
-        if sound_manager: sound_manager.play_ui_eating()
     elif item.item_type == 'boots':
         player.has_boots = True
         if sound_manager: sound_manager.play_ui_equipement()
@@ -1994,6 +2308,18 @@ def _pickup_item(player, item, sound_manager):
     elif item.item_type == 'bluegem':
         player.has_blue_gem = True
         if sound_manager: sound_manager.play_ui_equipement()
+    elif item.item_type == 'mirror':
+        player.has_mirror = True
+        if sound_manager: sound_manager.play_ui_equipement()
+    elif item.item_type == 'kitsune_mask':
+        player.has_kitsune_mask = True
+        if sound_manager: sound_manager.play_ui_equipement()
+    elif item.item_type == 'cursed_brand':
+        player.has_cursed_brand = True
+        if sound_manager: sound_manager.play_ui_equipement()
+    else:
+        return False
+    return True
 
 
 def _handle_enemy_death(enemy, group, items_group, particles_group):

@@ -31,6 +31,15 @@ class UI:
 
             self.bluegem_img = pygame.image.load("assets/images/bluegem.png").convert_alpha()
             self.bluegem_img = pygame.transform.scale(self.bluegem_img, (64, 64))
+
+            self.mirror_img = pygame.image.load("assets/images/mirror.png").convert_alpha()
+            self.mirror_img = pygame.transform.scale(self.mirror_img, (64, 64))
+
+            self.kitsune_mask_img = pygame.image.load("assets/images/kitsune_mask.png").convert_alpha()
+            self.kitsune_mask_img = pygame.transform.scale(self.kitsune_mask_img, (64, 64))
+
+            self.cursed_brand_img = pygame.image.load("assets/images/cursed_brand.png").convert_alpha()
+            self.cursed_brand_img = pygame.transform.scale(self.cursed_brand_img, (64, 64))
         except FileNotFoundError:
             self.sword_img = pygame.Surface((64, 64)); self.sword_img.fill((200, 200, 200))
             self.bow_img = pygame.Surface((64, 64)); self.bow_img.fill((150, 100, 50))
@@ -38,6 +47,9 @@ class UI:
             self.boots_img = pygame.Surface((64, 64)); self.boots_img.fill((100, 150, 200))
             self.redgem_img = pygame.Surface((64, 64)); self.redgem_img.fill((200, 50, 50))
             self.bluegem_img = pygame.Surface((64, 64)); self.bluegem_img.fill((50, 50, 200))
+            self.mirror_img = pygame.Surface((64, 64)); self.mirror_img.fill((180, 180, 220))
+            self.kitsune_mask_img = pygame.Surface((64, 64)); self.kitsune_mask_img.fill((220, 150, 50))
+            self.cursed_brand_img = pygame.Surface((64, 64)); self.cursed_brand_img.fill((150, 50, 150))
 
     def load_character_icons(self, char_type):
         """Charge les icônes spécifiques à un personnage."""
@@ -73,8 +85,11 @@ class UI:
 
     def draw_character_hud(self, char_type, current_weapon, skill_cooldowns=None,
                            arrows=0, has_pickaxe=False, has_boots=False, dash_cr=1.0,
-                           has_red_gem=False, has_blue_gem=False, blue_gem_cr=1.0):
-        """Dessine le HUD complet d'un personnage (icônes + cooldowns)."""
+                           has_red_gem=False, has_blue_gem=False, blue_gem_cr=1.0,
+                           has_mirror=False, has_kitsune_mask=False,
+                           has_cursed_brand=False, cursed_brand_cr=1.0):
+        """Dessine le HUD complet d'un personnage (icônes + cooldowns).
+        Ordre : slots arme (1,2) → items actifs → items passifs."""
         icons = self.load_character_icons(char_type)
         char_def = CHARACTER_DEFS.get(char_type, CHARACTER_DEFS['soldier'])
         abilities = char_def.get('abilities', {})
@@ -85,20 +100,18 @@ class UI:
         gap = 8
 
         # Slot 1 (touche 1 / attaque de base)
-        # Déterminer si slot1 est actif
         if char_type == 'soldier':
             slot1_active = (current_weapon == 'melee')
         elif char_type == 'archer':
             slot1_active = (current_weapon == 'ranged')
         elif char_type == 'swordsman':
-            slot1_active = True  # Icône fixe, toujours active
+            slot1_active = True
         else:
             slot1_active = (current_weapon == 'skill1')
 
         slot1_cooldown = 1.0
         slot1_show_cd = False
         if char_type == 'swordsman':
-            # Swordsman slot1 = skill1 cooldown
             slot1_cooldown = skill_cooldowns.get('skill1', 1.0) if skill_cooldowns else 1.0
             slot1_show_cd = True
         elif char_type not in ('soldier', 'archer'):
@@ -111,7 +124,6 @@ class UI:
                         show_cooldown=slot1_show_cd,
                         label='1')
 
-        # Afficher le nombre de flèches pour l'archer sur slot1
         if char_type == 'archer' and current_weapon in ('ranged', 'skill1'):
             self._draw_counter(x_offset, y, slot_size, arrows)
 
@@ -119,13 +131,10 @@ class UI:
 
         # Slot 2 (touche 2 / compétence)
         if 'slot2' in icons:
-            skill2_name = 'skill2' if 'skill2' in abilities else ('skill1' if 'skill1' in abilities and 'slot2' in icons else None)
-            # Pour soldier : slot2 = ranged
             if char_type == 'soldier':
                 self._draw_slot(x_offset, y, slot_size, icons.get('slot2'),
                                 is_active=(current_weapon == 'ranged'),
                                 cooldown_ratio=1.0, show_cooldown=False, label='2')
-                # Toujours afficher le compteur de flèches sur l'arc
                 self._draw_counter(x_offset, y, slot_size, arrows)
             elif char_type == 'archer':
                 cr = skill_cooldowns.get('skill1', 1.0) if skill_cooldowns else 1.0
@@ -139,30 +148,42 @@ class UI:
                                 cooldown_ratio=cr, show_cooldown=True, label='2')
             x_offset += slot_size + gap
 
-        # Pickaxe
-        if has_pickaxe:
-            self._draw_slot(x_offset, y, slot_size, self.pickaxe_img,
-                            is_active=False, cooldown_ratio=1.0, show_cooldown=False)
-            x_offset += slot_size + gap
+        # --- Items d'inventaire : ACTIFS d'abord, PASSIFS ensuite ---
+        # Chaque item a : (present, icon, cooldown_ratio, show_cd, is_active_type)
+        # Compteur de touche commence à 3 pour les items actifs
+        key_counter = 3
 
-        # Boots
+        # Items ACTIFS (avec touche d'activation)
+        active_items = []
         if has_boots:
-            self._draw_slot(x_offset, y, slot_size, self.boots_img,
-                            is_active=False, cooldown_ratio=dash_cr,
-                            show_cooldown=True)
-            x_offset += slot_size + gap
+            active_items.append((self.boots_img, dash_cr, True))
+        if has_blue_gem:
+            active_items.append((self.bluegem_img, blue_gem_cr, True))
+        if has_cursed_brand:
+            active_items.append((self.cursed_brand_img, cursed_brand_cr, True))
 
-        # Red Gem (passif, pas de cooldown)
+        for icon, cr, show_cd in active_items:
+            self._draw_slot(x_offset, y, slot_size, icon,
+                            is_active=False, cooldown_ratio=cr,
+                            show_cooldown=show_cd, label=str(key_counter))
+            x_offset += slot_size + gap
+            key_counter += 1
+
+        # Items PASSIFS (pas de touche d'activation)
+        passive_items = []
+        if has_pickaxe:
+            passive_items.append(self.pickaxe_img)
         if has_red_gem:
-            self._draw_slot(x_offset, y, slot_size, self.redgem_img,
+            passive_items.append(self.redgem_img)
+        if has_mirror:
+            passive_items.append(self.mirror_img)
+        if has_kitsune_mask:
+            passive_items.append(self.kitsune_mask_img)
+
+        for icon in passive_items:
+            self._draw_slot(x_offset, y, slot_size, icon,
                             is_active=False, cooldown_ratio=1.0, show_cooldown=False)
             x_offset += slot_size + gap
-
-        # Blue Gem (actif, cooldown 30s)
-        if has_blue_gem:
-            self._draw_slot(x_offset, y, slot_size, self.bluegem_img,
-                            is_active=False, cooldown_ratio=blue_gem_cr,
-                            show_cooldown=True, label='3')
 
     def _draw_slot(self, x, y, size, icon, is_active=False, cooldown_ratio=1.0,
                    show_cooldown=False, label=None):

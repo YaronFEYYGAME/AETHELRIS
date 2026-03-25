@@ -31,6 +31,15 @@ class Item(pygame.sprite.Sprite):
             elif self.item_type == 'bluegem':
                 img = pygame.image.load("assets/images/bluegem.png").convert_alpha()
                 self.image = pygame.transform.scale(img, (20, 20))
+            elif self.item_type == 'mirror':
+                img = pygame.image.load("assets/images/mirror.png").convert_alpha()
+                self.image = pygame.transform.scale(img, (20, 20))
+            elif self.item_type == 'kitsune_mask':
+                img = pygame.image.load("assets/images/kitsune_mask.png").convert_alpha()
+                self.image = pygame.transform.scale(img, (24, 24))
+            elif self.item_type == 'cursed_brand':
+                img = pygame.image.load("assets/images/cursed_brand.png").convert_alpha()
+                self.image = pygame.transform.scale(img, (20, 20))
         except FileNotFoundError:
             self.image = pygame.Surface((32, 32))
             self.image.fill((255, 255, 0)) 

@@ -69,6 +69,21 @@ class Player(pygame.sprite.Sprite):
         self.blue_gem_cooldown = 30000  # 30 secondes
         self.last_blue_gem_time = -30000  # prêt immédiatement
 
+        # Mirror
+        self.has_mirror = False
+        self.mirror_triggered = False  # flag pour animation
+
+        # Kitsune Mask
+        self.has_kitsune_mask = False
+
+        # Cursed Brand
+        self.has_cursed_brand = False
+        self.cursed_brand_cooldown = 30000  # 30 secondes
+        self.last_cursed_brand_time = -30000
+        self.cursed_brand_active = False
+        self.cursed_brand_end_time = 0
+        self.cursed_brand_triggered = False  # flag pour animation sur la cible
+
         self.is_hit = False
         self.last_hit_time = 0
 
@@ -250,6 +265,17 @@ class Player(pygame.sprite.Sprite):
                 self.image.blit(blue_overlay, (0, 0))
             else:
                 self.blue_gem_active = False
+
+        # Cursed Brand : clignotement rouge pendant le boost
+        if self.cursed_brand_active:
+            if pygame.time.get_ticks() < self.cursed_brand_end_time:
+                # Alternance rapide toutes les 100ms
+                if (pygame.time.get_ticks() // 100) % 2 == 0:
+                    mask = pygame.mask.from_surface(self.image)
+                    red_overlay = mask.to_surface(setcolor=(255, 50, 50, 100), unsetcolor=(0, 0, 0, 0))
+                    self.image.blit(red_overlay, (0, 0))
+            else:
+                self.cursed_brand_active = False
 
     def attack(self):
         """Attaque de base (E). Retourne ('melee', rect), ('ranged', None), ou None."""
@@ -474,10 +500,17 @@ class Player(pygame.sprite.Sprite):
     def is_moving(self):
         return self.velocity.length() > 0
 
-    def damage(self, amount):
+    def damage(self, amount, source_enemy=None):
         if self.state != 'death':
             # Blue Gem : invincibilité active → ignore les dégâts
             if self.blue_gem_active and pygame.time.get_ticks() < self.blue_gem_end_time:
+                return
+            # Mirror : 1/3 chance de renvoyer les dégâts
+            import random
+            if self.has_mirror and source_enemy is not None and random.random() < 1/3:
+                if hasattr(source_enemy, 'damage'):
+                    source_enemy.damage(amount)
+                self.mirror_triggered = True
                 return
             self.health -= amount
             self.is_hit = True
@@ -506,6 +539,33 @@ class Player(pygame.sprite.Sprite):
         """Retourne le ratio de cooldown de la blue gem (0.0 = vient d'être utilisé, 1.0 = prêt)."""
         elapsed = pygame.time.get_ticks() - self.last_blue_gem_time
         return min(1.0, max(0.0, elapsed / self.blue_gem_cooldown))
+
+    def activate_cursed_brand(self, ally_player=None):
+        """Active la Marque Maudite : -30% PV allié, +50% dégâts pendant 10s."""
+        current_time = pygame.time.get_ticks()
+        if current_time - self.last_cursed_brand_time < self.cursed_brand_cooldown:
+            return False
+        self.last_cursed_brand_time = current_time
+        self.cursed_brand_active = True
+        self.cursed_brand_end_time = current_time + 10000  # 10 secondes
+
+        # Cible : allié si vivant, sinon soi-même
+        target = ally_player if (ally_player and ally_player.health > 0) else self
+        hp_loss = int(target.health * 0.30)
+        target.health = max(1, target.health - hp_loss)
+        target.cursed_brand_triggered = True
+        return True
+
+    def get_cursed_brand_cooldown_ratio(self):
+        elapsed = pygame.time.get_ticks() - self.last_cursed_brand_time
+        return min(1.0, max(0.0, elapsed / self.cursed_brand_cooldown))
+
+    def get_damage_multiplier(self):
+        """Retourne le multiplicateur de dégâts total (cursed brand + kitsune sont gérés séparément)."""
+        mult = 1.0
+        if self.cursed_brand_active and pygame.time.get_ticks() < self.cursed_brand_end_time:
+            mult *= 1.5
+        return mult
 
     def heal(self, amount):
         if self.state != 'death':
@@ -608,6 +668,13 @@ class RemotePlayer(pygame.sprite.Sprite):
             mask = pygame.mask.from_surface(self.image)
             blue_overlay = mask.to_surface(setcolor=(50, 100, 255, 120), unsetcolor=(0, 0, 0, 0))
             self.image.blit(blue_overlay, (0, 0))
+
+        # Cursed Brand : clignotement rouge si boost actif
+        if state.get('cursed_brand_active', False):
+            if (pygame.time.get_ticks() // 100) % 2 == 0:
+                mask = pygame.mask.from_surface(self.image)
+                red_overlay = mask.to_surface(setcolor=(255, 50, 50, 100), unsetcolor=(0, 0, 0, 0))
+                self.image.blit(red_overlay, (0, 0))
 
     def update(self):
         pass

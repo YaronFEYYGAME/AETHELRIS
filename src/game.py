@@ -1337,15 +1337,11 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             if player.has_kitsune_mask:
                 for e in enemies_group:
                     if getattr(e, 'health', 0) > 0 and e.health <= e.max_health * 0.3:
-                        # Position écran de l'ennemi
                         ex = (e.feet.centerx - cam_x) * zoom_level + screen_width / 2
                         ey = (e.rect.top - cam_y) * zoom_level + screen_height / 2
-                        try:
-                            mark = pygame.image.load("assets/images/griffe_passif.png").convert_alpha()
-                            mark = pygame.transform.scale(mark, (24, 24))
-                            screen.blit(mark, (ex - 12, ey - 28))
-                        except Exception:
-                            pass
+                        mark_size = max(28, int(max(e.rect.width, e.rect.height) * 0.5))
+                        mark = _get_kitsune_mark(mark_size)
+                        screen.blit(mark, (ex - mark_size // 2, ey - mark_size - 4))
 
             # --- HUD ---
             ui.draw_health_bar(player.health, player.max_health)
@@ -1838,14 +1834,11 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             for edata in enemies_state:
                 if edata.get('health', 0) > 0 and edata['health'] <= edata.get('max_health', 1) * 0.3:
                     ex = (edata['x'] - _cam_x) * zoom_level + screen_width / 2
-                    ey_world = edata['y'] - 40  # au-dessus de l'ennemi
+                    ey_world = edata['y'] - 40
                     ey = (ey_world - _cam_y) * zoom_level + screen_height / 2
-                    try:
-                        mark = pygame.image.load("assets/images/griffe_passif.png").convert_alpha()
-                        mark = pygame.transform.scale(mark, (24, 24))
-                        screen.blit(mark, (ex - 12, ey - 12))
-                    except Exception:
-                        pass
+                    mark_size = 40  # taille par défaut client (pas de rect dispo)
+                    mark = _get_kitsune_mark(mark_size)
+                    screen.blit(mark, (ex - mark_size // 2, ey - mark_size // 2))
 
         # Animer les particules locales (sang, fumée, etc.)
         client_particles_grp.update()
@@ -2116,6 +2109,25 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 # =============================================================================
 # HELPERS PARTAGÉS
 # =============================================================================
+
+_kitsune_mark_cache = {}  # size → Surface
+_kitsune_mark_base = None
+
+def _get_kitsune_mark(size):
+    """Retourne la marque kitsune mise en cache pour une taille donnée."""
+    global _kitsune_mark_base
+    if size in _kitsune_mark_cache:
+        return _kitsune_mark_cache[size]
+    if _kitsune_mark_base is None:
+        try:
+            _kitsune_mark_base = pygame.image.load("assets/images/griffe_passif.png").convert_alpha()
+        except Exception:
+            _kitsune_mark_base = pygame.Surface((32, 32), pygame.SRCALPHA)
+            pygame.draw.circle(_kitsune_mark_base, (255, 50, 50, 200), (16, 16), 16)
+    mark = pygame.transform.scale(_kitsune_mark_base, (size, size))
+    _kitsune_mark_cache[size] = mark
+    return mark
+
 
 def _get_active_item_keys(player):
     """Retourne la liste des items actifs avec leur touche assignée.

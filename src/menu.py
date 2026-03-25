@@ -29,9 +29,15 @@ def start_menu(screen):
     settings_button = pygame.Rect(button_x, 485, button_width, button_height)
     quit_button     = pygame.Rect(button_x, 550, button_width, button_height)
 
-    title   = "AETHELRIS"
-    x_title = 50
-    y_title = 50
+    # Logo du jeu
+    try:
+        logo_img = pygame.image.load("assets/images/logo_game.png").convert_alpha()
+        # Redimensionner proportionnellement (hauteur ~120px)
+        logo_h = 120
+        logo_w = int(logo_img.get_width() * (logo_h / logo_img.get_height()))
+        logo_img = pygame.transform.scale(logo_img, (logo_w, logo_h))
+    except FileNotFoundError:
+        logo_img = None
 
     try:
         bg_image = pygame.image.load("assets/images/acceuil.jpeg").convert()
@@ -55,7 +61,10 @@ def start_menu(screen):
         else:
             screen.fill((15, 10, 25))
 
-        draw_pixel_text(screen, title, x_title, y_title, 2, (150, 100, 255))
+        if logo_img:
+            screen.blit(logo_img, (30, 30))
+        else:
+            draw_pixel_text(screen, "AETHELRIS", 50, 50, 2, (150, 100, 255))
 
         if not in_settings:
             draw_button(screen, play_button,     "JOUER")

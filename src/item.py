@@ -36,7 +36,7 @@ class Item(pygame.sprite.Sprite):
                 self.image = pygame.transform.scale(img, (20, 20))
             elif self.item_type == 'kitsune_mask':
                 img = pygame.image.load("assets/images/kitsune_mask.png").convert_alpha()
-                self.image = pygame.transform.scale(img, (24, 24))
+                self.image = pygame.transform.scale(img, (18, 18))
             elif self.item_type == 'cursed_brand':
                 img = pygame.image.load("assets/images/cursed_brand.png").convert_alpha()
                 self.image = pygame.transform.scale(img, (20, 20))

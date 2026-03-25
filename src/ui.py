@@ -36,7 +36,7 @@ class UI:
             self.mirror_img = pygame.transform.scale(self.mirror_img, (64, 64))
 
             self.kitsune_mask_img = pygame.image.load("assets/images/kitsune_mask.png").convert_alpha()
-            self.kitsune_mask_img = pygame.transform.scale(self.kitsune_mask_img, (64, 64))
+            self.kitsune_mask_img = pygame.transform.scale(self.kitsune_mask_img, (52, 52))
 
             self.cursed_brand_img = pygame.image.load("assets/images/cursed_brand.png").convert_alpha()
             self.cursed_brand_img = pygame.transform.scale(self.cursed_brand_img, (64, 64))

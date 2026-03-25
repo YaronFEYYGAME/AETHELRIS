@@ -53,31 +53,51 @@ class Enemy(pygame.sprite.Sprite):
         
         self.slide_dir_x = 1
         self.slide_dir_y = 1
-        
+
+        # Paralysie
+        self.paralyzed = False
+        self.paralyze_end_time = 0
+        self._blue_cache = {}
+
     def load_animation(self, state_name, path, num_frames):
         try:
             sprite_sheet = pygame.image.load(path).convert_alpha()
             frame_width = sprite_sheet.get_width() // num_frames
             frame_height = sprite_sheet.get_height()
-            
+
             frames_right = []
             frames_left = []
-            
+
             for i in range(num_frames):
                 frame = sprite_sheet.subsurface((i * frame_width, 0, frame_width, frame_height))
-                
+
                 new_width = int(frame_width * self.scale_factor)
                 new_height = int(frame_height * self.scale_factor)
                 frame = pygame.transform.scale(frame, (new_width, new_height))
-                
+
                 frames_right.append(frame)
                 frames_left.append(pygame.transform.flip(frame, True, False))
-                
+
             self.animations['right'][state_name] = frames_right
             self.animations['left'][state_name] = frames_left
         except FileNotFoundError:
             print(f"⚠️ Erreur: Fichier {path} introuvable.")
-            
+
+    def paralyze(self, duration_ms):
+        """Paralyse l'ennemi pour une durée donnée (en ms). Réinitialise si déjà paralysé."""
+        self.paralyzed = True
+        self.paralyze_end_time = pygame.time.get_ticks() + duration_ms
+
+    def _get_blue_tinted(self, frame):
+        """Retourne une version teintée en bleu du frame, mise en cache."""
+        frame_id = id(frame)
+        if frame_id in self._blue_cache:
+            return self._blue_cache[frame_id]
+        tinted = frame.copy()
+        tinted.fill((100, 150, 255, 255), special_flags=pygame.BLEND_RGBA_MULT)
+        self._blue_cache[frame_id] = tinted
+        return tinted
+
     def damage(self, amount):
         if self.is_dead: return 
         
@@ -118,7 +138,9 @@ class Enemy(pygame.sprite.Sprite):
                 
         self.image = animation[int(self.frame_index)]
 
-        if not self.is_dead and pygame.time.get_ticks() - self.hit_time < 150:
+        if self.paralyzed:
+            self.image = self._get_blue_tinted(self.image)
+        elif not self.is_dead and pygame.time.get_ticks() - self.hit_time < 150:
             self.image = self.image.copy()
             self.image.fill((255, 50, 50, 255), special_flags=pygame.BLEND_RGBA_MULT)
 
@@ -128,6 +150,15 @@ class Enemy(pygame.sprite.Sprite):
             if pygame.time.get_ticks() - self.death_time > 3000:
                 self.kill()
             return
+
+        # Paralysie : figé, pas de mouvement ni d'attaque
+        if self.paralyzed:
+            if pygame.time.get_ticks() >= self.paralyze_end_time:
+                self.paralyzed = False
+            else:
+                self.current_velocity = pygame.math.Vector2(0, 0)
+                self.animate()
+                return
 
         target_center = pygame.math.Vector2(player.feet.center)
         my_center = pygame.math.Vector2(self.feet.center)
@@ -268,7 +299,12 @@ class BigEnemy(pygame.sprite.Sprite):
         self.has_dealt_damage_2 = False
         self.has_aggro = False
         self.pending_drop = None
-        
+
+        # Paralysie
+        self.paralyzed = False
+        self.paralyze_end_time = 0
+        self._blue_cache = {}
+
         # Sons gérés via pending_sounds → SpatialAudioManager dans game.py
         self.activation_played = False
         self.death_sound_played = False
@@ -330,15 +366,39 @@ class BigEnemy(pygame.sprite.Sprite):
                 self.state = 'hit'
                 self.frame_index = 0
                 self.is_attacking = False 
-                self.velocity.xy = 0, 0 
+                self.velocity.xy = 0, 0
+
+    def paralyze(self, duration_ms):
+        """Paralyse le boss pour une durée donnée (en ms). Réinitialise si déjà paralysé."""
+        self.paralyzed = True
+        self.paralyze_end_time = pygame.time.get_ticks() + duration_ms
+
+    def _get_blue_tinted(self, frame):
+        """Retourne une version teintée en bleu du frame, mise en cache."""
+        frame_id = id(frame)
+        if frame_id in self._blue_cache:
+            return self._blue_cache[frame_id]
+        tinted = frame.copy()
+        tinted.fill((100, 150, 255, 255), special_flags=pygame.BLEND_RGBA_MULT)
+        self._blue_cache[frame_id] = tinted
+        return tinted
 
     def update(self, player, walls):
         if self.state == 'death':
             self.animate()
             return
 
+        # Paralysie : figé, pas de mouvement ni d'attaque
+        if self.paralyzed:
+            if pygame.time.get_ticks() >= self.paralyze_end_time:
+                self.paralyzed = False
+            else:
+                self.velocity.xy = 0, 0
+                self.animate()
+                return
+
         current_time = pygame.time.get_ticks()
-        
+
         target_center = pygame.math.Vector2(player.feet.center)
         my_center = pygame.math.Vector2(self.feet.center)
         target_vector = target_center - my_center
@@ -531,12 +591,14 @@ class BigEnemy(pygame.sprite.Sprite):
         
         if self.state == 'death':
             self._is_blinking = False
-            
-        if self.state == 'hit' or self._is_blinking:
+
+        if self.paralyzed:
+            self.image = self._get_blue_tinted(animation[int(self.frame_index)])
+        elif self.state == 'hit' or self._is_blinking:
             mask = pygame.mask.from_surface(self.image)
             red_overlay = mask.to_surface(setcolor=(255, 0, 0, 150), unsetcolor=(0, 0, 0, 0))
             self.image.blit(red_overlay, (0, 0))
-    
+
     def update_volumes(self, music_vol, sfx_vol):
         # Sons gérés via pending_sounds → SpatialAudioManager, rien à ajuster ici
         pygame.mixer.music.set_volume(music_vol)
@@ -575,11 +637,29 @@ class Spirit(pygame.sprite.Sprite):
         self.rect.centerx = self.feet.centerx
         self.rect.bottom = self.feet.bottom + self.y_offset 
         
-        self.health = 1 
-        self.speed = 1.8 
+        self.health = 1
+        self.speed = 1.8
         self.velocity = pygame.math.Vector2(0, 0)
         self.facing = "right"
-        self.damage_amount = 15 
+        self.damage_amount = 15
+
+        # Paralysie
+        self.paralyzed = False
+        self.paralyze_end_time = 0
+        self._blue_cache = {}
+
+    def paralyze(self, duration_ms):
+        self.paralyzed = True
+        self.paralyze_end_time = pygame.time.get_ticks() + duration_ms
+
+    def _get_blue_tinted(self, frame):
+        frame_id = id(frame)
+        if frame_id in self._blue_cache:
+            return self._blue_cache[frame_id]
+        tinted = frame.copy()
+        tinted.fill((100, 150, 255, 255), special_flags=pygame.BLEND_RGBA_MULT)
+        self._blue_cache[frame_id] = tinted
+        return tinted
 
     def load_grid_animation(self, state_name, path, cols, rows, num_frames, scale_override=None):
         scale = scale_override if scale_override is not None else self.scale_factor
@@ -617,14 +697,23 @@ class Spirit(pygame.sprite.Sprite):
         if self.state in ['death', 'explode']:
             self.animate()
             if self.frame_index >= len(self.animations[self.facing][self.state]) - 1:
-                self.kill() 
+                self.kill()
             return
 
         if self.state == 'appear':
             self.animate()
             if self.frame_index >= len(self.animations[self.facing]['appear']) - 1:
-                self.state = 'run' 
+                self.state = 'run'
             return
+
+        # Paralysie : figé
+        if self.paralyzed:
+            if pygame.time.get_ticks() >= self.paralyze_end_time:
+                self.paralyzed = False
+            else:
+                self.velocity.xy = 0, 0
+                self.animate()
+                return
 
         target_center = pygame.math.Vector2(player.feet.center)
         my_center = pygame.math.Vector2(self.feet.center)
@@ -664,7 +753,10 @@ class Spirit(pygame.sprite.Sprite):
             else:
                 self.frame_index = 0
         self.image = animation[int(self.frame_index)].copy()
-        
+
+        if self.paralyzed:
+            self.image = self._get_blue_tinted(animation[int(self.frame_index)])
+
         if self.state == 'explode':
             self.rect = self.image.get_rect()
             self.rect.center = self.explode_center
@@ -732,7 +824,23 @@ class Necromancer(pygame.sprite.Sprite):
         self.slide_dir_y = 1
         self.pending_sounds = []
 
-        # Sons gérés via pending_sounds → SpatialAudioManager dans game.py
+        # Paralysie
+        self.paralyzed = False
+        self.paralyze_end_time = 0
+        self._blue_cache = {}
+
+    def paralyze(self, duration_ms):
+        self.paralyzed = True
+        self.paralyze_end_time = pygame.time.get_ticks() + duration_ms
+
+    def _get_blue_tinted(self, frame):
+        frame_id = id(frame)
+        if frame_id in self._blue_cache:
+            return self._blue_cache[frame_id]
+        tinted = frame.copy()
+        tinted.fill((100, 150, 255, 255), special_flags=pygame.BLEND_RGBA_MULT)
+        self._blue_cache[frame_id] = tinted
+        return tinted
 
     def load_grid_animation(self, state_name, path, cols, rows, num_frames):
         try:
@@ -782,6 +890,15 @@ class Necromancer(pygame.sprite.Sprite):
         if self.state == 'death':
             self.animate()
             return
+
+        # Paralysie : figé
+        if self.paralyzed:
+            if pygame.time.get_ticks() >= self.paralyze_end_time:
+                self.paralyzed = False
+            else:
+                self.velocity.xy = 0, 0
+                self.animate()
+                return
 
         current_time = pygame.time.get_ticks()
         target_center = pygame.math.Vector2(player.feet.center)
@@ -965,15 +1082,17 @@ class Necromancer(pygame.sprite.Sprite):
         self.image = animation[int(self.frame_index)].copy()
 
         if self.state == 'death': self._is_blinking = False
-        
-        if self._is_blinking:
-            if pygame.time.get_ticks() - self.hit_time < 150: 
+
+        if self.paralyzed:
+            self.image = self._get_blue_tinted(animation[int(self.frame_index)])
+        elif self._is_blinking:
+            if pygame.time.get_ticks() - self.hit_time < 150:
                 mask = pygame.mask.from_surface(self.image)
                 red_overlay = mask.to_surface(setcolor=(255, 0, 0, 150), unsetcolor=(0, 0, 0, 0))
                 self.image.blit(red_overlay, (0, 0))
             else:
                 self._is_blinking = False
-            
+
     def update_volumes(self, music_vol, sfx_vol):
         # Sons gérés via pending_sounds → SpatialAudioManager, rien à ajuster ici
         pygame.mixer.music.set_volume(music_vol)
@@ -1061,6 +1180,16 @@ class RemoteEnemy(pygame.sprite.Sprite):
 
         self.health = 1
         self.max_health = 1
+        self._blue_cache = {}
+
+    def _get_blue_tinted(self, frame):
+        frame_id = id(frame)
+        if frame_id in self._blue_cache:
+            return self._blue_cache[frame_id]
+        tinted = frame.copy()
+        tinted.fill((100, 150, 255, 255), special_flags=pygame.BLEND_RGBA_MULT)
+        self._blue_cache[frame_id] = tinted
+        return tinted
 
     def _load_strip(self, state_name, path, num_frames):
         try:
@@ -1137,6 +1266,8 @@ class RemoteEnemy(pygame.sprite.Sprite):
         if anim_state in anims and anims[anim_state]:
             frames = anims[anim_state]
             self.image = frames[int(frame) % len(frames)]
+            if state.get('paralyzed', False):
+                self.image = self._get_blue_tinted(self.image)
 
     def update(self):
         pass

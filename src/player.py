@@ -445,6 +445,7 @@ class Player(pygame.sprite.Sprite):
                         'instant': True,
                         'target_size': target_size,
                         'render_scale': skill.get('render_scale', 1.2),
+                        'paralyze': skill.get('paralyze', 0),
                     }
                 else:
                     # Aucun ennemi à portée → signaler l'échec

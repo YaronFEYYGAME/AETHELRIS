@@ -655,6 +655,7 @@ def _serialize_enemy(e):
         'max_health': getattr(e, 'max_health', health),
         'etype':     etype,
         'has_aggro': getattr(e, 'has_aggro', False),
+        'paralyzed': getattr(e, 'paralyzed', False),
     }
 
 
@@ -1239,6 +1240,14 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                     if owner:
                                         aoe_dmg *= owner.get_damage_multiplier(target_enemy=e)
                                     e.damage(aoe_dmg)
+                                    # Paralysie (orbe cristal wizard)
+                                    paralyze_dur = getattr(proj, '_paralyze_duration', 0)
+                                    if paralyze_dur and e.health > 0 and hasattr(e, 'paralyze'):
+                                        # Boss : durée réduite à 1.5s
+                                        if isinstance(e, (BigEnemy, Necromancer)):
+                                            e.paralyze(paralyze_dur // 2)
+                                        else:
+                                            e.paralyze(paralyze_dur)
                                     if e.health <= 0:
                                         e_pos = (e.feet.centerx, e.feet.centery)
                                         sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
@@ -1435,17 +1444,14 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                         alpha = 255
                     else:
                         alpha = int(255 * (1.0 - (elapsed_m - 500) / 300.0))
-                    try:
-                        mir_img = pygame.image.load("assets/images/mirror.png").convert_alpha()
-                        mir_img = pygame.transform.scale(mir_img, (128, 128))
-                        mir_img.set_alpha(alpha)
-                        mir_rect = mir_img.get_rect(center=(screen_width // 2, screen_height // 2))
-                        overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
-                        overlay.fill((180, 180, 255, int(alpha * 0.3)))
-                        screen.blit(overlay, (0, 0))
-                        screen.blit(mir_img, mir_rect)
-                    except Exception:
-                        pass
+                    mir_base = _get_mirror_anim_img()
+                    mir_img = mir_base.copy()
+                    mir_img.set_alpha(alpha)
+                    mir_rect = mir_img.get_rect(center=(screen_width // 2, screen_height // 2))
+                    overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+                    overlay.fill((180, 180, 255, int(alpha * 0.3)))
+                    screen.blit(overlay, (0, 0))
+                    screen.blit(mir_img, mir_rect)
                 else:
                     mirror_animating = False
 
@@ -2058,17 +2064,14 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 if elapsed_m < 200: alpha = int(255 * (elapsed_m / 200.0))
                 elif elapsed_m < 500: alpha = 255
                 else: alpha = int(255 * (1.0 - (elapsed_m - 500) / 300.0))
-                try:
-                    mir_img = pygame.image.load("assets/images/mirror.png").convert_alpha()
-                    mir_img = pygame.transform.scale(mir_img, (128, 128))
-                    mir_img.set_alpha(alpha)
-                    mir_rect = mir_img.get_rect(center=(screen_width // 2, screen_height // 2))
-                    overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
-                    overlay.fill((180, 180, 255, int(alpha * 0.3)))
-                    screen.blit(overlay, (0, 0))
-                    screen.blit(mir_img, mir_rect)
-                except Exception:
-                    pass
+                mir_base = _get_mirror_anim_img()
+                mir_img = mir_base.copy()
+                mir_img.set_alpha(alpha)
+                mir_rect = mir_img.get_rect(center=(screen_width // 2, screen_height // 2))
+                overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+                overlay.fill((180, 180, 255, int(alpha * 0.3)))
+                screen.blit(overlay, (0, 0))
+                screen.blit(mir_img, mir_rect)
             else:
                 run_game_mp_client._client_mirror_animating = False
 
@@ -2103,6 +2106,19 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 
 _kitsune_mark_cache = {}  # size → Surface
 _kitsune_mark_base = None
+
+_mirror_anim_img = None
+
+def _get_mirror_anim_img():
+    """Retourne l'image miroir mise en cache pour l'animation fullscreen."""
+    global _mirror_anim_img
+    if _mirror_anim_img is None:
+        try:
+            _mirror_anim_img = pygame.image.load("assets/images/mirror.png").convert_alpha()
+            _mirror_anim_img = pygame.transform.scale(_mirror_anim_img, (128, 128))
+        except Exception:
+            _mirror_anim_img = pygame.Surface((128, 128), pygame.SRCALPHA)
+    return _mirror_anim_img
 
 def _get_kitsune_mark(size):
     """Retourne la marque kitsune mise en cache pour une taille donnée."""
@@ -2231,6 +2247,7 @@ def _apply_skill_result(skill_result, caster, group, projectiles_group,
         )
         aoe._mp_id = next_id_fn()
         aoe._owner = caster
+        aoe._paralyze_duration = homing.get('paralyze', 0)
         group.add(aoe)
         projectiles_group.add(aoe)
         sound_manager.play_spatial('shot', target_pos, listener_pos)

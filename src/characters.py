@@ -161,6 +161,7 @@ CHARACTER_DEFS = {
                 'explosion_radius': 60,
                 'detect_range': 200,
                 'render_scale': 0.6,  # effet visuel réduit pour le wizard
+                'paralyze': 3000,  # paralysie 3s (1.5s sur les boss)
             },
         },
         'icons': {

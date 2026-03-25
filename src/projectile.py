@@ -20,7 +20,7 @@ class Projectile(pygame.sprite.Sprite):
 
         # Déterminer la taille d'affichage selon le type de projectile
         is_effect = 'Effect' in img_path or 'effect' in img_path
-        display_size = 64 if is_effect else 32
+        display_size = 128 if is_effect else 32
 
         try:
             arrow_img = pygame.image.load(img_path).convert_alpha()
@@ -46,7 +46,9 @@ class Projectile(pygame.sprite.Sprite):
         self.rect.center = (x, y)
         self.rect.y -= 5
 
-        self.hitbox = pygame.Rect(0, 0, 15, 4)
+        hitbox_w = 30 if is_effect else 15
+        hitbox_h = 16 if is_effect else 4
+        self.hitbox = pygame.Rect(0, 0, hitbox_w, hitbox_h)
         self.hitbox.center = self.rect.center
 
     def update(self):

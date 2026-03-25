@@ -562,14 +562,14 @@ class Player(pygame.sprite.Sprite):
 
     def get_damage_multiplier(self, target_enemy=None):
         """Retourne le multiplicateur de dégâts total.
-        Les bonus s'additionnent : base 1.0 + 0.5 (cursed brand) + 0.5 (kitsune)."""
-        bonus = 0.0
+        Les bonus se multiplient entre eux : base × 1.5 (cursed) × 1.5 (kitsune)."""
+        mult = 1.0
         if self.cursed_brand_active and pygame.time.get_ticks() < self.cursed_brand_end_time:
-            bonus += 0.5
+            mult *= 1.5
         if target_enemy and self.has_kitsune_mask:
             if getattr(target_enemy, 'health', 0) > 0 and target_enemy.health <= target_enemy.max_health * 0.3:
-                bonus += 0.5
-        return 1.0 + bonus
+                mult *= 1.5
+        return mult
 
     def heal(self, amount):
         if self.state != 'death':

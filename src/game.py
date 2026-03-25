@@ -1328,9 +1328,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 for e in enemies_group:
                     if getattr(e, 'health', 0) > 0 and e.health <= e.max_health * 0.3:
                         ex = (e.feet.centerx - cam_x) * zoom_level + screen_width / 2
-                        # Positionner juste au-dessus du pied de l'ennemi (pas du rect complet)
-                        ey = (e.feet.top - 15 - cam_y) * zoom_level + screen_height / 2
-                        mark_size = max(28, int(max(e.rect.width, e.rect.height) * 0.5))
+                        ey = (e.feet.top - 5 - cam_y) * zoom_level + screen_height / 2
+                        mark_size = max(36, int(max(e.rect.width, e.rect.height) * 0.6))
                         mark = _get_kitsune_mark(mark_size)
                         screen.blit(mark, (ex - mark_size // 2, ey - mark_size // 2))
 

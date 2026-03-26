@@ -882,7 +882,7 @@ class Necromancer(pygame.sprite.Sprite):
 
         # Invocation de summons
         self.last_skill_time = 0
-        self.skill_cooldown = 32000  # 32 secondes entre chaque invocation
+        self.skill_cooldown = 16000  # 16 secondes entre chaque invocation
         self.has_summoned = False
         self.pending_summons = []
         self.pending_drop = None

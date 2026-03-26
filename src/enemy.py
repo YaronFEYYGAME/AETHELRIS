@@ -669,7 +669,6 @@ class Spirit(pygame.sprite.Sprite):
         self.load_grid_animation('idle', "assets/images/necromancer_summonIdle.png", 4, 1, 4)
         self.load_grid_animation('run', "assets/images/necromancer_summonIdle.png", 4, 1, 4)
         self.load_grid_animation('death', "assets/images/necromancer_summonDeath.png", 3, 2, 6)
-        self.load_grid_animation('explode', "assets/images/explosion_anim.png", 5, 1, 5, scale_override=0.45)
 
         self.image = self.animations['right']['appear'][0]
         self.rect = self.image.get_rect()
@@ -686,8 +685,8 @@ class Spirit(pygame.sprite.Sprite):
         self.rect.centerx = self.feet.centerx
         self.rect.bottom = self.feet.bottom + self.y_offset
 
-        self.max_health = 15
-        self.health = 15
+        self.max_health = 1
+        self.health = 1
         self.speed = 1.8
         self.velocity = pygame.math.Vector2(0, 0)
         self.facing = "right"
@@ -696,9 +695,8 @@ class Spirit(pygame.sprite.Sprite):
 
         # Référence au Necromancer propriétaire (pour le lifesteal)
         self.owner = owner_necromancer
-        # Flag : True si le summon a infligé des dégâts (pour le lifesteal du Necromancer)
-        self.dealt_damage = False
-        self.damage_dealt_amount = 0
+        # Flag pour spawner des particules rouges à la mort/explosion
+        self.pending_particles = False
 
         # Paralysie
         self.paralyzed = False
@@ -743,20 +741,18 @@ class Spirit(pygame.sprite.Sprite):
             print(f"Erreur: Fichier {path} introuvable.")
 
     def damage(self, amount):
-        if self.health > 0 and self.state not in ['death', 'explode']:
+        if self.health > 0 and self.state != 'death':
             self.health -= amount
             if self.health <= 0:
                 self.health = 0
                 self.is_dead = True
-                self.state = 'explode'
-                self.frame_index = 0
-                self.velocity.xy = 0, 0
-                self.explode_center = self.rect.center
+                self.pending_particles = True
+                self.kill()
 
     def update(self, player, walls):
-        if self.state in ['death', 'explode']:
+        if self.state == 'death':
             self.animate()
-            if self.frame_index >= len(self.animations[self.facing][self.state]) - 1:
+            if self.frame_index >= len(self.animations[self.facing]['death']) - 1:
                 self.kill()
             return
 
@@ -786,15 +782,13 @@ class Spirit(pygame.sprite.Sprite):
             player.damage(self.damage_amount, source_enemy=self)
             actual_damage = hp_before - player.health
             if actual_damage > 0:
-                self.dealt_damage = True
-                self.damage_dealt_amount = actual_damage
                 # Lifesteal du Necromancer : 100% des dégâts infligés
                 if self.owner and hasattr(self.owner, 'health') and self.owner.health > 0:
                     self.owner.health = min(self.owner.max_health, self.owner.health + actual_damage)
-            self.state = 'explode'
-            self.frame_index = 0
-            self.velocity.xy = 0, 0
-            self.explode_center = self.rect.center
+            # Disparaît avec particules rouges (pas d'animation d'explosion)
+            self.pending_particles = True
+            self.kill()
+            return
         elif distance > 0 and player.health > 0:
             self.state = 'run'
             norm_dir = target_vector.normalize()
@@ -829,18 +823,15 @@ class Spirit(pygame.sprite.Sprite):
 
         self.frame_index += self.animation_speed
         if self.frame_index >= len(animation):
-            if self.state in ['death', 'appear', 'explode']:
+            if self.state in ['death', 'appear']:
                 self.frame_index = len(animation) - 1
             else:
                 self.frame_index = 0
-        self.image = animation[int(self.frame_index)].copy()
+        frame_idx = max(0, min(int(self.frame_index), len(animation) - 1))
+        self.image = animation[frame_idx]
 
-        if self.state == 'explode':
-            self.rect = self.image.get_rect()
-            self.rect.center = self.explode_center
-        else:
-            self.rect.centerx = self.feet.centerx
-            self.rect.bottom = self.feet.bottom + self.y_offset
+        self.rect.centerx = self.feet.centerx
+        self.rect.bottom = self.feet.bottom + self.y_offset
 
 
 class Necromancer(pygame.sprite.Sprite):
@@ -852,7 +843,7 @@ class Necromancer(pygame.sprite.Sprite):
         self.frame_index = 0
         self.animation_speed = 0.15
 
-        self.load_grid_animation('idle', "assets/images/necromancer_idle.png", 5, 1, 5)
+        self.load_grid_animation('idle', "assets/images/necromancer_idle.png", 5, 1, 4)  # 5e frame vide
         self.load_grid_animation('run', "assets/images/necromancer_idle2.png", 4, 2, 8)
         self.load_grid_animation('attack', "assets/images/necromancer_attacking.png", 6, 3, 13)
         self.load_grid_animation('skill', "assets/images/necromancer_skill1.png", 6, 2, 12)
@@ -875,7 +866,7 @@ class Necromancer(pygame.sprite.Sprite):
 
         self.max_health = 450
         self.health = 450
-        self.speed = 1.5
+        self.speed = 2.5
         self.damage_amount = 10
         self.aggro_radius = 400
 
@@ -891,14 +882,6 @@ class Necromancer(pygame.sprite.Sprite):
         self.has_summoned = False
         self.pending_summons = []
         self.pending_drop = None
-
-        # Téléportation
-        self.teleport_distance = 350  # Distance au-delà de laquelle le Necromancer se téléporte
-        self.teleport_cooldown = 6000
-        self.last_teleport_time = 0
-        self.is_teleporting = False
-        self.teleport_phase = None  # 'disappear' ou 'appear'
-        self.teleport_target = None  # position cible
 
         self._is_blinking = False
         self.hit_time = 0
@@ -987,7 +970,6 @@ class Necromancer(pygame.sprite.Sprite):
                 self.state = 'death'
                 self.frame_index = 0
                 self.is_attacking = False
-                self.is_teleporting = False
                 self.velocity.xy = 0, 0
                 self._is_blinking = False
                 if not self.death_sound_played:
@@ -1068,41 +1050,6 @@ class Necromancer(pygame.sprite.Sprite):
                 self.bgm_playing = False
                 self.pending_sounds.append('boss_bgm_stop')
 
-        # --- Téléportation en cours ---
-        if self.is_teleporting:
-            self.velocity.xy = 0, 0
-            if self.teleport_phase == 'disappear':
-                self.state = 'skill'
-                anim = self.animations[self.facing]['skill']
-                if self.frame_index >= len(anim) - 1:
-                    # Téléportation effective : déplacer à la cible
-                    if self.teleport_target:
-                        self.position.x = self.teleport_target.x
-                        self.position.y = self.teleport_target.y
-                        self.feet.midbottom = (round(self.position.x), round(self.position.y))
-                        self.rect.centerx = self.feet.centerx
-                        self.rect.bottom = self.feet.bottom + self.y_offset
-                        # Faire face au joueur après téléport
-                        if player.feet.centerx > self.feet.centerx:
-                            self.facing = 'right'
-                        else:
-                            self.facing = 'left'
-                    self.teleport_phase = 'appear'
-                    self.frame_index = 0
-            elif self.teleport_phase == 'appear':
-                self.state = 'skill'
-                anim = self.animations[self.facing]['skill']
-                if self.frame_index >= len(anim) - 1:
-                    # Summons APRÈS la réapparition complète
-                    self._spawn_summons()
-                    self.last_skill_time = current_time  # reset skill cooldown aussi
-                    self.is_teleporting = False
-                    self.teleport_phase = None
-                    self.state = 'idle'
-                    self.frame_index = 0
-            self.animate()
-            return
-
         hit_x = False
         hit_y = False
         norm_dir = pygame.math.Vector2(0, 0)
@@ -1117,7 +1064,7 @@ class Necromancer(pygame.sprite.Sprite):
         elif self.is_attacking:
             self.velocity.xy = 0, 0
             current_frame = int(self.frame_index)
-            if current_frame == 6 and not self.has_dealt_damage_1:
+            if current_frame == 3 and not self.has_dealt_damage_1:
                 self.pending_sounds.append('boss_attack')
                 attack_area = self.get_attack_hitbox(salve=1)
                 if self._hits_player(attack_area, player) and player.health > 0:
@@ -1126,7 +1073,7 @@ class Necromancer(pygame.sprite.Sprite):
                     if player.health < hp_before:
                         self.health = min(self.max_health, self.health + (self.damage_amount * 0.5))
                 self.has_dealt_damage_1 = True
-            elif current_frame == 11 and not self.has_dealt_damage_2:
+            elif current_frame == 8 and not self.has_dealt_damage_2:
                 self.pending_sounds.append('boss_attack')
                 attack_area = self.get_attack_hitbox(salve=2)
                 if self._hits_player(attack_area, player) and player.health > 0:
@@ -1139,24 +1086,6 @@ class Necromancer(pygame.sprite.Sprite):
             if player.health > 0 and self.has_aggro:
                 if player.feet.centerx > self.feet.centerx: self.facing = "right"
                 else: self.facing = "left"
-
-                # Téléportation si le joueur est trop loin
-                if (distance > self.teleport_distance and
-                    current_time - self.last_teleport_time > self.teleport_cooldown):
-                    self.is_teleporting = True
-                    self.teleport_phase = 'disappear'
-                    self.state = 'skill'
-                    self.frame_index = 0
-                    self.last_teleport_time = current_time
-                    # Cible : près du joueur, légèrement décalé
-                    offset_x = 60 if self.facing == 'left' else -60
-                    self.teleport_target = pygame.math.Vector2(
-                        player.feet.centerx + offset_x,
-                        player.feet.bottom
-                    )
-                    self.velocity.xy = 0, 0
-                    self.animate()
-                    return
 
                 # Invocation de summons (cooldown)
                 if current_time - self.last_skill_time > self.skill_cooldown:
@@ -1262,9 +1191,6 @@ class Necromancer(pygame.sprite.Sprite):
         return attack_area.colliderect(player.feet.inflate(8, 8))
 
     def animate(self):
-        # Pendant la téléportation, ne PAS changer d'état automatiquement
-        is_tp = self.is_teleporting
-
         animation = self.animations[self.facing][self.state]
 
         # Paralysie : frame figée + teinte bleue
@@ -1281,9 +1207,6 @@ class Necromancer(pygame.sprite.Sprite):
             if self.state == 'death':
                 self.frame_index = len(animation) - 1
                 self._is_blinking = False
-            elif is_tp:
-                # Pendant le téléport : rester sur la dernière frame, pas de transition
-                self.frame_index = len(animation) - 1
             elif self.state == 'attack' or self.state == 'skill':
                 self.is_attacking = False
                 self.state = 'idle'
@@ -1344,7 +1267,7 @@ class RemoteEnemy(pygame.sprite.Sprite):
             'scale': 2.0,
             'empty_below': 25 * 2.0,
             'anims': [
-                ('idle',   "assets/images/necromancer_idle.png",       5,  'grid', 5, 1),
+                ('idle',   "assets/images/necromancer_idle.png",       4,  'grid', 5, 1),
                 ('run',    "assets/images/necromancer_idle2.png",       8,  'grid', 4, 2),
                 ('attack', "assets/images/necromancer_attacking.png",  13, 'grid', 6, 3),
                 ('skill',  "assets/images/necromancer_skill1.png",    12, 'grid', 6, 2),
@@ -1359,7 +1282,6 @@ class RemoteEnemy(pygame.sprite.Sprite):
                 ('idle',   "assets/images/necromancer_summonIdle.png",   4, 'grid', 4, 1),
                 ('run',    "assets/images/necromancer_summonIdle.png",   4, 'grid', 4, 1),
                 ('death',  "assets/images/necromancer_summonDeath.png",  6, 'grid', 3, 2),
-                ('explode',"assets/images/explosion_anim.png",          5, 'grid', 5, 1),
             ],
         },
     }

@@ -357,8 +357,24 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
             player.move(walls)
             
             ppos = (player.feet.centerx, player.feet.centery)
-            for enemy in enemies_group:
+            # Snapshot des spirits avant update pour détecter ceux qui meurent
+            spirits_before = {id(e): e for e in enemies_group if isinstance(e, Spirit)}
+
+            for enemy in list(enemies_group):
+                # Sauvegarder la position du spirit avant update (au cas où il se kill)
+                spirit_pos = None
+                if isinstance(enemy, Spirit):
+                    spirit_pos = (enemy.rect.centerx, enemy.rect.centery)
+
                 enemy.update(player, walls)
+
+                # Spirit qui a explosé ou est mort : spawner des particules rouges
+                if isinstance(enemy, Spirit) and getattr(enemy, 'pending_particles', False):
+                    if spirit_pos:
+                        for _ in range(15):
+                            particle = BloodParticle(spirit_pos[0], spirit_pos[1])
+                            group.add(particle)
+                            particles_group.add(particle)
 
                 if hasattr(enemy, 'pending_summons') and enemy.pending_summons:
                     owner_ref = enemy if isinstance(enemy, Necromancer) else None
@@ -1147,7 +1163,20 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                     ).length())
                 else:
                     target = player  # tous morts, peu importe
+
+                # Sauvegarder position du spirit avant update
+                spirit_pos = None
+                if isinstance(e, Spirit):
+                    spirit_pos = (e.rect.centerx, e.rect.centery)
+
                 e.update(target, walls)
+
+                # Spirit qui a explosé/mort : particules rouges
+                if isinstance(e, Spirit) and getattr(e, 'pending_particles', False):
+                    if spirit_pos:
+                        for _ in range(15):
+                            p = BloodParticle(spirit_pos[0], spirit_pos[1])
+                            group.add(p); particles_group.add(p)
                 # Dégâts sur le joueur non-ciblé (boss avec get_attack_hitbox)
                 if player2:
                     other = player2 if target is player else player
@@ -1370,6 +1399,12 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             else: cam_y = max(view_h // 2, min(cam_y, map_pixel_height - view_h // 2))
             group.center((cam_x, cam_y))
             group.draw(screen)
+
+            # --- Debug : hitbox d'attaque du Necromancer (violet, toujours visible quand aggro) ---
+            for e in enemies_group:
+                if isinstance(e, Necromancer) and getattr(e, 'has_aggro', False) and e.health > 0:
+                    draw_debug_rect(screen, e.get_attack_hitbox(), (200, 50, 200),
+                                    cam_x, cam_y, zoom_level, screen_width, screen_height)
 
             # --- Marque Kitsune : griffe au-dessus des ennemis sous 40% PV ---
             if player.has_kitsune_mask:

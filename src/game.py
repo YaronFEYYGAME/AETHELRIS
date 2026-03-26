@@ -361,8 +361,9 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                 enemy.update(player, walls)
 
                 if hasattr(enemy, 'pending_summons') and enemy.pending_summons:
+                    owner_ref = enemy if isinstance(enemy, Necromancer) else None
                     for sx, sy in enemy.pending_summons:
-                        new_spirit = Spirit(sx, sy)
+                        new_spirit = Spirit(sx, sy, owner_necromancer=owner_ref)
                         group.add(new_spirit)
                         enemies_group.add(new_spirit)
                     enemy.pending_summons.clear()
@@ -374,6 +375,13 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                         if bs == 'boss_bgm_start':
                             try:
                                 pygame.mixer.music.load("assets/sounds/boss1_soundtrack.mp3")
+                                pygame.mixer.music.set_volume(global_music_vol)
+                                pygame.mixer.music.play(-1)
+                            except Exception:
+                                pass
+                        elif bs == 'necro_bgm_start':
+                            try:
+                                pygame.mixer.music.load("assets/sounds/necromancer_song.mp3")
                                 pygame.mixer.music.set_volume(global_music_vol)
                                 pygame.mixer.music.play(-1)
                             except Exception:
@@ -1148,8 +1156,9 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                             other.damage(getattr(e, 'damage_amount', 10), source_enemy=e)
                             e._mp_other_dmg_time = now
                 if hasattr(e, 'pending_summons') and e.pending_summons:
+                    owner_ref = e if isinstance(e, Necromancer) else None
                     for sx, sy in e.pending_summons:
-                        ns = Spirit(sx, sy); ns._mp_id = _next_id()
+                        ns = Spirit(sx, sy, owner_necromancer=owner_ref); ns._mp_id = _next_id()
                         group.add(ns); enemies_group.add(ns)
                     e.pending_summons.clear()
                 # Collecter les sons des boss pour les envoyer au client
@@ -1160,6 +1169,13 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                             if bs == 'boss_bgm_start':
                                 try:
                                     pygame.mixer.music.load("assets/sounds/boss1_soundtrack.mp3")
+                                    pygame.mixer.music.set_volume(global_music_vol)
+                                    pygame.mixer.music.play(-1)
+                                except Exception:
+                                    pass
+                            elif bs == 'necro_bgm_start':
+                                try:
+                                    pygame.mixer.music.load("assets/sounds/necromancer_song.mp3")
                                     pygame.mixer.music.set_volume(global_music_vol)
                                     pygame.mixer.music.play(-1)
                                 except Exception:
@@ -1812,6 +1828,13 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             if snd_name == 'boss_bgm_start':
                 try:
                     pygame.mixer.music.load("assets/sounds/boss1_soundtrack.mp3")
+                    pygame.mixer.music.set_volume(global_music_vol)
+                    pygame.mixer.music.play(-1)
+                except Exception:
+                    pass
+            elif snd_name == 'necro_bgm_start':
+                try:
+                    pygame.mixer.music.load("assets/sounds/necromancer_song.mp3")
                     pygame.mixer.music.set_volume(global_music_vol)
                     pygame.mixer.music.play(-1)
                 except Exception:

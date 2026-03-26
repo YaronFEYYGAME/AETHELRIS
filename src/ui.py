@@ -285,7 +285,7 @@ class UI:
                 crop_rect = pygame.Rect(0, 64 - fill_height, 64, fill_height)
                 self.screen.blit(self.boots_img, (x, y + 64 - fill_height), area=crop_rect)
 
-    def draw_boss_dialogue(self, text):
+    def draw_boss_dialogue(self, text, boss_name=None):
         """Boîte de dialogue RPG en bas de l'écran pour les dialogues de boss."""
         sw = self.screen.get_width()
         sh = self.screen.get_height()
@@ -304,8 +304,19 @@ class UI:
         if not hasattr(self, '_boss_dialogue_font'):
             self._boss_dialogue_font = pygame.font.SysFont(
                 "garamond, times new roman, serif", 26)
+        if not hasattr(self, '_boss_name_font'):
+            self._boss_name_font = pygame.font.SysFont(
+                "garamond, times new roman, serif", 22, bold=True)
+
+        # Nom du boss en haut à gauche de la boîte
+        text_y_offset = 0
+        if boss_name:
+            name_surf = self._boss_name_font.render(boss_name, True, (255, 200, 100))
+            self.screen.blit(name_surf, (x + 12, y + 8))
+            text_y_offset = 10
+
         text_surf = self._boss_dialogue_font.render(text, True, (255, 255, 240))
-        text_rect = text_surf.get_rect(center=(x + box_w // 2, y + box_h // 2))
+        text_rect = text_surf.get_rect(center=(x + box_w // 2, y + box_h // 2 + text_y_offset))
         self.screen.blit(text_surf, text_rect)
 
     def draw_dialogue(self, text):

@@ -1072,7 +1072,6 @@ class Necromancer(pygame.sprite.Sprite):
         if self.is_teleporting:
             self.velocity.xy = 0, 0
             if self.teleport_phase == 'disappear':
-                # Animation skill pour disparaître
                 self.state = 'skill'
                 anim = self.animations[self.facing]['skill']
                 if self.frame_index >= len(anim) - 1:
@@ -1083,15 +1082,20 @@ class Necromancer(pygame.sprite.Sprite):
                         self.feet.midbottom = (round(self.position.x), round(self.position.y))
                         self.rect.centerx = self.feet.centerx
                         self.rect.bottom = self.feet.bottom + self.y_offset
-                    # Invoquer des summons en même temps
-                    self._spawn_summons()
+                        # Faire face au joueur après téléport
+                        if player.feet.centerx > self.feet.centerx:
+                            self.facing = 'right'
+                        else:
+                            self.facing = 'left'
                     self.teleport_phase = 'appear'
                     self.frame_index = 0
             elif self.teleport_phase == 'appear':
-                # Rejouer l'animation skill pour réapparaître
                 self.state = 'skill'
                 anim = self.animations[self.facing]['skill']
                 if self.frame_index >= len(anim) - 1:
+                    # Summons APRÈS la réapparition complète
+                    self._spawn_summons()
+                    self.last_skill_time = current_time  # reset skill cooldown aussi
                     self.is_teleporting = False
                     self.teleport_phase = None
                     self.state = 'idle'
@@ -1242,14 +1246,14 @@ class Necromancer(pygame.sprite.Sprite):
         self.pending_summons.append((cx, cy - 50))
 
     def get_attack_hitbox(self, salve=1):
-        width = 95 if salve == 1 else 115
-        height = 80
+        width = 55 if salve == 1 else 65
+        height = 40
         attack_rect = pygame.Rect(0, 0, width, height)
 
         if self.facing == 'right':
-            attack_rect.left = self.feet.centerx - 5
+            attack_rect.left = self.feet.centerx
         else:
-            attack_rect.right = self.feet.centerx + 5
+            attack_rect.right = self.feet.centerx
 
         attack_rect.centery = self.feet.centery
         return attack_rect
@@ -1258,6 +1262,9 @@ class Necromancer(pygame.sprite.Sprite):
         return attack_area.colliderect(player.feet.inflate(8, 8))
 
     def animate(self):
+        # Pendant la téléportation, ne PAS changer d'état automatiquement
+        is_tp = self.is_teleporting
+
         animation = self.animations[self.facing][self.state]
 
         # Paralysie : frame figée + teinte bleue
@@ -1274,6 +1281,9 @@ class Necromancer(pygame.sprite.Sprite):
             if self.state == 'death':
                 self.frame_index = len(animation) - 1
                 self._is_blinking = False
+            elif is_tp:
+                # Pendant le téléport : rester sur la dernière frame, pas de transition
+                self.frame_index = len(animation) - 1
             elif self.state == 'attack' or self.state == 'skill':
                 self.is_attacking = False
                 self.state = 'idle'
@@ -1281,13 +1291,16 @@ class Necromancer(pygame.sprite.Sprite):
             else:
                 self.frame_index = 0
 
+        # Re-fetch animation au cas où l'état a changé, puis clamp l'index
         animation = self.animations[self.facing][self.state]
-        self.image = animation[int(self.frame_index)].copy()
+        frame_idx = max(0, min(int(self.frame_index), len(animation) - 1))
+        self.image = animation[frame_idx]
 
         if self.state == 'death': self._is_blinking = False
 
         if self._is_blinking:
             if pygame.time.get_ticks() - self.hit_time < 150:
+                self.image = self.image.copy()
                 mask = pygame.mask.from_surface(self.image)
                 red_overlay = mask.to_surface(setcolor=(255, 0, 0, 150), unsetcolor=(0, 0, 0, 0))
                 self.image.blit(red_overlay, (0, 0))

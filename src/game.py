@@ -532,6 +532,9 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                         draw_debug_rect(screen, enemy.feet, (255, 0, 0), camera_x, camera_y, zoom_level, screen_width, screen_height)
                     if getattr(enemy, 'is_attacking', False) and hasattr(enemy, 'get_attack_hitbox'):
                         draw_debug_rect(screen, enemy.get_attack_hitbox(), (255, 165, 0), camera_x, camera_y, zoom_level, screen_width, screen_height)
+                    # Necromancer : afficher la hitbox d'attaque en permanence (violet) quand aggro
+                    if isinstance(enemy, Necromancer) and getattr(enemy, 'has_aggro', False) and enemy.health > 0:
+                        draw_debug_rect(screen, enemy.get_attack_hitbox(), (200, 50, 200), camera_x, camera_y, zoom_level, screen_width, screen_height)
                 
                 # Projectiles (Bleu)
                 for proj in projectiles_group:

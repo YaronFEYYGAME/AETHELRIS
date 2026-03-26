@@ -310,12 +310,13 @@ class BigEnemy(pygame.sprite.Sprite):
             ("Votre chemin s'arrête ici.", 2500),
             ("Vous disparaîtrez avec les secrets que renferme ce temple.", 4000),
         ]
-        self.dialogue_zone = int(self.aggro_radius * 0.75)
+        self.dialogue_zone = int(self.aggro_radius * 0.40)
         self.in_dialogue = False
         self.dialogue_finished = False
         self.dialogue_index = 0
         self.dialogue_start_time = 0
         self.invulnerable = False
+        self.boss_display_name = "Gardien du Temple"
 
         # Paralysie
         self.paralyzed = False
@@ -451,11 +452,14 @@ class BigEnemy(pygame.sprite.Sprite):
                 self.animate()
                 return
 
-        # --- Aggro classique (après dialogues terminés ou si pas de dialogues) ---
+        # --- Aggro classique (uniquement après fin des dialogues) ---
+        if self.dialogue_lines and not self.dialogue_finished:
+            self.animate()
+            return
+
         if distance < self.aggro_radius and player.health > 0:
             if not self.has_aggro:
                 self.has_aggro = True
-                # Sons uniquement si pas de dialogue prévu (sinon c'est le dialogue qui les déclenche)
                 if not self.dialogue_lines or self.dialogue_finished:
                     if not self.activation_played:
                         self.activation_played = True
@@ -866,7 +870,7 @@ class Necromancer(pygame.sprite.Sprite):
 
         self.max_health = 450
         self.health = 450
-        self.speed = 2.0
+        self.speed = 1.8
         self.damage_amount = 10
         self.aggro_radius = 400
 
@@ -878,7 +882,7 @@ class Necromancer(pygame.sprite.Sprite):
 
         # Invocation de summons
         self.last_skill_time = 0
-        self.skill_cooldown = 16000  # 16 secondes entre chaque invocation
+        self.skill_cooldown = 32000  # 32 secondes entre chaque invocation
         self.has_summoned = False
         self.pending_summons = []
         self.pending_drop = None
@@ -898,12 +902,13 @@ class Necromancer(pygame.sprite.Sprite):
             ("Enfin de nouvelles \u00e2mes...", 2500),
             ("Je vais me faire un plaisir de vous \u00e9ventrer.", 4000),
         ]
-        self.dialogue_zone = int(self.aggro_radius * 0.75)
+        self.dialogue_zone = int(self.aggro_radius * 0.40)
         self.in_dialogue = False
         self.dialogue_finished = False
         self.dialogue_index = 0
         self.dialogue_start_time = 0
         self.invulnerable = False
+        self.boss_display_name = "Nécromancien"
 
         # Sons & musique
         self.activation_played = False
@@ -1032,7 +1037,11 @@ class Necromancer(pygame.sprite.Sprite):
                 self.animate()
                 return
 
-        # --- Aggro classique ---
+        # --- Aggro classique (uniquement après fin des dialogues) ---
+        if self.dialogue_lines and not self.dialogue_finished:
+            self.animate()
+            return
+
         if distance < self.aggro_radius and player.health > 0:
             if not self.has_aggro:
                 self.has_aggro = True

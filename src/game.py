@@ -345,7 +345,7 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                 for enemy in enemies_group:
                     dialogue_text = getattr(enemy, 'get_current_dialogue', lambda: None)()
                     if dialogue_text:
-                        ui.draw_boss_dialogue(dialogue_text)
+                        ui.draw_boss_dialogue(dialogue_text, getattr(enemy, 'boss_display_name', None))
                         break
 
                 pause_rects = ui.draw_pause_menu(global_music_vol, global_sfx_vol)
@@ -548,9 +548,6 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                         draw_debug_rect(screen, enemy.feet, (255, 0, 0), camera_x, camera_y, zoom_level, screen_width, screen_height)
                     if getattr(enemy, 'is_attacking', False) and hasattr(enemy, 'get_attack_hitbox'):
                         draw_debug_rect(screen, enemy.get_attack_hitbox(), (255, 165, 0), camera_x, camera_y, zoom_level, screen_width, screen_height)
-                    # Necromancer : afficher la hitbox d'attaque en permanence (violet) quand aggro
-                    if isinstance(enemy, Necromancer) and getattr(enemy, 'has_aggro', False) and enemy.health > 0:
-                        draw_debug_rect(screen, enemy.get_attack_hitbox(), (200, 50, 200), camera_x, camera_y, zoom_level, screen_width, screen_height)
                 
                 # Projectiles (Bleu)
                 for proj in projectiles_group:
@@ -583,7 +580,7 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
             for enemy in enemies_group:
                 dialogue_text = getattr(enemy, 'get_current_dialogue', lambda: None)()
                 if dialogue_text:
-                    ui.draw_boss_dialogue(dialogue_text)
+                    ui.draw_boss_dialogue(dialogue_text, getattr(enemy, 'boss_display_name', None))
                     break
 
             if show_exit_dialogue:
@@ -699,6 +696,7 @@ def _serialize_enemy(e):
         'has_aggro': getattr(e, 'has_aggro', False),
         'paralyzed': getattr(e, 'paralyzed', False),
         'dialogue_text': getattr(e, 'get_current_dialogue', lambda: None)(),
+        'boss_display_name': getattr(e, 'boss_display_name', None),
     }
 
 
@@ -1400,12 +1398,6 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             group.center((cam_x, cam_y))
             group.draw(screen)
 
-            # --- Debug : hitbox d'attaque du Necromancer (violet, toujours visible quand aggro) ---
-            for e in enemies_group:
-                if isinstance(e, Necromancer) and getattr(e, 'has_aggro', False) and e.health > 0:
-                    draw_debug_rect(screen, e.get_attack_hitbox(), (200, 50, 200),
-                                    cam_x, cam_y, zoom_level, screen_width, screen_height)
-
             # --- Marque Kitsune : griffe au-dessus des ennemis sous 40% PV ---
             if player.has_kitsune_mask:
                 for e in enemies_group:
@@ -1447,7 +1439,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             for e in enemies_group:
                 dialogue_text = getattr(e, 'get_current_dialogue', lambda: None)()
                 if dialogue_text:
-                    ui.draw_boss_dialogue(dialogue_text)
+                    ui.draw_boss_dialogue(dialogue_text, getattr(e, 'boss_display_name', None))
                     break
 
             if show_exit_dialogue:
@@ -1808,6 +1800,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                     rp = InstantAOE(pdata['x'], pdata['y'],
                                     img_path=pdata.get('img_path'),
                                     explosion_radius=pdata.get('radius', 60))
+                    rp._layer = 99
                 elif ptype == 'heal_effect':
                     rp = HealEffect(pdata['x'], pdata['y'],
                                     img_path=pdata.get('img_path'))
@@ -2100,7 +2093,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         for edata in enemies_state:
             dtxt = edata.get('dialogue_text')
             if dtxt:
-                ui.draw_boss_dialogue(dtxt)
+                ui.draw_boss_dialogue(dtxt, edata.get('boss_display_name'))
                 break
 
         # Indicateur multijoueur
@@ -2346,6 +2339,7 @@ def _apply_skill_result(skill_result, caster, group, projectiles_group,
         aoe._mp_id = next_id_fn()
         aoe._owner = caster
         aoe._paralyze_duration = homing.get('paralyze', 0)
+        aoe._layer = 99
         group.add(aoe)
         projectiles_group.add(aoe)
         sound_manager.play_spatial('shot', target_pos, listener_pos)

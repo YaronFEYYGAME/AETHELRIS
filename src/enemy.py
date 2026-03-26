@@ -866,7 +866,7 @@ class Necromancer(pygame.sprite.Sprite):
 
         self.max_health = 450
         self.health = 450
-        self.speed = 2.5
+        self.speed = 2.0
         self.damage_amount = 10
         self.aggro_radius = 400
 
@@ -878,7 +878,7 @@ class Necromancer(pygame.sprite.Sprite):
 
         # Invocation de summons
         self.last_skill_time = 0
-        self.skill_cooldown = 8000  # 8 secondes entre chaque invocation
+        self.skill_cooldown = 16000  # 16 secondes entre chaque invocation
         self.has_summoned = False
         self.pending_summons = []
         self.pending_drop = None

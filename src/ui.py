@@ -443,44 +443,72 @@ class UI:
         text_rect = text_surf.get_rect(center=(screen_width // 2, y + bar_height // 2))
         self.screen.blit(text_surf, text_rect)
 
+    def _draw_styled_button(self, rect, text, font=None):
+        """Bouton style inventaire : fond semi-transparent, bordure dorée au survol."""
+        mouse_pos = pygame.mouse.get_pos()
+        hovered = rect.collidepoint(mouse_pos)
+        if font is None:
+            font = pygame.font.SysFont(None, 30)
+
+        bg = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+        if hovered:
+            pygame.draw.rect(bg, (60, 55, 45, 230), (0, 0, rect.width, rect.height), border_radius=5)
+        else:
+            pygame.draw.rect(bg, (30, 28, 35, 200), (0, 0, rect.width, rect.height), border_radius=5)
+        self.screen.blit(bg, rect.topleft)
+
+        border_color = (200, 170, 100) if hovered else (120, 110, 90)
+        pygame.draw.rect(self.screen, border_color, rect, 2, border_radius=5)
+
+        txt_color = (255, 240, 200) if hovered else (220, 215, 200)
+        txt = font.render(text, True, txt_color)
+        self.screen.blit(txt, txt.get_rect(center=rect.center))
+
     def draw_pause_menu(self, music_vol, sfx_vol, action_text=None):
         overlay = pygame.Surface((self.screen.get_width(), self.screen.get_height()), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180))
+        overlay.fill((0, 0, 0, 150))
         self.screen.blit(overlay, (0, 0))
 
         menu_w, menu_h = 450, 300
         x = (self.screen.get_width() - menu_w) // 2
         y = (self.screen.get_height() - menu_h) // 2
 
-        pygame.draw.rect(self.screen, (40, 40, 40), (x, y, menu_w, menu_h))
-        pygame.draw.rect(self.screen, (255, 255, 255), (x, y, menu_w, menu_h), 2)
+        # Fond semi-transparent style inventaire
+        panel = pygame.Surface((menu_w, menu_h), pygame.SRCALPHA)
+        pygame.draw.rect(panel, (20, 20, 30, 220), (0, 0, menu_w, menu_h), border_radius=6)
+        self.screen.blit(panel, (x, y))
+        pygame.draw.rect(self.screen, (180, 150, 100), (x, y, menu_w, menu_h), 2, border_radius=6)
+        pygame.draw.rect(self.screen, (100, 80, 50), (x + 2, y + 2, menu_w - 4, menu_h - 4), 1, border_radius=5)
 
-        title = self.font.render("PAUSE" if action_text != "Retour" else "PARAMÈTRES", True, (255, 255, 255))
-        self.screen.blit(title, (x + menu_w//2 - title.get_width()//2, y + 20))
+        # Titre
+        title_font = pygame.font.SysFont(None, 36)
+        title_text = "PAUSE" if action_text != "Retour" else "PARAMÈTRES"
+        title = title_font.render(title_text, True, (255, 220, 150))
+        self.screen.blit(title, (x + menu_w // 2 - title.get_width() // 2, y + 18))
 
-        music_txt = self.font.render(f"Musique : {int(music_vol*100)}%", True, (255, 255, 255))
-        self.screen.blit(music_txt, (x + 30, y + 100))
+        # Ligne décorative sous le titre
+        line_y = y + 52
+        pygame.draw.line(self.screen, (180, 150, 100), (x + 30, line_y), (x + menu_w - 30, line_y), 1)
 
-        btn_mus_min = pygame.Rect(x + 300, y + 95, 40, 40)
-        btn_mus_pl = pygame.Rect(x + 360, y + 95, 40, 40)
-        pygame.draw.rect(self.screen, (100, 100, 100), btn_mus_min)
-        pygame.draw.rect(self.screen, (100, 100, 100), btn_mus_pl)
+        # Labels volume
+        label_font = pygame.font.SysFont(None, 28)
+        music_txt = label_font.render(f"Musique : {int(music_vol * 100)}%", True, (220, 215, 200))
+        self.screen.blit(music_txt, (x + 30, y + 75))
 
-        min_lbl = self.font.render("-", True, (255, 255, 255))
-        pl_lbl = self.font.render("+", True, (255, 255, 255))
-        self.screen.blit(min_lbl, (btn_mus_min.centerx - min_lbl.get_width()//2, btn_mus_min.centery - min_lbl.get_height()//2))
-        self.screen.blit(pl_lbl, (btn_mus_pl.centerx - pl_lbl.get_width()//2, btn_mus_pl.centery - pl_lbl.get_height()//2))
+        sfx_txt = label_font.render(f"Effets : {int(sfx_vol * 100)}%", True, (220, 215, 200))
+        self.screen.blit(sfx_txt, (x + 30, y + 135))
 
-        sfx_txt = self.font.render(f"Effets : {int(sfx_vol*100)}%", True, (255, 255, 255))
-        self.screen.blit(sfx_txt, (x + 30, y + 160))
+        # Boutons +/- volume (style inventaire)
+        btn_font = pygame.font.SysFont(None, 30)
+        btn_mus_min = pygame.Rect(x + 300, y + 68, 40, 40)
+        btn_mus_pl = pygame.Rect(x + 360, y + 68, 40, 40)
+        self._draw_styled_button(btn_mus_min, "-", btn_font)
+        self._draw_styled_button(btn_mus_pl, "+", btn_font)
 
-        btn_sfx_min = pygame.Rect(x + 300, y + 155, 40, 40)
-        btn_sfx_pl = pygame.Rect(x + 360, y + 155, 40, 40)
-        pygame.draw.rect(self.screen, (100, 100, 100), btn_sfx_min)
-        pygame.draw.rect(self.screen, (100, 100, 100), btn_sfx_pl)
-
-        self.screen.blit(min_lbl, (btn_sfx_min.centerx - min_lbl.get_width()//2, btn_sfx_min.centery - min_lbl.get_height()//2))
-        self.screen.blit(pl_lbl, (btn_sfx_pl.centerx - pl_lbl.get_width()//2, btn_sfx_pl.centery - pl_lbl.get_height()//2))
+        btn_sfx_min = pygame.Rect(x + 300, y + 128, 40, 40)
+        btn_sfx_pl = pygame.Rect(x + 360, y + 128, 40, 40)
+        self._draw_styled_button(btn_sfx_min, "-", btn_font)
+        self._draw_styled_button(btn_sfx_pl, "+", btn_font)
 
         rects = {
             "mus_min": btn_mus_min, "mus_pl": btn_mus_pl,
@@ -488,26 +516,14 @@ class UI:
         }
 
         if action_text == "Retour":
-            btn_quit = pygame.Rect(x + menu_w//2 - 75, y + 230, 150, 50)
-            pygame.draw.rect(self.screen, (200, 50, 50), btn_quit)
-            quit_lbl = self.font.render(action_text, True, (255, 255, 255))
-            if quit_lbl.get_width() > 130:
-                quit_lbl = pygame.transform.scale(quit_lbl, (130, 30))
-            self.screen.blit(quit_lbl, (btn_quit.centerx - quit_lbl.get_width()//2, btn_quit.centery - quit_lbl.get_height()//2))
+            btn_quit = pygame.Rect(x + menu_w // 2 - 75, y + 230, 150, 50)
+            self._draw_styled_button(btn_quit, action_text, btn_font)
             rects["quit"] = btn_quit
         else:
-            btn_resume = pygame.Rect(x + menu_w//2 - 160, y + 230, 150, 50)
-            btn_quit = pygame.Rect(x + menu_w//2 + 10, y + 230, 150, 50)
-
-            pygame.draw.rect(self.screen, (50, 150, 50), btn_resume)
-            pygame.draw.rect(self.screen, (200, 50, 50), btn_quit)
-
-            resume_lbl = self.font.render("Reprendre", True, (255, 255, 255))
-            quit_lbl = self.font.render("Quitter", True, (255, 255, 255))
-
-            self.screen.blit(resume_lbl, (btn_resume.centerx - resume_lbl.get_width()//2, btn_resume.centery - resume_lbl.get_height()//2))
-            self.screen.blit(quit_lbl, (btn_quit.centerx - quit_lbl.get_width()//2, btn_quit.centery - quit_lbl.get_height()//2))
-
+            btn_resume = pygame.Rect(x + menu_w // 2 - 160, y + 230, 150, 50)
+            btn_quit = pygame.Rect(x + menu_w // 2 + 10, y + 230, 150, 50)
+            self._draw_styled_button(btn_resume, "Reprendre", btn_font)
+            self._draw_styled_button(btn_quit, "Quitter", btn_font)
             rects["resume"] = btn_resume
             rects["quit"] = btn_quit
 

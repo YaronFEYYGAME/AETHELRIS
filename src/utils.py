@@ -29,8 +29,24 @@ def draw_pixel_text(surface, text, x, y, scale, color):
         cursor_x += (len(pattern[0]) + 1) * scale * 8
 
 def draw_button(surface, rect, text):
-    pygame.draw.rect(surface, (40,40,40), rect)
-    pygame.draw.rect(surface, (255,255,255), rect, 3)
-    font = pygame.font.SysFont(None, 40)
-    txt = font.render(text, True, (255,255,255))
+    """Bouton style inventaire : fond semi-transparent, bordure dorée au survol."""
+    mouse_pos = pygame.mouse.get_pos()
+    hovered = rect.collidepoint(mouse_pos)
+
+    # Fond semi-transparent
+    bg = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+    if hovered:
+        pygame.draw.rect(bg, (60, 55, 45, 230), (0, 0, rect.width, rect.height), border_radius=5)
+    else:
+        pygame.draw.rect(bg, (30, 28, 35, 200), (0, 0, rect.width, rect.height), border_radius=5)
+    surface.blit(bg, rect.topleft)
+
+    # Bordure
+    border_color = (200, 170, 100) if hovered else (120, 110, 90)
+    pygame.draw.rect(surface, border_color, rect, 2, border_radius=5)
+
+    # Texte
+    font = pygame.font.SysFont(None, 30)
+    txt_color = (255, 240, 200) if hovered else (220, 215, 200)
+    txt = font.render(text, True, txt_color)
     surface.blit(txt, txt.get_rect(center=rect.center))

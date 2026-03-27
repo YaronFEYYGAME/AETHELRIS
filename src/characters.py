@@ -81,13 +81,15 @@ CHARACTER_DEFS = {
         'icons': {
             'e': 'assets/images/sword2_icon.png',
             '1': 'assets/images/sword2_icon.png',
+            '2': 'assets/images/sword2_icon.png',
         },
         'bindings': {
             'mouse': 'melee',     # clic gauche → attaque de base
-            'e': 'skill1',        # touche E → compétence 1 (3 salves)
-            '1': 'skill2',        # touche 1 → compétence 2 (5 salves)
+            'e': 'melee',         # touche E → attaque de base
+            '1': 'skill1',        # touche 1 → compétence 1 (3 salves)
+            '2': 'skill2',        # touche 2 → compétence 2 (5 salves)
         },
-        'item_start_key': 2,     # items sur touches 2,3,4,5,6
+        'item_start_key': 3,     # items sur touches 3,4,5,6,7
         'projectile_img': None,
     },
 

@@ -144,6 +144,19 @@ class UI:
                             show_cooldown=s1_show_cd, label='1')
             x_offset += slot_size + gap
 
+        # --- Slot 2 (compétence touche 2, swordsman uniquement) ---
+        skill_2_weapon = bindings.get('2')
+        if skill_2_weapon:
+            s2_cr = 1.0
+            s2_show_cd = False
+            if skill_2_weapon in abilities:
+                s2_cr = skill_cooldowns.get(skill_2_weapon, 1.0) if skill_cooldowns else 1.0
+                s2_show_cd = True
+            self._draw_slot(x_offset, y, slot_size, icons.get('2'),
+                            is_active=False, cooldown_ratio=s2_cr,
+                            show_cooldown=s2_show_cd, label='2')
+            x_offset += slot_size + gap
+
         # --- Items d'inventaire (ordre de la liste) ---
         from player import ACTIVE_ITEMS
         key_counter = item_start_key
@@ -182,12 +195,9 @@ class UI:
         overlay.fill((0, 0, 0, 120))
         self.screen.blit(overlay, (0, 0))
 
-        # Panneau central
-        slot_size = 72
-        gap = 12
-        n = max(len(inventory_items), 1)
-        panel_w = n * slot_size + (n - 1) * gap + 40
-        panel_h = 140
+        # Panneau central — même taille que le menu pause (450x300)
+        panel_w = 450
+        panel_h = 300
         px = (sw - panel_w) // 2
         py = (sh - panel_h) // 2
 
@@ -200,14 +210,18 @@ class UI:
         if not hasattr(self, '_inv_title_font'):
             self._inv_title_font = pygame.font.SysFont(None, 28)
         title = self._inv_title_font.render("INVENTAIRE", True, (255, 255, 240))
-        self.screen.blit(title, (px + panel_w // 2 - title.get_width() // 2, py + 8))
+        self.screen.blit(title, (px + panel_w // 2 - title.get_width() // 2, py + 15))
 
         # Slots
+        slot_size = 72
+        gap = 12
         key_counter = item_start_key
         if skill_1_exists and key_counter == 1:
             key_counter = 2
-        slot_y = py + 40
-        slot_x_start = px + 20
+        n = max(len(inventory_items), 1)
+        total_slots_w = n * slot_size + (n - 1) * gap
+        slot_x_start = px + (panel_w - total_slots_w) // 2
+        slot_y = py + (panel_h - slot_size) // 2 - 10
 
         for i, item_type in enumerate(inventory_items):
             sx = slot_x_start + i * (slot_size + gap)
@@ -230,11 +244,9 @@ class UI:
 
             # Bordure
             if is_grabbed_slot:
-                border_color = (255, 200, 50)
-                pygame.draw.rect(self.screen, border_color, (sx, slot_y, slot_size, slot_size), 3, border_radius=5)
+                pygame.draw.rect(self.screen, (255, 200, 50), (sx, slot_y, slot_size, slot_size), 3, border_radius=5)
             elif is_cursor:
-                border_color = (100, 200, 255)
-                pygame.draw.rect(self.screen, border_color, (sx, slot_y, slot_size, slot_size), 2, border_radius=5)
+                pygame.draw.rect(self.screen, (100, 200, 255), (sx, slot_y, slot_size, slot_size), 2, border_radius=5)
             else:
                 pygame.draw.rect(self.screen, (150, 150, 150), (sx, slot_y, slot_size, slot_size), 1, border_radius=5)
 
@@ -249,13 +261,18 @@ class UI:
                 self.screen.blit(lbl, (sx + 4, slot_y + 2))
                 key_counter += 1
 
+        # Message si inventaire vide
+        if not inventory_items:
+            empty_txt = self._inv_title_font.render("Inventaire vide", True, (150, 150, 150))
+            self.screen.blit(empty_txt, (px + panel_w // 2 - empty_txt.get_width() // 2, slot_y + 25))
+
         # Instructions en bas
         if not hasattr(self, '_inv_help_font'):
-            self._inv_help_font = pygame.font.SysFont(None, 20)
-        help_text = "[E] Saisir   [Q/D] Deplacer   [Suppr] Jeter   [I/Echap] Fermer"
+            self._inv_help_font = pygame.font.SysFont(None, 22)
+        help_text = "[E] Saisir   [Q/D] Deplacer   [A] Jeter   [I/Echap] Fermer"
         help_surf = self._inv_help_font.render(help_text, True, (180, 180, 180))
         self.screen.blit(help_surf, (px + panel_w // 2 - help_surf.get_width() // 2,
-                                     py + panel_h - 25))
+                                     py + panel_h - 30))
 
     def _draw_slot(self, x, y, size, icon, is_active=False, cooldown_ratio=1.0,
                    show_cooldown=False, label=None):

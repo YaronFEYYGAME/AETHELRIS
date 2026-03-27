@@ -1289,7 +1289,7 @@ class Medusa(pygame.sprite.Sprite):
         # Stats (1.5x BigEnemy HP)
         self.max_health = 585
         self.health = 585
-        self.base_speed = 0.9
+        self.base_speed = 1.17
         self.speed = self.base_speed
         self.damage_amount = 7.5
         self.special_damage = 10
@@ -1412,22 +1412,26 @@ class Medusa(pygame.sprite.Sprite):
         if attack_type is None:
             attack_type = self.state if self.state in ('attack1', 'attack2', 'special') else 'attack1'
         if attack_type == 'attack1':
-            width = 28
-            height = 15
+            width = 45
+            height = 30
         elif attack_type == 'attack2':
-            width = 20
-            height = 12
+            width = 35
+            height = 25
         else:
-            # Special
-            width = 24
-            height = 15
+            # Special : large zone AoE centrée sur Médusa
+            width = 80
+            height = 80
 
         attack_rect = pygame.Rect(0, 0, width, height)
-        if self.facing == 'right':
-            attack_rect.left = self.feet.centerx
+        if attack_type == 'special':
+            # AoE centré sur Médusa
+            attack_rect.center = self.feet.center
         else:
-            attack_rect.right = self.feet.centerx
-        attack_rect.centery = self.feet.centery
+            if self.facing == 'right':
+                attack_rect.left = self.feet.centerx
+            else:
+                attack_rect.right = self.feet.centerx
+            attack_rect.centery = self.feet.centery
         return attack_rect
 
     def _choose_attack(self):

@@ -1274,8 +1274,8 @@ class Medusa(pygame.sprite.Sprite):
         self.image = self.animations['right']['idle'][0]
         self.rect = self.image.get_rect()
 
-        hitbox_width = 13
-        hitbox_height = 8
+        hitbox_width = 16
+        hitbox_height = 30
         self.feet = pygame.Rect(0, 0, hitbox_width, hitbox_height)
 
         self.y_offset = 8
@@ -1316,7 +1316,6 @@ class Medusa(pygame.sprite.Sprite):
 
         # Course : quand le joueur est trop loin
         self.is_running = False
-        self.force_special_after_run = False
 
         # Dialogue de boss
         self.dialogue_lines = [
@@ -1434,9 +1433,6 @@ class Medusa(pygame.sprite.Sprite):
     def _choose_attack(self):
         """Choisit une attaque : 1/6 chance ultime, sinon 50/50 entre attack1 et attack2."""
         import random
-        if self.force_special_after_run:
-            self.force_special_after_run = False
-            return 'special'
         roll = random.randint(1, 6)
         if roll == 1:
             return 'special'
@@ -1557,15 +1553,21 @@ class Medusa(pygame.sprite.Sprite):
                     self.facing = 'left'
 
                 attack_hitbox = self.get_attack_hitbox()
-                if attack_hitbox.colliderect(player.feet.inflate(20, 20)):
-                    # À portée d'attaque
+                at_melee_range = attack_hitbox.colliderect(player.feet.inflate(20, 20))
+
+                if at_melee_range:
                     if self.is_running:
-                        # Arrivée après une course → toujours ultime
+                        # Arrivée après une course → ultime immédiat (ignore le cooldown)
                         self.is_running = False
                         self.speed = self.base_speed
-                        self.force_special_after_run = True
-
-                    if current_time - self.last_attack_time > self.attack_cooldown:
+                        self.is_attacking = True
+                        self.state = 'special'
+                        self.frame_index = 0
+                        self.last_attack_time = current_time
+                        self.has_dealt_damage = False
+                        self.velocity.xy = 0, 0
+                        self.pending_sounds.append('boss_attack')
+                    elif current_time - self.last_attack_time > self.attack_cooldown:
                         chosen = self._choose_attack()
                         self.is_attacking = True
                         self.state = chosen
@@ -1579,18 +1581,19 @@ class Medusa(pygame.sprite.Sprite):
                         self.velocity.xy = 0, 0
                 elif distance < self.aggro_radius and distance > 0:
                     # Déplacement vers le joueur
-                    if distance > self.RUN_DISTANCE_THRESHOLD:
-                        # Trop loin → course (vitesse x2)
-                        if not self.is_running:
-                            self.is_running = True
-                            self.speed = self.base_speed * 2
+                    if self.is_running:
+                        # En course : ne PAS s'arrêter avant le corps à corps
+                        self.state = 'run'
+                        self.speed = self.base_speed * 2
+                    elif distance > self.RUN_DISTANCE_THRESHOLD:
+                        # Trop loin → commencer la course (vitesse x2)
+                        self.is_running = True
+                        self.speed = self.base_speed * 2
                         self.state = 'run'
                     else:
                         # Proche → marche normale
-                        if self.is_running:
-                            self.is_running = False
-                            self.speed = self.base_speed
                         self.state = 'walk'
+                        self.speed = self.base_speed
                     norm_dir = target_vector.normalize()
                     self.velocity.x = norm_dir.x * self.speed
                     self.velocity.y = norm_dir.y * self.speed

@@ -368,11 +368,49 @@ class UI:
                 self.screen.blit(self.boots_img, (x, y + 64 - fill_height), area=crop_rect)
 
     def draw_boss_dialogue(self, text, boss_name=None):
-        """Boîte de dialogue RPG en bas de l'écran pour les dialogues de boss."""
+        """Boîte de dialogue RPG en bas de l'écran pour les dialogues de boss.
+        Word wrap automatique si le texte est trop long."""
         sw = self.screen.get_width()
         sh = self.screen.get_height()
         box_w = min(700, sw - 60)
-        box_h = 90
+        padding = 14
+        max_text_w = box_w - padding * 2
+
+        if not hasattr(self, '_boss_dialogue_font'):
+            self._boss_dialogue_font = pygame.font.SysFont(
+                "garamond, times new roman, serif", 26)
+        if not hasattr(self, '_boss_name_font'):
+            self._boss_name_font = pygame.font.SysFont(
+                "garamond, times new roman, serif", 22, bold=True)
+
+        # Calculer la hauteur du nom
+        name_h = 0
+        if boss_name:
+            name_surf = self._boss_name_font.render(boss_name, True, (255, 200, 100))
+            name_h = name_surf.get_height() + 4
+
+        # Word wrap : découper le texte en lignes
+        words = text.split(' ')
+        lines = []
+        current_line = ''
+        for word in words:
+            test = (current_line + ' ' + word).strip()
+            if self._boss_dialogue_font.size(test)[0] <= max_text_w:
+                current_line = test
+            else:
+                if current_line:
+                    lines.append(current_line)
+                current_line = word
+        if current_line:
+            lines.append(current_line)
+
+        line_h = self._boss_dialogue_font.get_linesize()
+        text_block_h = line_h * len(lines)
+
+        # Hauteur de la boîte adaptée au contenu
+        box_h = name_h + text_block_h + padding * 2 + 4
+        box_h = max(box_h, 70)
+
         x = (sw - box_w) // 2
         y = sh - box_h - 30
 
@@ -383,23 +421,16 @@ class UI:
         pygame.draw.rect(self.screen, (180, 150, 100), (x, y, box_w, box_h), 2, border_radius=4)
         pygame.draw.rect(self.screen, (120, 100, 70), (x + 2, y + 2, box_w - 4, box_h - 4), 1, border_radius=3)
 
-        if not hasattr(self, '_boss_dialogue_font'):
-            self._boss_dialogue_font = pygame.font.SysFont(
-                "garamond, times new roman, serif", 26)
-        if not hasattr(self, '_boss_name_font'):
-            self._boss_name_font = pygame.font.SysFont(
-                "garamond, times new roman, serif", 22, bold=True)
-
-        # Nom du boss en haut à gauche de la boîte
-        text_y_offset = 0
+        # Nom du boss
         if boss_name:
-            name_surf = self._boss_name_font.render(boss_name, True, (255, 200, 100))
-            self.screen.blit(name_surf, (x + 12, y + 8))
-            text_y_offset = 10
+            self.screen.blit(name_surf, (x + padding, y + padding))
 
-        text_surf = self._boss_dialogue_font.render(text, True, (255, 255, 240))
-        text_rect = text_surf.get_rect(center=(x + box_w // 2, y + box_h // 2 + text_y_offset))
-        self.screen.blit(text_surf, text_rect)
+        # Texte (centré horizontalement, sous le nom)
+        text_start_y = y + padding + name_h
+        for i, line in enumerate(lines):
+            line_surf = self._boss_dialogue_font.render(line, True, (255, 255, 240))
+            line_rect = line_surf.get_rect(centerx=x + box_w // 2, y=text_start_y + i * line_h)
+            self.screen.blit(line_surf, line_rect)
 
     def draw_dialogue(self, text):
         screen_width = self.screen.get_width()

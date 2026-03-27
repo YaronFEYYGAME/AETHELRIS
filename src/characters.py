@@ -28,9 +28,14 @@ CHARACTER_DEFS = {
         'ranged_fire_frame': 6,
         'abilities': {},
         'icons': {
-            'slot1': 'assets/images/sword_icon.png',
-            'slot2': 'assets/images/arc_icon.png',
+            'e': 'assets/images/arc_icon.png',
         },
+        'bindings': {
+            'mouse': 'melee',     # clic gauche → épée
+            'e': 'ranged',        # touche E → arc
+            '1': None,            # pas de compétence sur 1
+        },
+        'item_start_key': 1,     # items sur touches 1,2,3,4,5
         'projectile_img': 'assets/images/Arrow01(32x32).png',
     },
 
@@ -74,9 +79,15 @@ CHARACTER_DEFS = {
             },
         },
         'icons': {
-            'slot1': 'assets/images/sword2_icon.png',
-            'slot2': 'assets/images/sword2_icon.png',
+            'e': 'assets/images/sword2_icon.png',
+            '1': 'assets/images/sword2_icon.png',
         },
+        'bindings': {
+            'mouse': 'melee',     # clic gauche → attaque de base
+            'e': 'skill1',        # touche E → compétence 1 (3 salves)
+            '1': 'skill2',        # touche 1 → compétence 2 (5 salves)
+        },
+        'item_start_key': 2,     # items sur touches 2,3,4,5,6
         'projectile_img': None,
     },
 
@@ -114,9 +125,15 @@ CHARACTER_DEFS = {
             },
         },
         'icons': {
-            'slot1': 'assets/images/arc_icon.png',
-            'slot2': 'assets/images/golden_arrow_icon.png',
+            'e': 'assets/images/arc_icon.png',
+            '1': 'assets/images/golden_arrow_icon.png',
         },
+        'bindings': {
+            'mouse': None,        # clic gauche → rien
+            'e': 'ranged',        # touche E → arc
+            '1': 'skill1',        # touche 1 → flèche d'or
+        },
+        'item_start_key': 2,     # items sur touches 2,3,4,5,6
         'projectile_img': 'assets/images/Arrow01(32x32).png',
     },
 
@@ -165,9 +182,15 @@ CHARACTER_DEFS = {
             },
         },
         'icons': {
-            'slot1': 'assets/images/fireball_icon.png',
-            'slot2': 'assets/images/cristal_icon.png',
+            'e': 'assets/images/fireball_icon.png',
+            '1': 'assets/images/cristal_icon.png',
         },
+        'bindings': {
+            'mouse': None,        # clic gauche → rien
+            'e': 'skill1',        # touche E → boule de feu
+            '1': 'skill2',        # touche 1 → orbe de cristal
+        },
+        'item_start_key': 2,     # items sur touches 2,3,4,5,6
         'projectile_img': None,
     },
 
@@ -215,9 +238,15 @@ CHARACTER_DEFS = {
             },
         },
         'icons': {
-            'slot1': 'assets/images/explosion_icon.png',
-            'slot2': 'assets/images/heal_icon.png',
+            'e': 'assets/images/explosion_icon.png',
+            '1': 'assets/images/heal_icon.png',
         },
+        'bindings': {
+            'mouse': None,        # clic gauche → rien
+            'e': 'skill1',        # touche E → onde destructrice
+            '1': 'skill2',        # touche 1 → heal allié
+        },
+        'item_start_key': 2,     # items sur touches 2,3,4,5,6
         'projectile_img': None,
     },
 }

@@ -2,6 +2,11 @@ import pygame
 from projectile import Projectile
 from characters import get_character_def
 
+# Types d'items
+ACTIVE_ITEMS = {'boots', 'bluegem', 'cursed_brand'}
+PASSIVE_ITEMS = {'pickaxe', 'redgem', 'mirror', 'kitsune_mask'}
+MAX_INVENTORY_ITEMS = 5
+
 
 class Player(pygame.sprite.Sprite):
     def __init__(self, x, y, char_type='soldier'):
@@ -87,6 +92,12 @@ class Player(pygame.sprite.Sprite):
         self.is_hit = False
         self.last_hit_time = 0
 
+        # --- Inventaire d'items ---
+        self.inventory_items = []  # Liste ordonnée des types d'items
+        self.inventory_open = False
+        self.inventory_cursor = 0      # index du curseur dans l'inventaire
+        self.inventory_grabbed = False  # item sélectionné pour déplacement
+
         # --- Compétences (skills) ---
         self.abilities = self.char_def.get('abilities', {})
         self.skill_cooldowns = {}  # skill_name → last_use_time
@@ -126,7 +137,7 @@ class Player(pygame.sprite.Sprite):
             print(f"Erreur: Fichier {path} introuvable.")
 
     def switch_weapon(self, weapon_name):
-        """Changer d'arme/compétence active."""
+        """Changer d'arme/compétence active (legacy, gardé pour compatibilité)."""
         if weapon_name == 'melee' and self.has_melee:
             self.current_weapon = 'melee'
         elif weapon_name == 'ranged' and self.has_ranged:
@@ -134,8 +145,93 @@ class Player(pygame.sprite.Sprite):
         elif weapon_name in self.abilities:
             self.current_weapon = weapon_name
 
+    def trigger_attack(self, binding_key):
+        """Déclenche une attaque basée sur le binding (mouse/e/1)."""
+        bindings = self.char_def.get('bindings', {})
+        weapon = bindings.get(binding_key)
+        if not weapon:
+            return None
+        if weapon == 'melee' and not self.has_melee:
+            return None
+        if weapon == 'ranged' and not self.has_ranged:
+            return None
+        self.current_weapon = weapon
+        if weapon in self.abilities:
+            return self.use_skill(weapon)
+        return self.attack()
+
+    # --- Gestion de l'inventaire ---
+
+    def add_inventory_item(self, item_type):
+        """Ajoute un item à l'inventaire. Retourne True si ajouté."""
+        if len(self.inventory_items) >= MAX_INVENTORY_ITEMS:
+            return False
+        if item_type in self.inventory_items:
+            return False
+        if item_type in ACTIVE_ITEMS:
+            # Insérer avant les items passifs
+            insert_idx = len(self.inventory_items)
+            for i, existing in enumerate(self.inventory_items):
+                if existing in PASSIVE_ITEMS:
+                    insert_idx = i
+                    break
+            self.inventory_items.insert(insert_idx, item_type)
+        else:
+            self.inventory_items.append(item_type)
+        self._set_item_flag(item_type, True)
+        return True
+
+    def remove_inventory_item(self, item_type):
+        """Retire un item de l'inventaire. Retourne True si retiré."""
+        if item_type in self.inventory_items:
+            self.inventory_items.remove(item_type)
+            self._set_item_flag(item_type, False)
+            # Ajuster le curseur
+            if self.inventory_cursor >= len(self.inventory_items):
+                self.inventory_cursor = max(0, len(self.inventory_items) - 1)
+            return True
+        return False
+
+    def _set_item_flag(self, item_type, value):
+        flag_map = {
+            'boots': 'has_boots', 'redgem': 'has_red_gem',
+            'bluegem': 'has_blue_gem', 'pickaxe': 'has_pickaxe',
+            'mirror': 'has_mirror', 'kitsune_mask': 'has_kitsune_mask',
+            'cursed_brand': 'has_cursed_brand',
+        }
+        attr = flag_map.get(item_type)
+        if attr:
+            setattr(self, attr, value)
+
+    def get_active_items_with_keys(self):
+        """Retourne [(key_num, item_type), ...] pour les items actifs."""
+        start_key = self.char_def.get('item_start_key', 2)
+        result = []
+        for item_type in self.inventory_items:
+            if item_type in ACTIVE_ITEMS:
+                result.append((start_key + len(result), item_type))
+        return result
+
+    def inventory_swap(self, direction):
+        """Déplace l'item sélectionné dans l'inventaire (Q=-1, D=+1).
+        Seuls les items actifs peuvent être déplacés entre eux."""
+        if not self.inventory_grabbed or not self.inventory_items:
+            return
+        idx = self.inventory_cursor
+        target = idx + direction
+        if target < 0 or target >= len(self.inventory_items):
+            return
+        # Les deux items doivent être actifs pour être échangés
+        current_item = self.inventory_items[idx]
+        target_item = self.inventory_items[target]
+        if current_item not in ACTIVE_ITEMS or target_item not in ACTIVE_ITEMS:
+            return
+        self.inventory_items[idx], self.inventory_items[target] = (
+            self.inventory_items[target], self.inventory_items[idx])
+        self.inventory_cursor = target
+
     def input(self):
-        if self.state == 'death' or self.is_attacking:
+        if self.state == 'death' or self.is_attacking or self.inventory_open:
             self.velocity.xy = 0, 0
             return
 

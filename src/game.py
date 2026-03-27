@@ -2028,6 +2028,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         group.draw(screen)
 
         # --- Marque Kitsune côté client ---
+        lp_now = players_state[1] if len(players_state) >= 2 else {}
         if lp_now.get('has_kitsune_mask', False) and local_player:
             lp_cx = local_player.feet.centerx
             lp_cy = local_player.feet.centery - 30
@@ -2063,7 +2064,6 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             continue
 
         # --- Sons d'inventaire personnels (détection de changements d'état) ---
-        lp_now = players_state[1] if len(players_state) >= 2 else {}
         cur_weapon = lp_now.get('current_weapon')
         prev_weapon = prev_lp.get('current_weapon')
 

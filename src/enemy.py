@@ -1244,6 +1244,481 @@ class Necromancer(pygame.sprite.Sprite):
 
 
 # =====================================================================
+# --- BOSS : MÉDUSA ---
+# =====================================================================
+
+class Medusa(pygame.sprite.Sprite):
+    """Boss Médusa. Deux attaques de base + ultime avec stun et vol de vie."""
+
+    SPRITE_DIR = "assets/images/Medusa_boss/"
+    RUN_DISTANCE_THRESHOLD = 200  # distance au-delà de laquelle elle court
+
+    def __init__(self, x, y):
+        super().__init__()
+        self.scale_factor = 3.5
+        self.animations = {'right': {}, 'left': {}}
+        self.state = 'idle'
+        self.frame_index = 0
+        self.animation_speed = 0.15
+
+        # Charger toutes les animations (spritesheets horizontales)
+        self.load_animation('idle',    self.SPRITE_DIR + "Idle.png",     7)
+        self.load_animation('walk',    self.SPRITE_DIR + "Walk.png",     13)
+        self.load_animation('run',     self.SPRITE_DIR + "Run.png",      7)
+        self.load_animation('attack1', self.SPRITE_DIR + "Attack_1.png", 16)
+        self.load_animation('attack2', self.SPRITE_DIR + "Attack_2.png", 7)
+        self.load_animation('special', self.SPRITE_DIR + "Special.png",  5)
+        self.load_animation('hurt',    self.SPRITE_DIR + "Hurt.png",     3)
+        self.load_animation('death',   self.SPRITE_DIR + "Dead.png",     3)
+
+        self.image = self.animations['right']['idle'][0]
+        self.rect = self.image.get_rect()
+
+        hitbox_width = int(20 * self.scale_factor)
+        hitbox_height = int(12 * self.scale_factor)
+        self.feet = pygame.Rect(0, 0, hitbox_width, hitbox_height)
+
+        self.y_offset = int(12 * self.scale_factor)
+
+        self.position = pygame.math.Vector2(x, y)
+        self.feet.midbottom = (round(self.position.x), round(self.position.y))
+
+        self.rect.centerx = self.feet.centerx
+        self.rect.bottom = self.feet.bottom + self.y_offset
+
+        # Stats (1.5x BigEnemy HP)
+        self.max_health = 585
+        self.health = 585
+        self.base_speed = 0.9
+        self.speed = self.base_speed
+        self.damage_amount = 7.5
+        self.special_damage = 10
+
+        self.aggro_radius = 300
+
+        self.velocity = pygame.math.Vector2(0, 0)
+        self.facing = "right"
+
+        self.is_attacking = False
+        self.last_attack_time = 0
+        self.attack_cooldown = 1500
+        self._is_blinking = False
+        self.hit_time = 0
+
+        # Tracking de dégâts par frame d'attaque
+        self.has_dealt_damage = False
+
+        self.has_aggro = False
+        self.pending_drop = None
+
+        self.slide_dir_x = 1
+        self.slide_dir_y = 1
+
+        # Course : quand le joueur est trop loin
+        self.is_running = False
+        self.force_special_after_run = False
+
+        # Dialogue de boss
+        self.dialogue_lines = [
+            ("Ssssss... des intrus....", 3000),
+            ("Cela faisait longtemps que personne n'était venu s'aventurer ici Ssssss....", 5000),
+            ("Ssssss.... Vous feriez de belles statues dans ma collection Sssss...", 5000),
+            ("EN GARDE SSSSSSSS....", 3000),
+        ]
+        self.dialogue_zone = int(self.aggro_radius * 0.40)
+        self.in_dialogue = False
+        self.dialogue_finished = False
+        self.dialogue_index = 0
+        self.dialogue_start_time = 0
+        self.invulnerable = False
+        self.boss_display_name = "Médusa"
+
+        # Sons
+        self.activation_played = False
+        self.death_sound_played = False
+        self.bgm_playing = False
+        self.pending_sounds = []
+
+        # Paralysie
+        self.paralyzed = False
+        self.paralyze_end_time = 0
+        self._blue_cache = {}
+
+    def load_animation(self, state_name, path, num_frames):
+        try:
+            sprite_sheet = pygame.image.load(path).convert_alpha()
+            frame_width = sprite_sheet.get_width() // num_frames
+            frame_height = sprite_sheet.get_height()
+            frames_right = []
+            frames_left = []
+            for i in range(num_frames):
+                frame = sprite_sheet.subsurface((i * frame_width, 0, frame_width, frame_height))
+                new_width = int(frame_width * self.scale_factor)
+                new_height = int(frame_height * self.scale_factor)
+                frame = pygame.transform.scale(frame, (new_width, new_height))
+                frames_right.append(frame)
+                frames_left.append(pygame.transform.flip(frame, True, False))
+            self.animations['right'][state_name] = frames_right
+            self.animations['left'][state_name] = frames_left
+        except FileNotFoundError:
+            print(f"Erreur: Fichier {path} introuvable.")
+
+    def paralyze(self, duration_ms):
+        self.paralyzed = True
+        self.paralyze_end_time = pygame.time.get_ticks() + duration_ms
+
+    def _get_blue_tinted(self, frame):
+        frame_id = id(frame)
+        if frame_id in self._blue_cache:
+            return self._blue_cache[frame_id]
+        tinted = frame.copy()
+        tinted.fill((100, 150, 255, 255), special_flags=pygame.BLEND_RGBA_MULT)
+        self._blue_cache[frame_id] = tinted
+        return tinted
+
+    def damage(self, amount):
+        if self.in_dialogue or self.invulnerable:
+            return
+        if self.health > 0 and self.state not in ('death', 'hurt'):
+            self.health -= amount
+            self._is_blinking = True
+            self.hit_time = pygame.time.get_ticks()
+
+            if self.health <= 0:
+                self.health = 0
+                self.state = 'death'
+                self.frame_index = 0
+                self.is_attacking = False
+                self.velocity.xy = 0, 0
+                self._is_blinking = False
+                if not self.death_sound_played:
+                    self.death_sound_played = True
+                    self.pending_sounds.append('boss_death')
+                if self.bgm_playing:
+                    self.bgm_playing = False
+                    self.pending_sounds.append('boss_bgm_stop')
+            else:
+                self.state = 'hurt'
+                self.frame_index = 0
+                self.is_attacking = False
+                self.velocity.xy = 0, 0
+
+    def get_current_dialogue(self):
+        if self.in_dialogue and self.dialogue_index < len(self.dialogue_lines):
+            return self.dialogue_lines[self.dialogue_index][0]
+        return None
+
+    def get_attack_hitbox(self, attack_type='attack1'):
+        """Hitbox adaptée au type d'attaque."""
+        if attack_type == 'attack1':
+            # Attack_1 : large sweep
+            width = 100
+            height = 50
+        elif attack_type == 'attack2':
+            # Attack_2 : attaque plus courte
+            width = 70
+            height = 40
+        else:
+            # Special
+            width = 80
+            height = 50
+
+        attack_rect = pygame.Rect(0, 0, width, height)
+        if self.facing == 'right':
+            attack_rect.left = self.feet.centerx
+        else:
+            attack_rect.right = self.feet.centerx
+        attack_rect.centery = self.feet.centery
+        return attack_rect
+
+    def _choose_attack(self):
+        """Choisit une attaque : 1/6 chance ultime, sinon 50/50 entre attack1 et attack2."""
+        import random
+        if self.force_special_after_run:
+            self.force_special_after_run = False
+            return 'special'
+        roll = random.randint(1, 6)
+        if roll == 1:
+            return 'special'
+        elif random.random() < 0.5:
+            return 'attack1'
+        else:
+            return 'attack2'
+
+    def update(self, player, walls):
+        if self.state == 'death':
+            self.animate()
+            return
+
+        # Paralysie
+        if self.paralyzed:
+            if pygame.time.get_ticks() >= self.paralyze_end_time:
+                self.paralyzed = False
+            else:
+                self.velocity.xy = 0, 0
+                self.animate()
+                return
+
+        current_time = pygame.time.get_ticks()
+        target_center = pygame.math.Vector2(player.feet.center)
+        my_center = pygame.math.Vector2(self.feet.center)
+        target_vector = target_center - my_center
+        distance = target_vector.length()
+
+        # --- Dialogue avant le combat ---
+        if not self.dialogue_finished and self.dialogue_lines:
+            if not self.in_dialogue:
+                if distance < self.dialogue_zone and player.health > 0:
+                    self.in_dialogue = True
+                    self.invulnerable = True
+                    self.dialogue_index = 0
+                    self.dialogue_start_time = current_time
+            if self.in_dialogue:
+                self.velocity.xy = 0, 0
+                self.state = 'idle'
+                if player.feet.centerx > self.feet.centerx:
+                    self.facing = 'right'
+                else:
+                    self.facing = 'left'
+                _, duration = self.dialogue_lines[self.dialogue_index]
+                if current_time - self.dialogue_start_time >= duration:
+                    self.dialogue_index += 1
+                    self.dialogue_start_time = current_time
+                    if self.dialogue_index >= len(self.dialogue_lines):
+                        self.in_dialogue = False
+                        self.dialogue_finished = True
+                        self.invulnerable = False
+                        self.has_aggro = True
+                        self.activation_played = True
+                        self.bgm_playing = True
+                        self.pending_sounds.append('boss_activation')
+                        self.pending_sounds.append('boss_bgm_start')
+                self.animate()
+                return
+
+        if self.dialogue_lines and not self.dialogue_finished:
+            self.animate()
+            return
+
+        # --- Aggro ---
+        if distance < self.aggro_radius and player.health > 0:
+            if not self.has_aggro:
+                self.has_aggro = True
+                if not self.activation_played:
+                    self.activation_played = True
+                    self.pending_sounds.append('boss_activation')
+                if not self.bgm_playing:
+                    self.bgm_playing = True
+                    self.pending_sounds.append('boss_bgm_start')
+        elif player.health <= 0:
+            self.has_aggro = False
+            if self.bgm_playing:
+                self.bgm_playing = False
+                self.pending_sounds.append('boss_bgm_stop')
+
+        hit_x = False
+        hit_y = False
+        norm_dir = pygame.math.Vector2(0, 0)
+
+        if self.state == 'hurt':
+            self.velocity.xy = 0, 0
+
+        elif self.is_attacking:
+            self.velocity.xy = 0, 0
+            current_frame = int(self.frame_index)
+            attack_state = self.state
+
+            # Dégâts à mi-animation
+            if not self.has_dealt_damage:
+                damage_frame = self._get_damage_frame(attack_state)
+                if current_frame >= damage_frame:
+                    self.has_dealt_damage = True
+                    hitbox = self.get_attack_hitbox(attack_state)
+                    if hitbox.colliderect(player.feet.inflate(20, 20)) and player.health > 0:
+                        if attack_state == 'special':
+                            # Ultime : stun + vol de vie
+                            self.pending_sounds.append('boss_attack')
+                            player.damage(self.special_damage, source_enemy=self)
+                            # Stun 3 secondes
+                            player.apply_stun(3000)
+                            # Récupère 50% des PV manquants
+                            missing_hp = self.max_health - self.health
+                            heal = missing_hp * 0.5
+                            self.health = min(self.max_health, self.health + heal)
+                        else:
+                            # Attaque normale
+                            self.pending_sounds.append('boss_attack')
+                            player.damage(self.damage_amount, source_enemy=self)
+        else:
+            if player.health > 0 and self.has_aggro:
+                if player.feet.centerx > self.feet.centerx:
+                    self.facing = 'right'
+                else:
+                    self.facing = 'left'
+
+                attack_hitbox = self.get_attack_hitbox()
+                if attack_hitbox.colliderect(player.feet.inflate(20, 20)):
+                    # À portée d'attaque
+                    if self.is_running:
+                        # Arrivée après une course → toujours ultime
+                        self.is_running = False
+                        self.speed = self.base_speed
+                        self.force_special_after_run = True
+
+                    if current_time - self.last_attack_time > self.attack_cooldown:
+                        chosen = self._choose_attack()
+                        self.is_attacking = True
+                        self.state = chosen
+                        self.frame_index = 0
+                        self.last_attack_time = current_time
+                        self.has_dealt_damage = False
+                        self.velocity.xy = 0, 0
+                        self.pending_sounds.append('boss_attack')
+                    else:
+                        self.state = 'idle'
+                        self.velocity.xy = 0, 0
+                elif distance < self.aggro_radius and distance > 0:
+                    # Déplacement vers le joueur
+                    if distance > self.RUN_DISTANCE_THRESHOLD:
+                        # Trop loin → course (vitesse x2)
+                        if not self.is_running:
+                            self.is_running = True
+                            self.speed = self.base_speed * 2
+                        self.state = 'run'
+                    else:
+                        # Proche → marche normale
+                        if self.is_running:
+                            self.is_running = False
+                            self.speed = self.base_speed
+                        self.state = 'walk'
+                    norm_dir = target_vector.normalize()
+                    self.velocity.x = norm_dir.x * self.speed
+                    self.velocity.y = norm_dir.y * self.speed
+                else:
+                    self.state = 'idle'
+                    self.velocity.xy = 0, 0
+            else:
+                self.state = 'idle'
+                self.velocity.xy = 0, 0
+
+        # Mouvement
+        if self.state in ('walk', 'run'):
+            self.position.x += self.velocity.x
+            self.feet.centerx = round(self.position.x)
+            for wall in walls:
+                if self.feet.colliderect(wall):
+                    if self.velocity.x > 0: self.feet.right = wall.left
+                    elif self.velocity.x < 0: self.feet.left = wall.right
+                    self.position.x = self.feet.centerx
+                    hit_x = True
+                    break
+
+            self.position.y += self.velocity.y
+            self.feet.bottom = round(self.position.y)
+            for wall in walls:
+                if self.feet.colliderect(wall):
+                    if self.velocity.y > 0: self.feet.bottom = wall.top
+                    elif self.velocity.y < 0: self.feet.top = wall.bottom
+                    self.position.y = self.feet.bottom
+                    hit_y = True
+                    break
+
+            # Contournement des murs
+            if hit_x and abs(norm_dir.y) < 0.5:
+                self.position.y += self.speed * self.slide_dir_y
+                self.feet.bottom = round(self.position.y)
+                for wall in walls:
+                    if self.feet.colliderect(wall):
+                        self.position.y -= self.speed * self.slide_dir_y
+                        self.slide_dir_y *= -1
+                        self.position.y += self.speed * self.slide_dir_y
+                        self.feet.bottom = round(self.position.y)
+                        for w2 in walls:
+                            if self.feet.colliderect(w2):
+                                self.position.y -= self.speed * self.slide_dir_y
+                                break
+                        break
+                self.feet.bottom = round(self.position.y)
+            elif hit_y and abs(norm_dir.x) < 0.5:
+                self.position.x += self.speed * self.slide_dir_x
+                self.feet.centerx = round(self.position.x)
+                for wall in walls:
+                    if self.feet.colliderect(wall):
+                        self.position.x -= self.speed * self.slide_dir_x
+                        self.slide_dir_x *= -1
+                        self.position.x += self.speed * self.slide_dir_x
+                        self.feet.centerx = round(self.position.x)
+                        for w2 in walls:
+                            if self.feet.colliderect(w2):
+                                self.position.x -= self.speed * self.slide_dir_x
+                                break
+                        break
+                self.feet.centerx = round(self.position.x)
+
+            self.rect.centerx = self.feet.centerx
+            self.rect.bottom = self.feet.bottom + self.y_offset
+
+        self.animate()
+
+    def _get_damage_frame(self, attack_state):
+        """Frame à laquelle les dégâts sont infligés."""
+        if attack_state == 'attack1':
+            return 8   # mi-animation des 16 frames
+        elif attack_state == 'attack2':
+            return 3   # mi-animation des 7 frames
+        elif attack_state == 'special':
+            return 3   # mi-animation des 5 frames
+        return 0
+
+    def animate(self):
+        animation = self.animations[self.facing][self.state]
+
+        # Paralysie : frame figée + teinte bleue
+        if self.paralyzed:
+            idx = max(0, min(int(self.frame_index), len(animation) - 1))
+            self.image = self._get_blue_tinted(animation[idx])
+            return
+
+        speed = self.animation_speed
+        if self.state in ('hurt', 'death'):
+            speed = 0.1
+
+        self.frame_index += speed
+
+        if self.frame_index >= len(animation):
+            if self.state == 'death':
+                self.frame_index = len(animation) - 1
+                self._is_blinking = False
+            elif self.state == 'hurt':
+                self.state = 'idle'
+                self.frame_index = 0
+                self._is_blinking = False
+            elif self.state in ('attack1', 'attack2', 'special'):
+                self.is_attacking = False
+                self.state = 'idle'
+                self.frame_index = 0
+            else:
+                self.frame_index = 0
+
+        animation = self.animations[self.facing][self.state]
+        self.image = animation[int(self.frame_index)].copy()
+
+        if self.state == 'death':
+            self._is_blinking = False
+
+        if self.state == 'hurt' or self._is_blinking:
+            if pygame.time.get_ticks() - self.hit_time < 150:
+                mask = pygame.mask.from_surface(self.image)
+                red_overlay = mask.to_surface(setcolor=(255, 0, 0, 150), unsetcolor=(0, 0, 0, 0))
+                self.image.blit(red_overlay, (0, 0))
+            else:
+                self._is_blinking = False
+
+    def update_volumes(self, music_vol, sfx_vol):
+        pygame.mixer.music.set_volume(music_vol)
+
+
+# =====================================================================
 # --- ENNEMI DISTANT (MULTIJOUEUR CLIENT) ---
 # =====================================================================
 
@@ -1291,6 +1766,20 @@ class RemoteEnemy(pygame.sprite.Sprite):
                 ('idle',   "assets/images/necromancer_summonIdle.png",   4, 'grid', 4, 1),
                 ('run',    "assets/images/necromancer_summonIdle.png",   4, 'grid', 4, 1),
                 ('death',  "assets/images/necromancer_summonDeath.png",  6, 'grid', 3, 2),
+            ],
+        },
+        'medusa': {
+            'scale': 3.5,
+            'empty_below': 12 * 3.5,
+            'anims': [
+                ('idle',    "assets/images/Medusa_boss/Idle.png",     7,  'strip'),
+                ('walk',    "assets/images/Medusa_boss/Walk.png",     13, 'strip'),
+                ('run',     "assets/images/Medusa_boss/Run.png",      7,  'strip'),
+                ('attack1', "assets/images/Medusa_boss/Attack_1.png", 16, 'strip'),
+                ('attack2', "assets/images/Medusa_boss/Attack_2.png", 7,  'strip'),
+                ('special', "assets/images/Medusa_boss/Special.png",  5,  'strip'),
+                ('hurt',    "assets/images/Medusa_boss/Hurt.png",     3,  'strip'),
+                ('death',   "assets/images/Medusa_boss/Dead.png",     3,  'strip'),
             ],
         },
     }

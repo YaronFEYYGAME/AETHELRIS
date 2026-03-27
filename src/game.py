@@ -5,7 +5,7 @@ import random
 
 from player import Player, RemotePlayer
 from sound import SoundManager
-from enemy import Enemy, BigEnemy, Necromancer, Spirit, RemoteEnemy
+from enemy import Enemy, BigEnemy, Necromancer, Spirit, Medusa, RemoteEnemy
 from ui import UI
 from item import Item
 from projectile import Projectile, HomingProjectile, HealEffect, InstantAOE, FloatingText
@@ -96,6 +96,12 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                 enemies_group.add(new_enemy)
             elif obj_type == "necromancer":
                 new_enemy = Necromancer(obj.x, obj.y)
+                if hasattr(new_enemy, 'update_volumes'):
+                    new_enemy.update_volumes(global_music_vol, global_sfx_vol)
+                group.add(new_enemy)
+                enemies_group.add(new_enemy)
+            elif obj_type == "medusa":
+                new_enemy = Medusa(obj.x, obj.y)
                 if hasattr(new_enemy, 'update_volumes'):
                     new_enemy.update_volumes(global_music_vol, global_sfx_vol)
                 group.add(new_enemy)
@@ -218,7 +224,7 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                             sound_manager.play_mmo_sound()
                             show_mmo = True
                             
-                        if player.health > 0:
+                        if player.health > 0 and not player.is_stunned:
                             if event.key == pygame.K_1:
                                 if player.has_melee and player.current_weapon != 'melee':
                                     player.switch_weapon('melee')
@@ -228,7 +234,7 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                                 if player.has_ranged and player.current_weapon != 'ranged':
                                     player.switch_weapon('ranged')
                                     sound_manager.play_ui_equip_bow()
-                                    
+
                             if event.key == pygame.K_a and can_exit:
                                 player_inventory['melee'] = player.has_melee
                                 player_inventory['ranged'] = player.has_ranged
@@ -337,7 +343,9 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                 
                 for enemy in enemies_group:
                     if getattr(enemy, 'has_aggro', False) and getattr(enemy, 'health', 0) > 0:
-                        if isinstance(enemy, BigEnemy):
+                        if isinstance(enemy, Medusa):
+                            ui.draw_boss_health_bar(enemy.health, enemy.max_health, "Médusa")
+                        elif isinstance(enemy, BigEnemy):
                             ui.draw_boss_health_bar(enemy.health, enemy.max_health, "Gardien des profondeurs")
                         elif isinstance(enemy, Necromancer):
                             ui.draw_boss_health_bar(enemy.health, enemy.max_health, "La Faucheuse")
@@ -672,11 +680,14 @@ def _serialize_player(p):
         'skill_cooldowns': skill_crs,
         'inventory_items': getattr(p, 'inventory_items', []),
         'item_start_key': p.char_def.get('item_start_key', 2),
+        'is_stunned': getattr(p, 'is_stunned', False),
     }
 
 
 def _serialize_enemy(e):
-    if isinstance(e, Necromancer):
+    if isinstance(e, Medusa):
+        etype = 'medusa'
+    elif isinstance(e, Necromancer):
         etype = 'necromancer'
     elif isinstance(e, BigEnemy):
         etype = 'bigenemy'
@@ -857,6 +868,10 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 e = Necromancer(obj.x, obj.y); e._mp_id = _next_id()
                 if hasattr(e, 'update_volumes'): e.update_volumes(global_music_vol, global_sfx_vol)
                 group.add(e); enemies_group.add(e)
+            elif obj_type == "medusa":
+                e = Medusa(obj.x, obj.y); e._mp_id = _next_id()
+                if hasattr(e, 'update_volumes'): e.update_volumes(global_music_vol, global_sfx_vol)
+                group.add(e); enemies_group.add(e)
             elif obj_type == "item_melee":
                 it = Item(obj.x, obj.y, 'melee'); group.add(it); items_group.add(it)
             elif obj_type == "item_ranged":
@@ -1007,7 +1022,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                 if not player.inventory_items:
                                     player.inventory_open = False
                         continue
-                    if not is_paused and player.health > 0:
+                    if not is_paused and player.health > 0 and not player.is_stunned:
                         if event.key == pygame.K_a and can_exit:
                             player_health  = player.health
                             player_inv_items = list(player.inventory_items)
@@ -1254,7 +1269,14 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                         now = pygame.time.get_ticks()
                         last_mp = getattr(e, '_mp_other_dmg_time', 0)
                         if atk and atk.colliderect(other.feet) and now - last_mp > getattr(e, 'attack_cooldown', 1500):
-                            other.damage(getattr(e, 'damage_amount', 10), source_enemy=e)
+                            # Médusa special : stun + vol de vie sur l'autre joueur aussi
+                            if isinstance(e, Medusa) and getattr(e, 'state', '') == 'special':
+                                other.damage(e.special_damage, source_enemy=e)
+                                other.apply_stun(3000)
+                                missing_hp = e.max_health - e.health
+                                e.health = min(e.max_health, e.health + missing_hp * 0.5)
+                            else:
+                                other.damage(getattr(e, 'damage_amount', 10), source_enemy=e)
                             e._mp_other_dmg_time = now
                 if hasattr(e, 'pending_summons') and e.pending_summons:
                     owner_ref = e if isinstance(e, Necromancer) else None
@@ -1506,7 +1528,9 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
 
             for e in enemies_group:
                 if getattr(e, 'has_aggro', False) and getattr(e, 'health', 0) > 0:
-                    if isinstance(e, BigEnemy):
+                    if isinstance(e, Medusa):
+                        ui.draw_boss_health_bar(e.health, e.max_health, "Médusa")
+                    elif isinstance(e, BigEnemy):
                         ui.draw_boss_health_bar(e.health, e.max_health, "Gardien des profondeurs")
                     elif isinstance(e, Necromancer):
                         ui.draw_boss_health_bar(e.health, e.max_health, "La Faucheuse")
@@ -2165,10 +2189,11 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 
         # Barre de vie du boss (uniquement si aggro et vivant)
         for edata in enemies_state:
-            if (edata.get('etype') in ('bigenemy', 'necromancer')
+            if (edata.get('etype') in ('bigenemy', 'necromancer', 'medusa')
                     and edata.get('has_aggro', False)
                     and edata.get('health', 0) > 0):
-                boss_name = "Gardien des profondeurs" if edata['etype'] == 'bigenemy' else "La Faucheuse"
+                boss_names = {'bigenemy': "Gardien des profondeurs", 'necromancer': "La Faucheuse", 'medusa': "Médusa"}
+                boss_name = boss_names.get(edata['etype'], "Boss")
                 ui.draw_boss_health_bar(edata['health'], edata['max_health'], boss_name)
                 break  # un seul boss à la fois
 

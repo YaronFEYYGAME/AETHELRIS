@@ -92,6 +92,11 @@ class Player(pygame.sprite.Sprite):
         self.is_hit = False
         self.last_hit_time = 0
 
+        # --- Stun (Médusa) ---
+        self.is_stunned = False
+        self.stun_end_time = 0
+        self._gray_cache = {}
+
         # --- Inventaire d'items ---
         self.inventory_items = []  # Liste ordonnée des types d'items
         self.inventory_open = False
@@ -147,6 +152,8 @@ class Player(pygame.sprite.Sprite):
 
     def trigger_attack(self, binding_key):
         """Déclenche une attaque basée sur le binding (mouse/e/1)."""
+        if self.is_stunned:
+            return None
         bindings = self.char_def.get('bindings', {})
         weapon = bindings.get(binding_key)
         if not weapon:
@@ -231,7 +238,7 @@ class Player(pygame.sprite.Sprite):
         self.inventory_cursor = target
 
     def input(self):
-        if self.state == 'death' or self.is_attacking or self.inventory_open:
+        if self.state == 'death' or self.is_attacking or self.inventory_open or self.is_stunned:
             self.velocity.xy = 0, 0
             return
 
@@ -372,6 +379,27 @@ class Player(pygame.sprite.Sprite):
                     self.image.blit(red_overlay, (0, 0))
             else:
                 self.cursed_brand_active = False
+
+        # Stun (Médusa) : filtre gris
+        if self.is_stunned:
+            if pygame.time.get_ticks() < self.stun_end_time:
+                frame_id = id(self.image)
+                if frame_id not in self._gray_cache:
+                    gray = self.image.copy()
+                    gray.fill((128, 128, 128, 255), special_flags=pygame.BLEND_RGBA_MULT)
+                    self._gray_cache[frame_id] = gray
+                self.image = self._gray_cache[frame_id]
+            else:
+                self.is_stunned = False
+                self._gray_cache = {}
+
+    def apply_stun(self, duration_ms):
+        """Applique un stun au joueur (Médusa). Bloque mouvement, attaque, items."""
+        self.is_stunned = True
+        self.stun_end_time = pygame.time.get_ticks() + duration_ms
+        self.velocity.xy = 0, 0
+        self.is_attacking = False
+        self._gray_cache = {}
 
     def attack(self):
         """Attaque de base (E). Retourne ('melee', rect), ('ranged', None), ou None."""
@@ -791,6 +819,10 @@ class RemotePlayer(pygame.sprite.Sprite):
                 mask = pygame.mask.from_surface(self.image)
                 red_overlay = mask.to_surface(setcolor=(255, 50, 50, 100), unsetcolor=(0, 0, 0, 0))
                 self.image.blit(red_overlay, (0, 0))
+
+        # Stun (Médusa) : filtre gris
+        if state.get('is_stunned', False):
+            self.image.fill((128, 128, 128, 255), special_flags=pygame.BLEND_RGBA_MULT)
 
     def update(self):
         pass

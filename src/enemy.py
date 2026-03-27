@@ -281,9 +281,9 @@ class BigEnemy(pygame.sprite.Sprite):
         self.rect.centerx = self.feet.centerx
         self.rect.bottom = self.feet.bottom + self.y_offset 
         
-        self.max_health = 390  
-        self.health = 390      
-        self.speed = 0.9       
+        self.max_health = 390
+        self.health = 390
+        self.speed = 1.8
         self.damage_amount = 7.5 
         
         self.aggro_radius = 300 
@@ -1319,10 +1319,10 @@ class Medusa(pygame.sprite.Sprite):
 
         # Dialogue de boss
         self.dialogue_lines = [
-            ("Ssssss... des intrus....", 3000),
-            ("Cela faisait longtemps que personne n'était venu s'aventurer ici Ssssss....", 5000),
-            ("Ssssss.... Vous feriez de belles statues dans ma collection Sssss...", 5000),
-            ("EN GARDE SSSSSSSS....", 3000),
+            ("Ssssss... des intrus....", 2000),
+            ("Cela faisait longtemps que personne n'était venu s'aventurer ici Ssssss....", 4000),
+            ("Ssssss.... Vous feriez de belles statues dans ma collection Sssss...", 4000),
+            ("EN GARDE SSSSSSSS....", 2000),
         ]
         self.dialogue_zone = int(self.aggro_radius * 0.40)
         self.in_dialogue = False
@@ -1415,8 +1415,8 @@ class Medusa(pygame.sprite.Sprite):
             width = 45
             height = 30
         elif attack_type == 'attack2':
-            width = 35
-            height = 25
+            width = 55
+            height = 35
         else:
             # Special : grande zone devant Médusa
             width = 100

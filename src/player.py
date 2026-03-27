@@ -95,7 +95,7 @@ class Player(pygame.sprite.Sprite):
         # --- Stun (Médusa) ---
         self.is_stunned = False
         self.stun_end_time = 0
-        self._gray_cache = {}
+        self._stun_frame = None
 
         # --- Inventaire d'items ---
         self.inventory_items = []  # Liste ordonnée des types d'items
@@ -312,6 +312,22 @@ class Player(pygame.sprite.Sprite):
         return True
 
     def animate(self):
+        # Stun (Médusa) : figé sur idle frame 0 + filtre gris
+        if self.is_stunned:
+            if pygame.time.get_ticks() < self.stun_end_time:
+                if not self._stun_frame:
+                    base = self.animations[self.facing]['idle'][0].copy()
+                    base.fill((128, 128, 128, 255), special_flags=pygame.BLEND_RGBA_MULT)
+                    self._stun_frame = base
+                self.image = self._stun_frame
+                self.state = 'idle'
+                self.frame_index = 0
+                self.is_attacking = False
+                return
+            else:
+                self.is_stunned = False
+                self._stun_frame = None
+
         if self.health <= 0:
             self.state = 'death'
         elif self.is_attacking:
@@ -380,26 +396,13 @@ class Player(pygame.sprite.Sprite):
             else:
                 self.cursed_brand_active = False
 
-        # Stun (Médusa) : filtre gris
-        if self.is_stunned:
-            if pygame.time.get_ticks() < self.stun_end_time:
-                frame_id = id(self.image)
-                if frame_id not in self._gray_cache:
-                    gray = self.image.copy()
-                    gray.fill((128, 128, 128, 255), special_flags=pygame.BLEND_RGBA_MULT)
-                    self._gray_cache[frame_id] = gray
-                self.image = self._gray_cache[frame_id]
-            else:
-                self.is_stunned = False
-                self._gray_cache = {}
-
     def apply_stun(self, duration_ms):
         """Applique un stun au joueur (Médusa). Bloque mouvement, attaque, items."""
         self.is_stunned = True
         self.stun_end_time = pygame.time.get_ticks() + duration_ms
         self.velocity.xy = 0, 0
         self.is_attacking = False
-        self._gray_cache = {}
+        self._stun_frame = None  # sera recalculé au prochain animate()
 
     def attack(self):
         """Attaque de base (E). Retourne ('melee', rect), ('ranged', None), ou None."""
@@ -660,6 +663,7 @@ class Player(pygame.sprite.Sprite):
                 if self.has_red_gem:
                     self.health = self.max_health
                     self.has_red_gem = False
+                    self.remove_inventory_item('redgem')
                     self.red_gem_triggered = True
                     return
                 self.health = 0

@@ -139,9 +139,14 @@ class UI:
             if skill_1_weapon in abilities:
                 s1_cr = skill_cooldowns.get(skill_1_weapon, 1.0) if skill_cooldowns else 1.0
                 s1_show_cd = True
+            elif skill_1_weapon == 'ranged' and arrows <= 0:
+                s1_cr = arrow_regen_cr
+                s1_show_cd = True
             self._draw_slot(x_offset, y, slot_size, icons.get('1'),
                             is_active=False, cooldown_ratio=s1_cr,
                             show_cooldown=s1_show_cd, label='1')
+            if skill_1_weapon == 'ranged':
+                self._draw_counter(x_offset, y, slot_size, arrows)
             x_offset += slot_size + gap
 
         # --- Slot 2 (compétence touche 2, swordsman uniquement) ---

@@ -670,6 +670,8 @@ def _serialize_player(p):
         'arrow_regen_cr': p.get_arrow_regen_cooldown_ratio(),
         'char_type':      getattr(p, 'char_type', 'soldier'),
         'skill_cooldowns': skill_crs,
+        'inventory_items': getattr(p, 'inventory_items', []),
+        'item_start_key': p.char_def.get('item_start_key', 2),
     }
 
 
@@ -779,6 +781,11 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
 
     player_health  = 100
     player2_health = 100
+    player_inv_items = []
+    player2_inv_items = []
+    player_has_melee = False
+    player_has_ranged = False
+    player_arrows = 0
 
     global_music_vol = start_music_vol
     global_sfx_vol   = start_sfx_vol
@@ -878,6 +885,11 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
         # Joueur local (serveur) — avec le personnage choisi
         player = Player(player_x, player_y, char_type=host_char_type)
         player.health = player_health
+        player.has_melee = player_has_melee or player.has_melee
+        player.has_ranged = player_has_ranged or player.has_ranged
+        player.arrows = player_arrows or player.arrows
+        for inv_item in player_inv_items:
+            player.add_inventory_item(inv_item)
         group.add(player)
 
         # Joueur distant (client, piloté par inputs réseau) — avec le personnage choisi
@@ -949,20 +961,66 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                             return
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        is_paused = not is_paused
+                        if player.inventory_open:
+                            player.inventory_open = False
+                            player.inventory_grabbed = False
+                        else:
+                            is_paused = not is_paused
+                        continue
+                    # Touche I : ouvrir/fermer inventaire
+                    if event.key == pygame.K_i and not is_paused and player.health > 0:
+                        player.inventory_open = not player.inventory_open
+                        player.inventory_grabbed = False
+                        if player.inventory_open:
+                            player.inventory_cursor = 0
+                        continue
+                    # Gestion de l'inventaire ouvert
+                    if player.inventory_open and not is_paused:
+                        if event.key == pygame.K_e:
+                            # Saisir / relâcher l'item
+                            if player.inventory_items:
+                                from player import ACTIVE_ITEMS
+                                cur_item = player.inventory_items[player.inventory_cursor] if player.inventory_cursor < len(player.inventory_items) else None
+                                if player.inventory_grabbed:
+                                    player.inventory_grabbed = False
+                                elif cur_item and cur_item in ACTIVE_ITEMS:
+                                    player.inventory_grabbed = True
+                        elif event.key == pygame.K_q:
+                            if player.inventory_grabbed:
+                                player.inventory_swap(-1)
+                            else:
+                                player.inventory_cursor = max(0, player.inventory_cursor - 1)
+                        elif event.key == pygame.K_d:
+                            if player.inventory_grabbed:
+                                player.inventory_swap(1)
+                            else:
+                                player.inventory_cursor = min(len(player.inventory_items) - 1, player.inventory_cursor + 1)
+                        elif event.key == pygame.K_DELETE or event.key == pygame.K_x:
+                            # Jeter l'item
+                            if player.inventory_items and player.inventory_cursor < len(player.inventory_items):
+                                dropped_type = player.inventory_items[player.inventory_cursor]
+                                player.remove_inventory_item(dropped_type)
+                                player.inventory_grabbed = False
+                                # Créer un item au sol
+                                drop_item = Item(player.feet.centerx, player.feet.centery, dropped_type)
+                                group.add(drop_item); items_group.add(drop_item)
+                                if not player.inventory_items:
+                                    player.inventory_open = False
                         continue
                     if not is_paused and player.health > 0:
-                        if event.key == pygame.K_1:
-                            _handle_weapon_switch(player, 1, sound_manager)
-                        if event.key == pygame.K_2:
-                            _handle_weapon_switch(player, 2, sound_manager)
                         if event.key == pygame.K_a and can_exit:
                             player_health  = player.health
-                            if player2: player2_health = player2.health
+                            player_inv_items = list(player.inventory_items)
+                            player_has_melee = player.has_melee
+                            player_has_ranged = player.has_ranged
+                            player_arrows = player.arrows
+                            if player2:
+                                player2_health = player2.health
+                                player2_inv_items = list(player2.inventory_items)
                             current_level_index += 1
                             level_running = False
                             break
-                        # Items actifs : touches dynamiques (3, 4, 5...)
+                        # Items actifs : touches dynamiques
                         active_items_keys = _get_active_item_keys(player)
                         for key_num, item_name in active_items_keys:
                             if event.key == getattr(pygame, f'K_{key_num}', None):
@@ -1034,26 +1092,31 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 player2.animate()
                 player2.move(walls)
 
-                # Attaque player2
-                if net_inputs.get('attack') and player2.current_weapon and player2.health > 0:
-                    res = player2.attack()
-                    if res:
-                        typ, data = res
-                        if typ == 'melee':
-                            p2_pos = (player2.feet.centerx, player2.feet.centery)
-                            sound_manager.play_spatial('sword', p2_pos, host_pos)
-                            for e in list(enemies_group):
-                                if getattr(e, 'health', 0) > 0 and data.colliderect(e.feet):
-                                    dmg2 = player2.melee_damage * player2.get_damage_multiplier(target_enemy=e)
-                                    e.damage(dmg2)
-                                    player2.lifesteal(dmg2)
-                                    if e.health <= 0:
-                                        e_pos = (e.feet.centerx, e.feet.centery)
-                                        sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
-                                    _handle_enemy_death(e, group, items_group, particles_group)
-                        elif typ == 'skill':
-                            p2_pos = (player2.feet.centerx, player2.feet.centery)
-                            sound_manager.play_spatial('sword', p2_pos, host_pos)
+                # Attaque player2 — nouveau système de bindings
+                if player2.health > 0:
+                    for binding, inp_key in [('mouse', 'attack_mouse'),
+                                              ('e', 'attack_e'),
+                                              ('1', 'attack_1')]:
+                        if net_inputs.get(inp_key):
+                            res = player2.trigger_attack(binding)
+                            if res:
+                                typ, data = res
+                                if typ == 'melee':
+                                    p2_pos = (player2.feet.centerx, player2.feet.centery)
+                                    sound_manager.play_spatial('sword', p2_pos, host_pos)
+                                    for e in list(enemies_group):
+                                        if getattr(e, 'health', 0) > 0 and data.colliderect(e.feet):
+                                            dmg2 = player2.melee_damage * player2.get_damage_multiplier(target_enemy=e)
+                                            e.damage(dmg2)
+                                            player2.lifesteal(dmg2)
+                                            if e.health <= 0:
+                                                e_pos = (e.feet.centerx, e.feet.centery)
+                                                sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
+                                            _handle_enemy_death(e, group, items_group, particles_group)
+                                elif typ == 'skill':
+                                    p2_pos = (player2.feet.centerx, player2.feet.centery)
+                                    sound_manager.play_spatial('sword', p2_pos, host_pos)
+                                break
 
                 # Vérifier les compétences actives de player2
                 if player2.is_attacking and player2.active_skill:
@@ -1106,11 +1169,13 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                 sound_events.append({'sound': 'eureka', 'x': rx, 'y': ry})
                                 break
 
-                # Changement d'arme/compétence player2
-                if net_inputs.get('weapon1'):
-                    _handle_weapon_switch(player2, 1, None)
-                if net_inputs.get('weapon2'):
-                    _handle_weapon_switch(player2, 2, None)
+                # Drop items player2
+                if net_inputs.get('drop_item'):
+                    drop_type = net_inputs['drop_item']
+                    if drop_type in player2.inventory_items:
+                        player2.remove_inventory_item(drop_type)
+                        drop_item = Item(player2.feet.centerx, player2.feet.centery, drop_type)
+                        group.add(drop_item); items_group.add(drop_item)
 
                 # Attaque à distance player2
                 new_proj2 = player2.check_ranged_attack()
@@ -1226,27 +1291,36 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             projectiles_group.update()
             particles_group.update()
 
-            # --- Attaque locale (serveur) ---
+            # --- Attaque locale (serveur) — nouveau système de bindings ---
             keys = pygame.key.get_pressed()
-            if keys[pygame.K_e] and player.current_weapon and player.health > 0:
-                res = player.attack()
-                if res:
-                    typ, data = res
-                    if typ == 'melee':
-                        sound_manager.play_spatial('sword', host_pos, host_pos)
-                        sound_events.append({'sound': 'sword', 'x': host_pos[0], 'y': host_pos[1]})
-                        for e in list(enemies_group):
-                            if getattr(e, 'health', 0) > 0 and data.colliderect(e.feet):
-                                dmg = player.melee_damage * player.get_damage_multiplier(target_enemy=e)
-                                e.damage(dmg)
-                                player.lifesteal(dmg)
-                                if e.health <= 0:
-                                    e_pos = (e.feet.centerx, e.feet.centery)
-                                    sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
-                                _handle_enemy_death(e, group, items_group, particles_group)
-                    elif typ == 'skill':
-                        sound_manager.play_spatial('sword', host_pos, host_pos)
-                        sound_events.append({'sound': 'sword', 'x': host_pos[0], 'y': host_pos[1]})
+            mouse_buttons = pygame.mouse.get_pressed()
+            if player.health > 0 and not player.inventory_open:
+                # Clic gauche → attaque de base (mouse binding)
+                # E → compétence E
+                # 1 → compétence 1
+                for binding, pressed in [('mouse', mouse_buttons[0]),
+                                          ('e', keys[pygame.K_e]),
+                                          ('1', keys[pygame.K_1])]:
+                    if pressed:
+                        res = player.trigger_attack(binding)
+                        if res:
+                            typ, data = res
+                            if typ == 'melee':
+                                sound_manager.play_spatial('sword', host_pos, host_pos)
+                                sound_events.append({'sound': 'sword', 'x': host_pos[0], 'y': host_pos[1]})
+                                for e in list(enemies_group):
+                                    if getattr(e, 'health', 0) > 0 and data.colliderect(e.feet):
+                                        dmg = player.melee_damage * player.get_damage_multiplier(target_enemy=e)
+                                        e.damage(dmg)
+                                        player.lifesteal(dmg)
+                                        if e.health <= 0:
+                                            e_pos = (e.feet.centerx, e.feet.centery)
+                                            sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
+                                        _handle_enemy_death(e, group, items_group, particles_group)
+                            elif typ == 'skill':
+                                sound_manager.play_spatial('sword', host_pos, host_pos)
+                                sound_events.append({'sound': 'sword', 'x': host_pos[0], 'y': host_pos[1]})
+                            break  # Un seul déclenchement par frame
 
             # Vérifier les compétences actives (serveur)
             if player.is_attacking and player.active_skill:
@@ -1414,16 +1488,12 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             skill_crs = {sk: player.get_skill_cooldown_ratio(sk) for sk in player.abilities}
             ui.draw_character_hud(player.char_type, player.current_weapon,
                                   skill_cooldowns=skill_crs, arrows=player.arrows,
-                                  has_pickaxe=player.has_pickaxe, has_boots=player.has_boots,
+                                  inventory_items=player.inventory_items,
                                   dash_cr=cr,
-                                  has_red_gem=player.has_red_gem,
-                                  has_blue_gem=player.has_blue_gem,
                                   blue_gem_cr=player.get_blue_gem_cooldown_ratio(),
-                                  has_mirror=player.has_mirror,
-                                  has_kitsune_mask=player.has_kitsune_mask,
-                                  has_cursed_brand=player.has_cursed_brand,
                                   cursed_brand_cr=player.get_cursed_brand_cooldown_ratio(),
-                                  arrow_regen_cr=player.get_arrow_regen_cooldown_ratio())
+                                  arrow_regen_cr=player.get_arrow_regen_cooldown_ratio(),
+                                  item_start_key=player.char_def.get('item_start_key', 2))
             # Barre de vie player2 (en haut à droite)
             if player2:
                 _draw_remote_health(screen, player2.health, player2.max_health)
@@ -1444,6 +1514,16 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
 
             if show_exit_dialogue:
                 ui.draw_dialogue("Voulez vous rentrer ? (A)")
+
+            # --- Écran inventaire ---
+            if player.inventory_open and player.health > 0:
+                bindings = player.char_def.get('bindings', {})
+                ui.draw_inventory_screen(
+                    player.inventory_items,
+                    player.inventory_cursor,
+                    player.inventory_grabbed,
+                    item_start_key=player.char_def.get('item_start_key', 2),
+                    skill_1_exists=bindings.get('1') is not None)
 
             # --- Indicateur mode ---
             if not solo_mode:
@@ -2014,44 +2094,45 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         # --- Capturer et envoyer les inputs locaux ---
         keys = pygame.key.get_pressed()
 
-        # Son d'attaque immédiat côté client (pas d'attente réseau) — spatialisé sur soi
-        cur_wep = lp_now.get('current_weapon')
-        if keys[pygame.K_e] and cur_wep and lp_now.get('health', 0) > 0:
+        # Son d'attaque immédiat côté client — nouveau système de bindings
+        mouse_buttons = pygame.mouse.get_pressed()
+        attacking_now = (mouse_buttons[0] or keys[pygame.K_e] or keys[pygame.K_1])
+        if attacking_now and lp_now.get('health', 0) > 0:
             if not getattr(run_game_mp_client, '_client_attacking', False):
                 sound_manager.play_spatial('sword', client_listener, client_listener)
                 run_game_mp_client._client_attacking = True
         else:
             run_game_mp_client._client_attacking = False
 
-        # Construire les inputs avec touches dynamiques pour items actifs
-        # Ordre items actifs : boots, blue_gem, cursed_brand → touches 3, 4, 5...
+        # Items actifs : touches dynamiques basées sur inventory_items
+        from player import ACTIVE_ITEMS
         gem_blue_pressed = False
         cursed_brand_pressed = False
         dash_pressed = bool(keys[pygame.K_LSHIFT])
-        active_key = 3
-        if lp_now.get('has_boots'):
-            if keys[getattr(pygame, f'K_{active_key}', 0)]:
-                dash_pressed = True
-            active_key += 1
-        if lp_now.get('has_blue_gem'):
-            if keys[getattr(pygame, f'K_{active_key}', 0)]:
-                gem_blue_pressed = True
-            active_key += 1
-        if lp_now.get('has_cursed_brand'):
-            if keys[getattr(pygame, f'K_{active_key}', 0)]:
-                cursed_brand_pressed = True
-            active_key += 1
+        inv_items = lp_now.get('inventory_items', [])
+        item_start = lp_now.get('item_start_key', 2)
+        active_key = item_start
+        for it in inv_items:
+            if it in ACTIVE_ITEMS:
+                if keys[getattr(pygame, f'K_{active_key}', 0)]:
+                    if it == 'boots':
+                        dash_pressed = True
+                    elif it == 'bluegem':
+                        gem_blue_pressed = True
+                    elif it == 'cursed_brand':
+                        cursed_brand_pressed = True
+                active_key += 1
 
         inputs = {
             'up':       bool(keys[pygame.K_z]),
             'down':     bool(keys[pygame.K_s]),
             'left':     bool(keys[pygame.K_q]),
             'right':    bool(keys[pygame.K_d]),
-            'attack':   bool(keys[pygame.K_e]),
+            'attack_mouse': bool(mouse_buttons[0]),
+            'attack_e': bool(keys[pygame.K_e]),
+            'attack_1': bool(keys[pygame.K_1]),
             'interact': bool(keys[pygame.K_f]),
             'dash':     dash_pressed,
-            'weapon1':  bool(keys[pygame.K_1]),
-            'weapon2':  bool(keys[pygame.K_2]),
             'gem_blue': gem_blue_pressed,
             'cursed_brand': cursed_brand_pressed,
         }
@@ -2064,17 +2145,12 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         ui.draw_character_hud(lp_char, lp_state.get('current_weapon'),
                               skill_cooldowns=lp_state.get('skill_cooldowns', {}),
                               arrows=lp_state.get('arrows', 0),
-                              has_pickaxe=lp_state.get('has_pickaxe', False),
-                              has_boots=lp_state.get('has_boots', False),
+                              inventory_items=lp_state.get('inventory_items', []),
                               dash_cr=lp_state.get('dash_cr', 1.0),
-                              has_red_gem=lp_state.get('has_red_gem', False),
-                              has_blue_gem=lp_state.get('has_blue_gem', False),
                               blue_gem_cr=lp_state.get('blue_gem_cr', 1.0),
-                              has_mirror=lp_state.get('has_mirror', False),
-                              has_kitsune_mask=lp_state.get('has_kitsune_mask', False),
-                              has_cursed_brand=lp_state.get('has_cursed_brand', False),
                               cursed_brand_cr=lp_state.get('cursed_brand_cr', 1.0),
-                              arrow_regen_cr=lp_state.get('arrow_regen_cr', 1.0))
+                              arrow_regen_cr=lp_state.get('arrow_regen_cr', 1.0),
+                              item_start_key=lp_state.get('item_start_key', 2))
 
         # Barre de vie du joueur hôte (en haut à droite)
         rp_state = players_state[0] if len(players_state) >= 1 else {}
@@ -2228,75 +2304,13 @@ def _get_kitsune_mark(size):
 
 def _get_active_item_keys(player):
     """Retourne la liste des items actifs avec leur touche assignée.
-    Ordre : boots, blue_gem, cursed_brand. Touches : 3, 4, 5..."""
-    items = []
-    key_num = 3
-    if player.has_boots:
-        items.append((key_num, 'boots')); key_num += 1
-    if player.has_blue_gem:
-        items.append((key_num, 'bluegem')); key_num += 1
-    if player.has_cursed_brand:
-        items.append((key_num, 'cursed_brand')); key_num += 1
-    return items
+    Utilise le nouveau système inventory_items du joueur."""
+    return player.get_active_items_with_keys()
 
 
 def _count_inventory_items(player):
     """Compte le nombre total d'items dans l'inventaire."""
-    count = 0
-    if player.has_pickaxe: count += 1
-    if player.has_boots: count += 1
-    if player.has_red_gem: count += 1
-    if player.has_blue_gem: count += 1
-    if player.has_mirror: count += 1
-    if player.has_kitsune_mask: count += 1
-    if player.has_cursed_brand: count += 1
-    return count
-
-
-def _handle_weapon_switch(player, slot, sound_manager):
-    """Gère le changement d'arme/compétence pour un joueur.
-    slot: 1 ou 2 (touche clavier)."""
-    char_def = player.char_def
-    abilities = char_def.get('abilities', {})
-    ct = player.char_type
-
-    if ct == 'soldier':
-        # Soldier : 1 = épée, 2 = arc
-        if slot == 1 and player.has_melee and player.current_weapon != 'melee':
-            player.switch_weapon('melee')
-            if sound_manager: sound_manager.play_ui_equip_sword()
-        elif slot == 2 and player.has_ranged and player.current_weapon != 'ranged':
-            player.switch_weapon('ranged')
-            if sound_manager: sound_manager.play_ui_equip_bow()
-
-    elif ct == 'swordsman':
-        # Swordsman : 1 = skill1 (3 salves), 2 = skill2 (5 salves)
-        # Activation directe — le melee de base reste sur E
-        if slot == 1 and 'skill1' in abilities:
-            player.use_skill('skill1')
-        elif slot == 2 and 'skill2' in abilities:
-            player.use_skill('skill2')
-
-    elif ct == 'archer':
-        # Archer : 1 = arc, 2 = flèche d'or (skill1)
-        if slot == 1 and player.has_ranged and player.current_weapon != 'ranged':
-            player.switch_weapon('ranged')
-        elif slot == 2 and 'skill1' in abilities and player.current_weapon != 'skill1':
-            player.switch_weapon('skill1')
-
-    elif ct == 'wizard':
-        # Wizard : 1 = skill1 (fireball), 2 = skill2 (cristal)
-        if slot == 1 and 'skill1' in abilities and player.current_weapon != 'skill1':
-            player.switch_weapon('skill1')
-        elif slot == 2 and 'skill2' in abilities and player.current_weapon != 'skill2':
-            player.switch_weapon('skill2')
-
-    elif ct == 'priest':
-        # Priest : 1 = skill1 (onde), 2 = skill2 (heal)
-        if slot == 1 and 'skill1' in abilities and player.current_weapon != 'skill1':
-            player.switch_weapon('skill1')
-        elif slot == 2 and 'skill2' in abilities and player.current_weapon != 'skill2':
-            player.switch_weapon('skill2')
+    return len(player.inventory_items)
 
 
 def _apply_skill_result(skill_result, caster, group, projectiles_group,
@@ -2391,44 +2405,19 @@ def _pickup_item(player, item, sound_manager):
         return True
     elif item.item_type == 'melee':
         player.has_melee = True
-        if player.current_weapon != 'melee':
-            player.current_weapon = 'melee'
-            if sound_manager: sound_manager.play_ui_equip_sword()
+        if sound_manager: sound_manager.play_ui_equip_sword()
         return True
     elif item.item_type == 'ranged':
         if not player.has_ranged: player.arrows += 10
         player.has_ranged = True
-        if player.current_weapon != 'ranged':
-            player.current_weapon = 'ranged'
-            if sound_manager: sound_manager.play_ui_equip_bow()
+        if sound_manager: sound_manager.play_ui_equip_bow()
         return True
 
-    # Items d'inventaire : vérifier la limite de 8 slots
-    if _count_inventory_items(player) >= 8:
-        return False  # Inventaire plein
-
-    if item.item_type == 'pickaxe':
-        player.has_pickaxe = True
-    elif item.item_type == 'boots':
-        player.has_boots = True
-        if sound_manager: sound_manager.play_ui_equipement()
-    elif item.item_type == 'redgem':
-        player.has_red_gem = True
-        if sound_manager: sound_manager.play_ui_equipement()
-    elif item.item_type == 'bluegem':
-        player.has_blue_gem = True
-        if sound_manager: sound_manager.play_ui_equipement()
-    elif item.item_type == 'mirror':
-        player.has_mirror = True
-        if sound_manager: sound_manager.play_ui_equipement()
-    elif item.item_type == 'kitsune_mask':
-        player.has_kitsune_mask = True
-        if sound_manager: sound_manager.play_ui_equipement()
-    elif item.item_type == 'cursed_brand':
-        player.has_cursed_brand = True
-        if sound_manager: sound_manager.play_ui_equipement()
-    else:
-        return False
+    # Items d'inventaire : utilise le nouveau système
+    if not player.add_inventory_item(item.item_type):
+        return False  # Inventaire plein (5 items max)
+    if sound_manager and item.item_type != 'pickaxe':
+        sound_manager.play_ui_equipement()
     return True
 
 

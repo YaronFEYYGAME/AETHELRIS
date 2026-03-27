@@ -85,112 +85,177 @@ class UI:
         pygame.draw.rect(self.screen, color, (x, y, bar_width * ratio, bar_height))
         pygame.draw.rect(self.screen, (255, 255, 255), (x, y, bar_width, bar_height), 2)
 
+    def _get_item_icon(self, item_type):
+        """Retourne l'icône 64x64 pour un type d'item."""
+        icon_map = {
+            'boots': self.boots_img, 'bluegem': self.bluegem_img,
+            'cursed_brand': self.cursed_brand_img, 'pickaxe': self.pickaxe_img,
+            'redgem': self.redgem_img, 'mirror': self.mirror_img,
+            'kitsune_mask': self.kitsune_mask_img,
+        }
+        return icon_map.get(item_type)
+
     def draw_character_hud(self, char_type, current_weapon, skill_cooldowns=None,
-                           arrows=0, has_pickaxe=False, has_boots=False, dash_cr=1.0,
-                           has_red_gem=False, has_blue_gem=False, blue_gem_cr=1.0,
-                           has_mirror=False, has_kitsune_mask=False,
-                           has_cursed_brand=False, cursed_brand_cr=1.0,
-                           arrow_regen_cr=1.0):
-        """Dessine le HUD complet d'un personnage (icônes + cooldowns).
-        Ordre : slots arme (1,2) → items actifs → items passifs."""
+                           arrows=0, inventory_items=None,
+                           dash_cr=1.0, blue_gem_cr=1.0, cursed_brand_cr=1.0,
+                           arrow_regen_cr=1.0, item_start_key=2):
+        """Dessine le HUD : skill E → skill 1 → items actifs → items passifs."""
         icons = self.load_character_icons(char_type)
         char_def = CHARACTER_DEFS.get(char_type, CHARACTER_DEFS['soldier'])
         abilities = char_def.get('abilities', {})
+        bindings = char_def.get('bindings', {})
+        if inventory_items is None:
+            inventory_items = []
 
         x_offset = 20
         y = 50
         slot_size = 64
         gap = 8
 
-        # Slot 1 (touche 1 / attaque de base)
-        if char_type == 'soldier':
-            slot1_active = (current_weapon == 'melee')
-        elif char_type == 'archer':
-            slot1_active = (current_weapon == 'ranged')
-        elif char_type == 'swordsman':
-            slot1_active = True
-        else:
-            slot1_active = (current_weapon == 'skill1')
-
-        slot1_cooldown = 1.0
-        slot1_show_cd = False
-        if char_type == 'swordsman':
-            slot1_cooldown = skill_cooldowns.get('skill1', 1.0) if skill_cooldowns else 1.0
-            slot1_show_cd = True
-        elif char_type == 'archer':
-            if arrows <= 0:
-                slot1_cooldown = arrow_regen_cr
-                slot1_show_cd = True
-        elif char_type not in ('soldier',):
-            slot1_cooldown = skill_cooldowns.get('skill1', 1.0) if skill_cooldowns else 1.0
-            slot1_show_cd = 'skill1' in abilities and abilities['skill1'].get('cooldown', 0) > 1000
-
-        self._draw_slot(x_offset, y, slot_size, icons.get('slot1'),
-                        is_active=slot1_active,
-                        cooldown_ratio=slot1_cooldown,
-                        show_cooldown=slot1_show_cd,
-                        label='1')
-
-        if char_type == 'archer' and current_weapon in ('ranged', 'skill1'):
+        # --- Slot E (compétence E) ---
+        e_weapon = bindings.get('e')
+        e_cr = 1.0
+        e_show_cd = False
+        if e_weapon:
+            if e_weapon in abilities:
+                e_cr = skill_cooldowns.get(e_weapon, 1.0) if skill_cooldowns else 1.0
+                e_show_cd = True
+            elif e_weapon == 'ranged' and arrows <= 0:
+                e_cr = arrow_regen_cr
+                e_show_cd = True
+        self._draw_slot(x_offset, y, slot_size, icons.get('e'),
+                        is_active=False, cooldown_ratio=e_cr,
+                        show_cooldown=e_show_cd, label='E')
+        # Compteur de flèches pour le slot E (soldier/archer)
+        if e_weapon == 'ranged':
             self._draw_counter(x_offset, y, slot_size, arrows)
-
         x_offset += slot_size + gap
 
-        # Slot 2 (touche 2 / compétence)
-        if 'slot2' in icons:
-            if char_type == 'soldier':
-                self._draw_slot(x_offset, y, slot_size, icons.get('slot2'),
-                                is_active=(current_weapon == 'ranged'),
-                                cooldown_ratio=1.0, show_cooldown=False, label='2')
-                self._draw_counter(x_offset, y, slot_size, arrows)
-            elif char_type == 'archer':
-                cr = skill_cooldowns.get('skill1', 1.0) if skill_cooldowns else 1.0
-                self._draw_slot(x_offset, y, slot_size, icons.get('slot2'),
-                                is_active=(current_weapon == 'skill1'),
-                                cooldown_ratio=cr, show_cooldown=True, label='2')
+        # --- Slot 1 (compétence touche 1, si le personnage en a une) ---
+        skill_1_weapon = bindings.get('1')
+        if skill_1_weapon:
+            s1_cr = 1.0
+            s1_show_cd = False
+            if skill_1_weapon in abilities:
+                s1_cr = skill_cooldowns.get(skill_1_weapon, 1.0) if skill_cooldowns else 1.0
+                s1_show_cd = True
+            self._draw_slot(x_offset, y, slot_size, icons.get('1'),
+                            is_active=False, cooldown_ratio=s1_cr,
+                            show_cooldown=s1_show_cd, label='1')
+            x_offset += slot_size + gap
+
+        # --- Items d'inventaire (ordre de la liste) ---
+        from player import ACTIVE_ITEMS
+        key_counter = item_start_key
+        # Skip key 1 si déjà utilisé par skill_1
+        if skill_1_weapon and key_counter == 1:
+            key_counter = 2
+
+        cooldown_map = {
+            'boots': dash_cr, 'bluegem': blue_gem_cr,
+            'cursed_brand': cursed_brand_cr,
+        }
+
+        for item_type in inventory_items:
+            icon = self._get_item_icon(item_type)
+            if item_type in ACTIVE_ITEMS:
+                cr = cooldown_map.get(item_type, 1.0)
+                self._draw_slot(x_offset, y, slot_size, icon,
+                                is_active=False, cooldown_ratio=cr,
+                                show_cooldown=True, label=str(key_counter))
+                key_counter += 1
             else:
-                cr = skill_cooldowns.get('skill2', 1.0) if skill_cooldowns else 1.0
-                self._draw_slot(x_offset, y, slot_size, icons.get('slot2'),
-                                is_active=(current_weapon == 'skill2'),
-                                cooldown_ratio=cr, show_cooldown=True, label='2')
+                self._draw_slot(x_offset, y, slot_size, icon,
+                                is_active=False, cooldown_ratio=1.0,
+                                show_cooldown=False)
             x_offset += slot_size + gap
 
-        # --- Items d'inventaire : ACTIFS d'abord, PASSIFS ensuite ---
-        # Chaque item a : (present, icon, cooldown_ratio, show_cd, is_active_type)
-        # Compteur de touche commence à 3 pour les items actifs
-        key_counter = 3
+    def draw_inventory_screen(self, inventory_items, cursor_idx, grabbed,
+                              item_start_key=2, skill_1_exists=False):
+        """Dessine l'écran d'inventaire (overlay, le jeu continue derrière)."""
+        from player import ACTIVE_ITEMS
+        sw = self.screen.get_width()
+        sh = self.screen.get_height()
 
-        # Items ACTIFS (avec touche d'activation)
-        active_items = []
-        if has_boots:
-            active_items.append((self.boots_img, dash_cr, True))
-        if has_blue_gem:
-            active_items.append((self.bluegem_img, blue_gem_cr, True))
-        if has_cursed_brand:
-            active_items.append((self.cursed_brand_img, cursed_brand_cr, True))
+        # Overlay semi-transparent
+        overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 120))
+        self.screen.blit(overlay, (0, 0))
 
-        for icon, cr, show_cd in active_items:
-            self._draw_slot(x_offset, y, slot_size, icon,
-                            is_active=False, cooldown_ratio=cr,
-                            show_cooldown=show_cd, label=str(key_counter))
-            x_offset += slot_size + gap
-            key_counter += 1
+        # Panneau central
+        slot_size = 72
+        gap = 12
+        n = max(len(inventory_items), 1)
+        panel_w = n * slot_size + (n - 1) * gap + 40
+        panel_h = 140
+        px = (sw - panel_w) // 2
+        py = (sh - panel_h) // 2
 
-        # Items PASSIFS (pas de touche d'activation)
-        passive_items = []
-        if has_pickaxe:
-            passive_items.append(self.pickaxe_img)
-        if has_red_gem:
-            passive_items.append(self.redgem_img)
-        if has_mirror:
-            passive_items.append(self.mirror_img)
-        if has_kitsune_mask:
-            passive_items.append(self.kitsune_mask_img)
+        panel_bg = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+        panel_bg.fill((20, 20, 30, 220))
+        self.screen.blit(panel_bg, (px, py))
+        pygame.draw.rect(self.screen, (180, 150, 100), (px, py, panel_w, panel_h), 2, border_radius=6)
 
-        for icon in passive_items:
-            self._draw_slot(x_offset, y, slot_size, icon,
-                            is_active=False, cooldown_ratio=1.0, show_cooldown=False)
-            x_offset += slot_size + gap
+        # Titre
+        if not hasattr(self, '_inv_title_font'):
+            self._inv_title_font = pygame.font.SysFont(None, 28)
+        title = self._inv_title_font.render("INVENTAIRE", True, (255, 255, 240))
+        self.screen.blit(title, (px + panel_w // 2 - title.get_width() // 2, py + 8))
+
+        # Slots
+        key_counter = item_start_key
+        if skill_1_exists and key_counter == 1:
+            key_counter = 2
+        slot_y = py + 40
+        slot_x_start = px + 20
+
+        for i, item_type in enumerate(inventory_items):
+            sx = slot_x_start + i * (slot_size + gap)
+            icon = self._get_item_icon(item_type)
+
+            # Surbrillance du curseur
+            is_cursor = (i == cursor_idx)
+            is_grabbed_slot = (is_cursor and grabbed)
+
+            # Fond du slot
+            bg = pygame.Surface((slot_size, slot_size), pygame.SRCALPHA)
+            if is_grabbed_slot:
+                bg_color = (80, 60, 30, 230)
+            elif is_cursor:
+                bg_color = (60, 60, 80, 220)
+            else:
+                bg_color = (40, 40, 40, 180)
+            pygame.draw.rect(bg, bg_color, (0, 0, slot_size, slot_size), border_radius=5)
+            self.screen.blit(bg, (sx, slot_y))
+
+            # Bordure
+            if is_grabbed_slot:
+                border_color = (255, 200, 50)
+                pygame.draw.rect(self.screen, border_color, (sx, slot_y, slot_size, slot_size), 3, border_radius=5)
+            elif is_cursor:
+                border_color = (100, 200, 255)
+                pygame.draw.rect(self.screen, border_color, (sx, slot_y, slot_size, slot_size), 2, border_radius=5)
+            else:
+                pygame.draw.rect(self.screen, (150, 150, 150), (sx, slot_y, slot_size, slot_size), 1, border_radius=5)
+
+            # Icône
+            if icon:
+                scaled = pygame.transform.scale(icon, (slot_size - 8, slot_size - 8))
+                self.screen.blit(scaled, (sx + 4, slot_y + 4))
+
+            # Label de touche
+            if item_type in ACTIVE_ITEMS:
+                lbl = self._inv_title_font.render(str(key_counter), True, (200, 200, 200))
+                self.screen.blit(lbl, (sx + 4, slot_y + 2))
+                key_counter += 1
+
+        # Instructions en bas
+        if not hasattr(self, '_inv_help_font'):
+            self._inv_help_font = pygame.font.SysFont(None, 20)
+        help_text = "[E] Saisir   [Q/D] Deplacer   [Suppr] Jeter   [I/Echap] Fermer"
+        help_surf = self._inv_help_font.render(help_text, True, (180, 180, 180))
+        self.screen.blit(help_surf, (px + panel_w // 2 - help_surf.get_width() // 2,
+                                     py + panel_h - 25))
 
     def _draw_slot(self, x, y, size, icon, is_active=False, cooldown_ratio=1.0,
                    show_cooldown=False, label=None):

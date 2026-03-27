@@ -1418,20 +1418,16 @@ class Medusa(pygame.sprite.Sprite):
             width = 35
             height = 25
         else:
-            # Special : large zone AoE centrée sur Médusa
-            width = 80
-            height = 80
+            # Special : grande zone devant Médusa
+            width = 100
+            height = 60
 
         attack_rect = pygame.Rect(0, 0, width, height)
-        if attack_type == 'special':
-            # AoE centré sur Médusa
-            attack_rect.center = self.feet.center
+        if self.facing == 'right':
+            attack_rect.left = self.feet.left
         else:
-            if self.facing == 'right':
-                attack_rect.left = self.feet.centerx
-            else:
-                attack_rect.right = self.feet.centerx
-            attack_rect.centery = self.feet.centery
+            attack_rect.right = self.feet.right
+        attack_rect.centery = self.feet.centery
         return attack_rect
 
     def _choose_attack(self):

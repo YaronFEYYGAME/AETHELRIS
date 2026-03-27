@@ -995,7 +995,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                 player.inventory_swap(1)
                             else:
                                 player.inventory_cursor = min(len(player.inventory_items) - 1, player.inventory_cursor + 1)
-                        elif event.key == pygame.K_DELETE or event.key == pygame.K_x:
+                        elif event.key == pygame.K_a:
                             # Jeter l'item
                             if player.inventory_items and player.inventory_cursor < len(player.inventory_items):
                                 dropped_type = player.inventory_items[player.inventory_cursor]
@@ -1054,6 +1054,11 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                 if player.feet.colliderect(item.rect):
                                     if _pickup_item(player, item, sound_manager):
                                         item.kill()
+                                    else:
+                                        # Inventaire plein : texte flottant
+                                        ft = FloatingText(player.feet.centerx, player.feet.centery,
+                                                          text="Inventaire plein...")
+                                        group.add(ft); particles_group.add(ft)
                                     break
                             if player.has_pickaxe:
                                 for rock in list(rocks_group):
@@ -1096,7 +1101,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 if player2.health > 0:
                     for binding, inp_key in [('mouse', 'attack_mouse'),
                                               ('e', 'attack_e'),
-                                              ('1', 'attack_1')]:
+                                              ('1', 'attack_1'),
+                                              ('2', 'attack_2')]:
                         if net_inputs.get(inp_key):
                             res = player2.trigger_attack(binding)
                             if res:
@@ -1296,11 +1302,11 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             mouse_buttons = pygame.mouse.get_pressed()
             if player.health > 0 and not player.inventory_open:
                 # Clic gauche → attaque de base (mouse binding)
-                # E → compétence E
-                # 1 → compétence 1
+                # E → compétence E, 1 → compétence 1, 2 → compétence 2
                 for binding, pressed in [('mouse', mouse_buttons[0]),
                                           ('e', keys[pygame.K_e]),
-                                          ('1', keys[pygame.K_1])]:
+                                          ('1', keys[pygame.K_1]),
+                                          ('2', keys[pygame.K_2])]:
                     if pressed:
                         res = player.trigger_attack(binding)
                         if res:
@@ -2096,7 +2102,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 
         # Son d'attaque immédiat côté client — nouveau système de bindings
         mouse_buttons = pygame.mouse.get_pressed()
-        attacking_now = (mouse_buttons[0] or keys[pygame.K_e] or keys[pygame.K_1])
+        attacking_now = (mouse_buttons[0] or keys[pygame.K_e] or keys[pygame.K_1] or keys[pygame.K_2])
         if attacking_now and lp_now.get('health', 0) > 0:
             if not getattr(run_game_mp_client, '_client_attacking', False):
                 sound_manager.play_spatial('sword', client_listener, client_listener)
@@ -2131,6 +2137,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             'attack_mouse': bool(mouse_buttons[0]),
             'attack_e': bool(keys[pygame.K_e]),
             'attack_1': bool(keys[pygame.K_1]),
+            'attack_2': bool(keys[pygame.K_2]),
             'interact': bool(keys[pygame.K_f]),
             'dash':     dash_pressed,
             'gem_blue': gem_blue_pressed,

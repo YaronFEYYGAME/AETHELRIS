@@ -28,14 +28,15 @@ CHARACTER_DEFS = {
         'ranged_fire_frame': 6,
         'abilities': {},
         'icons': {
-            'e': 'assets/images/arc_icon.png',
+            'e': 'assets/images/sword_icon.png',
+            '1': 'assets/images/arc_icon.png',
         },
         'bindings': {
-            'mouse': 'melee',     # clic gauche → épée
-            'e': 'ranged',        # touche E → arc
-            '1': None,            # pas de compétence sur 1
+            'mouse': None,        # clic gauche → rien
+            'e': 'melee',         # touche E → épée
+            '1': 'ranged',        # touche 1 → arc
         },
-        'item_start_key': 1,     # items sur touches 1,2,3,4,5
+        'item_start_key': 2,     # items sur touches 2,3,4,5,6
         'projectile_img': 'assets/images/Arrow01(32x32).png',
     },
 

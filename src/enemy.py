@@ -1255,7 +1255,7 @@ class Medusa(pygame.sprite.Sprite):
 
     def __init__(self, x, y):
         super().__init__()
-        self.scale_factor = 3.5
+        self.scale_factor = 2.0
         self.animations = {'right': {}, 'left': {}}
         self.state = 'idle'
         self.frame_index = 0
@@ -1274,11 +1274,11 @@ class Medusa(pygame.sprite.Sprite):
         self.image = self.animations['right']['idle'][0]
         self.rect = self.image.get_rect()
 
-        hitbox_width = int(20 * self.scale_factor)
-        hitbox_height = int(12 * self.scale_factor)
+        hitbox_width = int(12 * self.scale_factor)
+        hitbox_height = int(7 * self.scale_factor)
         self.feet = pygame.Rect(0, 0, hitbox_width, hitbox_height)
 
-        self.y_offset = int(12 * self.scale_factor)
+        self.y_offset = int(7 * self.scale_factor)
 
         self.position = pygame.math.Vector2(x, y)
         self.feet.midbottom = (round(self.position.x), round(self.position.y))
@@ -1412,16 +1412,16 @@ class Medusa(pygame.sprite.Sprite):
         """Hitbox adaptée au type d'attaque."""
         if attack_type == 'attack1':
             # Attack_1 : large sweep
-            width = 100
-            height = 50
+            width = 58
+            height = 30
         elif attack_type == 'attack2':
             # Attack_2 : attaque plus courte
-            width = 70
-            height = 40
+            width = 40
+            height = 24
         else:
             # Special
-            width = 80
-            height = 50
+            width = 46
+            height = 30
 
         attack_rect = pygame.Rect(0, 0, width, height)
         if self.facing == 'right':
@@ -1769,8 +1769,8 @@ class RemoteEnemy(pygame.sprite.Sprite):
             ],
         },
         'medusa': {
-            'scale': 3.5,
-            'empty_below': 12 * 3.5,
+            'scale': 2.0,
+            'empty_below': 7 * 2.0,
             'anims': [
                 ('idle',    "assets/images/Medusa_boss/Idle.png",     7,  'strip'),
                 ('walk',    "assets/images/Medusa_boss/Walk.png",     13, 'strip'),

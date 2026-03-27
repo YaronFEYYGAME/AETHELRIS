@@ -803,7 +803,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
     is_paused  = False
     pause_rects = {}
     zoom_level = 3.8
-    DEBUG_HITBOXES = False
+    DEBUG_HITBOXES = True
 
     sound_manager.update_sfx_volume(global_sfx_vol)
     pygame.mixer.music.set_volume(global_music_vol)
@@ -1499,6 +1499,27 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             else: cam_y = max(view_h // 2, min(cam_y, map_pixel_height - view_h // 2))
             group.center((cam_x, cam_y))
             group.draw(screen)
+
+            # --- DEBUG HITBOXES ---
+            if DEBUG_HITBOXES:
+                draw_debug_rect(screen, player.feet, (0, 255, 0), cam_x, cam_y, zoom_level, screen_width, screen_height)
+                if player.is_attacking and player.current_weapon == 'melee':
+                    attack_rect = pygame.Rect(0, 0, 70, 70)
+                    attack_rect.center = player.feet.center
+                    draw_debug_rect(screen, attack_rect, (255, 255, 0), cam_x, cam_y, zoom_level, screen_width, screen_height)
+                if player2:
+                    draw_debug_rect(screen, player2.feet, (0, 200, 0), cam_x, cam_y, zoom_level, screen_width, screen_height)
+                for enemy in enemies_group:
+                    if hasattr(enemy, 'feet'):
+                        draw_debug_rect(screen, enemy.feet, (255, 0, 0), cam_x, cam_y, zoom_level, screen_width, screen_height)
+                    if getattr(enemy, 'is_attacking', False) and hasattr(enemy, 'get_attack_hitbox'):
+                        draw_debug_rect(screen, enemy.get_attack_hitbox(), (255, 165, 0), cam_x, cam_y, zoom_level, screen_width, screen_height)
+                for proj in projectiles_group:
+                    if hasattr(proj, 'hitbox'):
+                        draw_debug_rect(screen, proj.hitbox, (0, 0, 255), cam_x, cam_y, zoom_level, screen_width, screen_height)
+                for rock in rocks_group:
+                    if hasattr(rock, 'hitbox'):
+                        draw_debug_rect(screen, rock.hitbox, (0, 255, 255), cam_x, cam_y, zoom_level, screen_width, screen_height)
 
             # --- Marque Kitsune : griffe au-dessus des ennemis sous 40% PV ---
             if player.has_kitsune_mask:

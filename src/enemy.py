@@ -1255,7 +1255,7 @@ class Medusa(pygame.sprite.Sprite):
 
     def __init__(self, x, y):
         super().__init__()
-        self.scale_factor = 1.0
+        self.scale_factor = 0.5
         self.animations = {'right': {}, 'left': {}}
         self.state = 'idle'
         self.frame_index = 0
@@ -1274,11 +1274,11 @@ class Medusa(pygame.sprite.Sprite):
         self.image = self.animations['right']['idle'][0]
         self.rect = self.image.get_rect()
 
-        hitbox_width = 14
-        hitbox_height = 8
+        hitbox_width = 10
+        hitbox_height = 6
         self.feet = pygame.Rect(0, 0, hitbox_width, hitbox_height)
 
-        self.y_offset = 8
+        self.y_offset = 5
 
         self.position = pygame.math.Vector2(x, y)
         self.feet.midbottom = (round(self.position.x), round(self.position.y))
@@ -1413,15 +1413,15 @@ class Medusa(pygame.sprite.Sprite):
         if attack_type is None:
             attack_type = self.state if self.state in ('attack1', 'attack2', 'special') else 'attack1'
         if attack_type == 'attack1':
-            width = 30
-            height = 16
+            width = 20
+            height = 12
         elif attack_type == 'attack2':
-            width = 22
-            height = 14
+            width = 15
+            height = 10
         else:
             # Special
-            width = 26
-            height = 16
+            width = 18
+            height = 12
 
         attack_rect = pygame.Rect(0, 0, width, height)
         if self.facing == 'right':
@@ -1769,8 +1769,8 @@ class RemoteEnemy(pygame.sprite.Sprite):
             ],
         },
         'medusa': {
-            'scale': 1.0,
-            'empty_below': 8,
+            'scale': 0.5,
+            'empty_below': 5,
             'anims': [
                 ('idle',    "assets/images/Medusa_boss/Idle.png",     7,  'strip'),
                 ('walk',    "assets/images/Medusa_boss/Walk.png",     13, 'strip'),

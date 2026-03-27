@@ -1255,7 +1255,7 @@ class Medusa(pygame.sprite.Sprite):
 
     def __init__(self, x, y):
         super().__init__()
-        self.scale_factor = 2.0
+        self.scale_factor = 1.0
         self.animations = {'right': {}, 'left': {}}
         self.state = 'idle'
         self.frame_index = 0
@@ -1274,11 +1274,11 @@ class Medusa(pygame.sprite.Sprite):
         self.image = self.animations['right']['idle'][0]
         self.rect = self.image.get_rect()
 
-        hitbox_width = int(12 * self.scale_factor)
-        hitbox_height = int(7 * self.scale_factor)
+        hitbox_width = 14
+        hitbox_height = 8
         self.feet = pygame.Rect(0, 0, hitbox_width, hitbox_height)
 
-        self.y_offset = int(7 * self.scale_factor)
+        self.y_offset = 8
 
         self.position = pygame.math.Vector2(x, y)
         self.feet.midbottom = (round(self.position.x), round(self.position.y))
@@ -1408,20 +1408,20 @@ class Medusa(pygame.sprite.Sprite):
             return self.dialogue_lines[self.dialogue_index][0]
         return None
 
-    def get_attack_hitbox(self, attack_type='attack1'):
-        """Hitbox adaptée au type d'attaque."""
+    def get_attack_hitbox(self, attack_type=None):
+        """Hitbox adaptée au type d'attaque. Si None, utilise l'état courant."""
+        if attack_type is None:
+            attack_type = self.state if self.state in ('attack1', 'attack2', 'special') else 'attack1'
         if attack_type == 'attack1':
-            # Attack_1 : large sweep
-            width = 58
-            height = 30
+            width = 30
+            height = 16
         elif attack_type == 'attack2':
-            # Attack_2 : attaque plus courte
-            width = 40
-            height = 24
+            width = 22
+            height = 14
         else:
             # Special
-            width = 46
-            height = 30
+            width = 26
+            height = 16
 
         attack_rect = pygame.Rect(0, 0, width, height)
         if self.facing == 'right':
@@ -1769,8 +1769,8 @@ class RemoteEnemy(pygame.sprite.Sprite):
             ],
         },
         'medusa': {
-            'scale': 2.0,
-            'empty_below': 7 * 2.0,
+            'scale': 1.0,
+            'empty_below': 8,
             'anims': [
                 ('idle',    "assets/images/Medusa_boss/Idle.png",     7,  'strip'),
                 ('walk',    "assets/images/Medusa_boss/Walk.png",     13, 'strip'),

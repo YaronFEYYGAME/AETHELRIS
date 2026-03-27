@@ -45,7 +45,7 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
     pause_rects = {}
     
     # --- TOGGLE DEBUG DES HITBOXES ---
-    DEBUG_HITBOXES = True # Passe-le à False pour cacher les rectangles colorés !
+    DEBUG_HITBOXES = False
 
     sound_manager.update_sfx_volume(global_sfx_vol)
     pygame.mixer.music.set_volume(global_music_vol)
@@ -803,7 +803,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
     is_paused  = False
     pause_rects = {}
     zoom_level = 3.8
-    DEBUG_HITBOXES = True
+    DEBUG_HITBOXES = False
 
     sound_manager.update_sfx_volume(global_sfx_vol)
     pygame.mixer.music.set_volume(global_music_vol)

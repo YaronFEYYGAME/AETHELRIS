@@ -1255,7 +1255,7 @@ class Medusa(pygame.sprite.Sprite):
 
     def __init__(self, x, y):
         super().__init__()
-        self.scale_factor = 0.9
+        self.scale_factor = 1.0
         self.animations = {'right': {}, 'left': {}}
         self.state = 'idle'
         self.frame_index = 0
@@ -1769,7 +1769,7 @@ class RemoteEnemy(pygame.sprite.Sprite):
             ],
         },
         'medusa': {
-            'scale': 0.9,
+            'scale': 1.0,
             'empty_below': 8,
             'anims': [
                 ('idle',    "assets/images/Medusa_boss/Idle.png",     7,  'strip'),

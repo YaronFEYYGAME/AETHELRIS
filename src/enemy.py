@@ -58,6 +58,8 @@ class Enemy(pygame.sprite.Sprite):
         self.paralyzed = False
         self.paralyze_end_time = 0
         self._blue_cache = {}
+        self._gold_cache = {}
+        self._zhonya_gold = False
 
     def load_animation(self, state_name, path, num_frames):
         try:
@@ -98,6 +100,16 @@ class Enemy(pygame.sprite.Sprite):
         self._blue_cache[frame_id] = tinted
         return tinted
 
+    def _get_gold_tinted(self, frame):
+        """Retourne une version teintée en doré du frame, mise en cache."""
+        frame_id = id(frame)
+        if frame_id in self._gold_cache:
+            return self._gold_cache[frame_id]
+        tinted = frame.copy()
+        tinted.fill((255, 200, 50, 255), special_flags=pygame.BLEND_RGBA_MULT)
+        self._gold_cache[frame_id] = tinted
+        return tinted
+
     def damage(self, amount):
         if self.is_dead: return 
         
@@ -125,7 +137,10 @@ class Enemy(pygame.sprite.Sprite):
         # Paralysie : frame figée + teinte bleue
         if self.paralyzed:
             idx = max(0, min(int(self.frame_index), len(animation) - 1))
-            self.image = self._get_blue_tinted(animation[idx])
+            if self._zhonya_gold:
+                self.image = self._get_gold_tinted(animation[idx])
+            else:
+                self.image = self._get_blue_tinted(animation[idx])
             return
 
         speed = self.animation_speed
@@ -159,6 +174,7 @@ class Enemy(pygame.sprite.Sprite):
         if self.paralyzed:
             if pygame.time.get_ticks() >= self.paralyze_end_time:
                 self.paralyzed = False
+                self._zhonya_gold = False
             else:
                 self.current_velocity = pygame.math.Vector2(0, 0)
                 self.animate()
@@ -168,7 +184,7 @@ class Enemy(pygame.sprite.Sprite):
         my_center = pygame.math.Vector2(self.feet.center)
         target_vector = target_center - my_center
         distance = target_vector.length()
-        
+
         velocity_x, velocity_y = 0, 0
         hit_x, hit_y = False, False
 
@@ -322,6 +338,8 @@ class BigEnemy(pygame.sprite.Sprite):
         self.paralyzed = False
         self.paralyze_end_time = 0
         self._blue_cache = {}
+        self._gold_cache = {}
+        self._zhonya_gold = False
 
         # Sons gérés via pending_sounds → SpatialAudioManager dans game.py
         self.activation_played = False
@@ -402,6 +420,16 @@ class BigEnemy(pygame.sprite.Sprite):
         self._blue_cache[frame_id] = tinted
         return tinted
 
+    def _get_gold_tinted(self, frame):
+        """Retourne une version teintée en doré du frame, mise en cache."""
+        frame_id = id(frame)
+        if frame_id in self._gold_cache:
+            return self._gold_cache[frame_id]
+        tinted = frame.copy()
+        tinted.fill((255, 200, 50, 255), special_flags=pygame.BLEND_RGBA_MULT)
+        self._gold_cache[frame_id] = tinted
+        return tinted
+
     def update(self, player, walls):
         if self.state == 'death':
             self.animate()
@@ -411,6 +439,7 @@ class BigEnemy(pygame.sprite.Sprite):
         if self.paralyzed:
             if pygame.time.get_ticks() >= self.paralyze_end_time:
                 self.paralyzed = False
+                self._zhonya_gold = False
             else:
                 self.velocity.xy = 0, 0
                 self.animate()
@@ -619,7 +648,10 @@ class BigEnemy(pygame.sprite.Sprite):
         # Paralysie : frame figée + teinte bleue
         if self.paralyzed:
             idx = max(0, min(int(self.frame_index), len(animation) - 1))
-            self.image = self._get_blue_tinted(animation[idx])
+            if self._zhonya_gold:
+                self.image = self._get_gold_tinted(animation[idx])
+            else:
+                self.image = self._get_blue_tinted(animation[idx])
             return
 
         speed = self.animation_speed
@@ -708,6 +740,8 @@ class Spirit(pygame.sprite.Sprite):
         self.paralyzed = False
         self.paralyze_end_time = 0
         self._blue_cache = {}
+        self._gold_cache = {}
+        self._zhonya_gold = False
 
     def paralyze(self, duration_ms):
         self.paralyzed = True
@@ -720,6 +754,16 @@ class Spirit(pygame.sprite.Sprite):
         tinted = frame.copy()
         tinted.fill((100, 150, 255, 255), special_flags=pygame.BLEND_RGBA_MULT)
         self._blue_cache[frame_id] = tinted
+        return tinted
+
+    def _get_gold_tinted(self, frame):
+        """Retourne une version teintée en doré du frame, mise en cache."""
+        frame_id = id(frame)
+        if frame_id in self._gold_cache:
+            return self._gold_cache[frame_id]
+        tinted = frame.copy()
+        tinted.fill((255, 200, 50, 255), special_flags=pygame.BLEND_RGBA_MULT)
+        self._gold_cache[frame_id] = tinted
         return tinted
 
     def load_grid_animation(self, state_name, path, cols, rows, num_frames, scale_override=None):
@@ -773,6 +817,7 @@ class Spirit(pygame.sprite.Sprite):
         if self.paralyzed:
             if pygame.time.get_ticks() >= self.paralyze_end_time:
                 self.paralyzed = False
+                self._zhonya_gold = False
             else:
                 self.velocity.xy = 0, 0
                 self.animate()
@@ -822,7 +867,10 @@ class Spirit(pygame.sprite.Sprite):
         # Paralysie : frame figée + teinte bleue
         if self.paralyzed:
             idx = max(0, min(int(self.frame_index), len(animation) - 1))
-            self.image = self._get_blue_tinted(animation[idx])
+            if self._zhonya_gold:
+                self.image = self._get_gold_tinted(animation[idx])
+            else:
+                self.image = self._get_blue_tinted(animation[idx])
             self.rect.centerx = self.feet.centerx
             self.rect.bottom = self.feet.bottom + self.y_offset
             return
@@ -921,6 +969,8 @@ class Necromancer(pygame.sprite.Sprite):
         self.paralyzed = False
         self.paralyze_end_time = 0
         self._blue_cache = {}
+        self._gold_cache = {}
+        self._zhonya_gold = False
 
     def paralyze(self, duration_ms):
         if self.in_dialogue or not self.dialogue_finished:
@@ -935,6 +985,16 @@ class Necromancer(pygame.sprite.Sprite):
         tinted = frame.copy()
         tinted.fill((100, 150, 255, 255), special_flags=pygame.BLEND_RGBA_MULT)
         self._blue_cache[frame_id] = tinted
+        return tinted
+
+    def _get_gold_tinted(self, frame):
+        """Retourne une version teintée en doré du frame, mise en cache."""
+        frame_id = id(frame)
+        if frame_id in self._gold_cache:
+            return self._gold_cache[frame_id]
+        tinted = frame.copy()
+        tinted.fill((255, 200, 50, 255), special_flags=pygame.BLEND_RGBA_MULT)
+        self._gold_cache[frame_id] = tinted
         return tinted
 
     def load_grid_animation(self, state_name, path, cols, rows, num_frames):
@@ -997,6 +1057,7 @@ class Necromancer(pygame.sprite.Sprite):
         if self.paralyzed:
             if pygame.time.get_ticks() >= self.paralyze_end_time:
                 self.paralyzed = False
+                self._zhonya_gold = False
             else:
                 self.velocity.xy = 0, 0
                 self.animate()
@@ -1209,7 +1270,10 @@ class Necromancer(pygame.sprite.Sprite):
         # Paralysie : frame figée + teinte bleue
         if self.paralyzed:
             idx = max(0, min(int(self.frame_index), len(animation) - 1))
-            self.image = self._get_blue_tinted(animation[idx])
+            if self._zhonya_gold:
+                self.image = self._get_gold_tinted(animation[idx])
+            else:
+                self.image = self._get_blue_tinted(animation[idx])
             return
 
         speed = self.animation_speed
@@ -1346,6 +1410,8 @@ class Medusa(pygame.sprite.Sprite):
         self.paralyzed = False
         self.paralyze_end_time = 0
         self._blue_cache = {}
+        self._gold_cache = {}
+        self._zhonya_gold = False
 
     def load_animation(self, state_name, path, num_frames):
         try:
@@ -1379,6 +1445,16 @@ class Medusa(pygame.sprite.Sprite):
         tinted = frame.copy()
         tinted.fill((100, 150, 255, 255), special_flags=pygame.BLEND_RGBA_MULT)
         self._blue_cache[frame_id] = tinted
+        return tinted
+
+    def _get_gold_tinted(self, frame):
+        """Retourne une version teintée en doré du frame, mise en cache."""
+        frame_id = id(frame)
+        if frame_id in self._gold_cache:
+            return self._gold_cache[frame_id]
+        tinted = frame.copy()
+        tinted.fill((255, 200, 50, 255), special_flags=pygame.BLEND_RGBA_MULT)
+        self._gold_cache[frame_id] = tinted
         return tinted
 
     def damage(self, amount):
@@ -1451,6 +1527,7 @@ class Medusa(pygame.sprite.Sprite):
         if self.paralyzed:
             if pygame.time.get_ticks() >= self.paralyze_end_time:
                 self.paralyzed = False
+                self._zhonya_gold = False
             else:
                 self.velocity.xy = 0, 0
                 self.animate()
@@ -1698,7 +1775,10 @@ class Medusa(pygame.sprite.Sprite):
             else:
                 if pygame.time.get_ticks() - self.hit_time >= 150:
                     self._is_blinking = False
-                self.image = self._get_blue_tinted(base)
+                if self._zhonya_gold:
+                    self.image = self._get_gold_tinted(base)
+                else:
+                    self.image = self._get_blue_tinted(base)
             return
 
         speed = self.animation_speed

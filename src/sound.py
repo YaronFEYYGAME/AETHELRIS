@@ -70,6 +70,9 @@ class SoundManager:
         load_sound('time_stop', "assets/sounds/time_stop.wav")
         load_sound('return_time', "assets/sounds/return_time.wav")
 
+        # --- SON ZHONYA ---
+        load_sound('zhonya', "assets/sounds/zhonya.wav")
+
         self.base_volumes = {
             'step': 0.4,
             'equip_sword': 0.3,
@@ -91,6 +94,7 @@ class SoundManager:
             'boss_talk': 0.35,
             'time_stop': 0.7,
             'return_time': 0.6,
+            'zhonya': 0.6,
         }
 
         self.update_sfx_volume(0.8)

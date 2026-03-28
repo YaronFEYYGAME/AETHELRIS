@@ -1251,7 +1251,7 @@ class Medusa(pygame.sprite.Sprite):
     """Boss Médusa. Deux attaques de base + ultime avec stun et vol de vie."""
 
     SPRITE_DIR = "assets/images/Medusa_boss/"
-    RUN_DISTANCE_THRESHOLD = 100  # distance au-delà de laquelle elle court
+    RUN_DISTANCE_THRESHOLD = 150  # distance au-delà de laquelle elle court
 
     def __init__(self, x, y):
         super().__init__()
@@ -1301,7 +1301,7 @@ class Medusa(pygame.sprite.Sprite):
 
         self.is_attacking = False
         self.last_attack_time = 0
-        self.attack_cooldown = 900
+        self.attack_cooldown = 1100
         self._is_blinking = False
         self.hit_time = 0
 

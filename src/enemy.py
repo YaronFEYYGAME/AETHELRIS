@@ -2336,8 +2336,8 @@ class KingBoss(pygame.sprite.Sprite):
                 frames_right.append(frame)
                 frames_left.append(pygame.transform.flip(frame, True, False))
 
-            self.animations['right']['attack'] = frames_right
-            self.animations['left']['attack'] = frames_left
+            self.animations['right']['attack'] = frames_left
+            self.animations['left']['attack'] = frames_right
         except FileNotFoundError:
             print("Erreur: Attacks.png introuvable.")
 

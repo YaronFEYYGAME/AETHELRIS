@@ -1251,7 +1251,7 @@ class Medusa(pygame.sprite.Sprite):
     """Boss Médusa. Deux attaques de base + ultime avec stun et vol de vie."""
 
     SPRITE_DIR = "assets/images/Medusa_boss/"
-    RUN_DISTANCE_THRESHOLD = 200  # distance au-delà de laquelle elle court
+    RUN_DISTANCE_THRESHOLD = 100  # distance au-delà de laquelle elle court
 
     def __init__(self, x, y):
         super().__init__()
@@ -1301,7 +1301,7 @@ class Medusa(pygame.sprite.Sprite):
 
         self.is_attacking = False
         self.last_attack_time = 0
-        self.attack_cooldown = 1500
+        self.attack_cooldown = 900
         self._is_blinking = False
         self.hit_time = 0
 
@@ -1662,7 +1662,7 @@ class Medusa(pygame.sprite.Sprite):
         elif attack_state == 'attack2':
             return 3   # mi-animation des 7 frames
         elif attack_state == 'special':
-            return 3   # mi-animation des 5 frames
+            return 1   # tôt dans l'animation des 5 frames
         return 0
 
     def _get_red_tinted(self, frame):
@@ -1682,10 +1682,16 @@ class Medusa(pygame.sprite.Sprite):
     def animate(self):
         animation = self.animations[self.facing][self.state]
 
-        # Paralysie : frame figée + teinte bleue
+        # Paralysie : frame figée + teinte bleue (rouge prioritaire si blessure récente)
         if self.paralyzed:
             idx = max(0, min(int(self.frame_index), len(animation) - 1))
-            self.image = self._get_blue_tinted(animation[idx])
+            base = animation[idx]
+            if self._is_blinking and pygame.time.get_ticks() - self.hit_time < 150:
+                self.image = self._get_red_tinted(base)
+            else:
+                if pygame.time.get_ticks() - self.hit_time >= 150:
+                    self._is_blinking = False
+                self.image = self._get_blue_tinted(base)
             return
 
         speed = self.animation_speed
@@ -1699,6 +1705,9 @@ class Medusa(pygame.sprite.Sprite):
                 self.frame_index = len(animation) - 1
                 self._is_blinking = False
             elif self.state in ('attack1', 'attack2', 'special'):
+                if self.state == 'special':
+                    # Enchaînement immédiat après l'ultime
+                    self.last_attack_time = pygame.time.get_ticks() - self.attack_cooldown
                 self.is_attacking = False
                 self.state = 'idle'
                 self.frame_index = 0

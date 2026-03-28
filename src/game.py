@@ -154,6 +154,14 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                 new_item = Item(obj.x, obj.y, 'travelers_cap')
                 group.add(new_item)
                 items_group.add(new_item)
+            elif obj_type == "zhonya":
+                new_item = Item(obj.x, obj.y, 'zhonya')
+                group.add(new_item)
+                items_group.add(new_item)
+            elif obj_type == "rabadon":
+                new_item = Item(obj.x, obj.y, 'rabadon')
+                group.add(new_item)
+                items_group.add(new_item)
             elif obj_type == "obstacle_rock":
                 new_rock = Rock(obj.x, obj.y)
                 group.add(new_rock)
@@ -480,8 +488,9 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                         sound_manager.play_spatial('sword', ppos, ppos)
                         for enemy in enemies_group:
                             if getattr(enemy, 'health', 0) > 0 and data.colliderect(enemy.feet):
-                                enemy.damage(player.melee_damage)
-                                player.lifesteal(player.melee_damage)
+                                dmg = player.melee_damage * player.get_damage_multiplier(target_enemy=enemy)
+                                enemy.damage(dmg)
+                                player.lifesteal(dmg)
 
                                 if hasattr(enemy, 'pending_drop') and enemy.pending_drop:
                                     drop = Item(enemy.rect.centerx, enemy.rect.centery, enemy.pending_drop)
@@ -519,7 +528,8 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
 
                             hit_pos = (projectile.hitbox.centerx, projectile.hitbox.centery)
                             sound_manager.play_spatial('shot', hit_pos, ppos)
-                            enemy.damage(projectile.damage_amount)
+                            proj_dmg = projectile.damage_amount * player.get_damage_multiplier(target_enemy=enemy)
+                            enemy.damage(proj_dmg)
 
                             if hasattr(enemy, 'pending_drop') and enemy.pending_drop:
                                 drop = Item(enemy.rect.centerx, enemy.rect.centery, enemy.pending_drop)
@@ -725,6 +735,9 @@ def _serialize_player(p):
         'cursed_brand_triggered': getattr(p, 'cursed_brand_triggered', False),
         'has_travelers_cap': p.has_travelers_cap,
         'travelers_cap_cr': p.get_travelers_cap_cooldown_ratio(),
+        'has_zhonya':     p.has_zhonya,
+        'zhonya_cr':      p.get_zhonya_cooldown_ratio(),
+        'has_rabadon':    p.has_rabadon,
         'arrows':         p.arrows,
         'dash_cr':        dash_cr,
         'arrow_regen_cr': p.get_arrow_regen_cooldown_ratio(),
@@ -948,6 +961,10 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 it = Item(obj.x, obj.y, 'cursed_brand'); group.add(it); items_group.add(it)
             elif obj_type == "travelers_cap":
                 it = Item(obj.x, obj.y, 'travelers_cap'); group.add(it); items_group.add(it)
+            elif obj_type == "zhonya":
+                it = Item(obj.x, obj.y, 'zhonya'); group.add(it); items_group.add(it)
+            elif obj_type == "rabadon":
+                it = Item(obj.x, obj.y, 'rabadon'); group.add(it); items_group.add(it)
             elif obj_type == "obstacle_rock":
                 r = Rock(obj.x, obj.y); group.add(r); rocks_group.add(r); walls.append(r.hitbox)
 
@@ -1127,6 +1144,33 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                         sound_manager.enter_time_stop()
                                         sound_manager.play_ui_time_stop()
                                         sound_events.append({'sound': 'time_stop', 'x': player.feet.centerx, 'y': player.feet.centery})
+                                elif item_name == 'zhonya':
+                                    if player.activate_zhonya():
+                                        # Trouver l'ennemi le plus proche dans un rayon de 200
+                                        nearest_enemy = None
+                                        nearest_dist = float('inf')
+                                        px, py = player.feet.centerx, player.feet.centery
+                                        for e in enemies_group:
+                                            if getattr(e, 'health', 0) > 0 and not getattr(e, 'paralyzed', False):
+                                                ex, ey = e.feet.centerx, e.feet.centery
+                                                dist = ((px - ex) ** 2 + (py - ey) ** 2) ** 0.5
+                                                if dist <= 200 and dist < nearest_dist:
+                                                    nearest_dist = dist
+                                                    nearest_enemy = e
+                                        if nearest_enemy:
+                                            stun_dur = 1500 if isinstance(nearest_enemy, (BigEnemy, Necromancer, Medusa)) else 3000
+                                            nearest_enemy.paralyze(stun_dur)
+                                            nearest_enemy._zhonya_gold = True
+                                            e_pos = (nearest_enemy.feet.centerx, nearest_enemy.feet.centery)
+                                            host_pos = (player.feet.centerx, player.feet.centery)
+                                            sound_manager.play_spatial('zhonya', e_pos, host_pos)
+                                            sound_events.append({'sound': 'zhonya', 'x': e_pos[0], 'y': e_pos[1]})
+                                        else:
+                                            # Pas d'ennemi à portée : annuler le cooldown
+                                            player.last_zhonya_time = -20000
+                                            ft = FloatingText(player.feet.centerx, player.feet.centery,
+                                                              text="Aucun ennemi à portée")
+                                            group.add(ft); particles_group.add(ft)
                         if event.key == pygame.K_LSHIFT and player.has_boots:
                             if player.dash(walls):
                                 host_pos = (player.feet.centerx, player.feet.centery)
@@ -1240,6 +1284,28 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                         sound_manager.enter_time_stop()
                         sound_manager.play_ui_time_stop()
                         sound_events.append({'sound': 'time_stop', 'x': player2.feet.centerx, 'y': player2.feet.centery})
+                # Zhonya player2
+                if net_inputs.get('zhonya') and player2.has_zhonya:
+                    if player2.activate_zhonya():
+                        nearest_enemy = None
+                        nearest_dist = float('inf')
+                        p2x, p2y = player2.feet.centerx, player2.feet.centery
+                        for e in enemies_group:
+                            if getattr(e, 'health', 0) > 0 and not getattr(e, 'paralyzed', False):
+                                ex, ey = e.feet.centerx, e.feet.centery
+                                dist = ((p2x - ex) ** 2 + (p2y - ey) ** 2) ** 0.5
+                                if dist <= 200 and dist < nearest_dist:
+                                    nearest_dist = dist
+                                    nearest_enemy = e
+                        if nearest_enemy:
+                            stun_dur = 1500 if isinstance(nearest_enemy, (BigEnemy, Necromancer, Medusa)) else 3000
+                            nearest_enemy.paralyze(stun_dur)
+                            nearest_enemy._zhonya_gold = True
+                            e_pos = (nearest_enemy.feet.centerx, nearest_enemy.feet.centery)
+                            sound_manager.play_spatial('zhonya', e_pos, host_pos)
+                            sound_events.append({'sound': 'zhonya', 'x': e_pos[0], 'y': e_pos[1]})
+                        else:
+                            player2.last_zhonya_time = -20000
                 # Dash player2
                 if net_inputs.get('dash') and player2.has_boots:
                     if player2.dash(walls):
@@ -1666,6 +1732,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                   cursed_brand_cr=player.get_cursed_brand_cooldown_ratio(),
                                   arrow_regen_cr=player.get_arrow_regen_cooldown_ratio(),
                                   travelers_cap_cr=player.get_travelers_cap_cooldown_ratio(),
+                                  zhonya_cr=player.get_zhonya_cooldown_ratio(),
                                   item_start_key=player.char_def.get('item_start_key', 2))
             # Barre de vie player2 (en haut à droite)
             if player2:
@@ -2333,6 +2400,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         gem_blue_pressed = False
         cursed_brand_pressed = False
         travelers_cap_pressed = False
+        zhonya_pressed = False
         dash_pressed = bool(keys[pygame.K_LSHIFT])
         inv_items = lp_now.get('inventory_items', [])
         item_start = lp_now.get('item_start_key', 2)
@@ -2348,6 +2416,8 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                         cursed_brand_pressed = True
                     elif it == 'travelers_cap':
                         travelers_cap_pressed = True
+                    elif it == 'zhonya':
+                        zhonya_pressed = True
                 active_key += 1
 
         inputs = {
@@ -2364,6 +2434,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             'gem_blue': gem_blue_pressed,
             'cursed_brand': cursed_brand_pressed,
             'travelers_cap': travelers_cap_pressed,
+            'zhonya':   zhonya_pressed,
         }
         client.send_inputs(inputs)
 
@@ -2380,6 +2451,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                               cursed_brand_cr=lp_state.get('cursed_brand_cr', 1.0),
                               arrow_regen_cr=lp_state.get('arrow_regen_cr', 1.0),
                               travelers_cap_cr=lp_state.get('travelers_cap_cr', 1.0),
+                              zhonya_cr=lp_state.get('zhonya_cr', 1.0),
                               item_start_key=lp_state.get('item_start_key', 2))
 
         # Barre de vie du joueur hôte (en haut à droite)

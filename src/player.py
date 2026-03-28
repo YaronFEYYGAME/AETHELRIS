@@ -3,8 +3,8 @@ from projectile import Projectile
 from characters import get_character_def
 
 # Types d'items
-ACTIVE_ITEMS = {'boots', 'bluegem', 'cursed_brand', 'travelers_cap'}
-PASSIVE_ITEMS = {'pickaxe', 'redgem', 'mirror', 'kitsune_mask'}
+ACTIVE_ITEMS = {'boots', 'bluegem', 'cursed_brand', 'travelers_cap', 'zhonya'}
+PASSIVE_ITEMS = {'pickaxe', 'redgem', 'mirror', 'kitsune_mask', 'rabadon'}
 MAX_INVENTORY_ITEMS = 5
 
 
@@ -93,6 +93,14 @@ class Player(pygame.sprite.Sprite):
         self.has_travelers_cap = False
         self.travelers_cap_cooldown = 25000  # 25 secondes
         self.last_travelers_cap_time = -25000
+
+        # Sablier de Zhonya (stun ennemi le plus proche)
+        self.has_zhonya = False
+        self.zhonya_cooldown = 20000  # 20 secondes
+        self.last_zhonya_time = -20000
+
+        # Coiffe de Rabadon (bonus dégâts passif)
+        self.has_rabadon = False
 
         self.is_hit = False
         self.last_hit_time = 0
@@ -210,6 +218,7 @@ class Player(pygame.sprite.Sprite):
             'bluegem': 'has_blue_gem', 'pickaxe': 'has_pickaxe',
             'mirror': 'has_mirror', 'kitsune_mask': 'has_kitsune_mask',
             'cursed_brand': 'has_cursed_brand', 'travelers_cap': 'has_travelers_cap',
+            'zhonya': 'has_zhonya', 'rabadon': 'has_rabadon',
         }
         attr = flag_map.get(item_type)
         if attr:
@@ -725,10 +734,24 @@ class Player(pygame.sprite.Sprite):
         elapsed = pygame.time.get_ticks() - self.last_travelers_cap_time
         return min(1.0, max(0.0, elapsed / self.travelers_cap_cooldown))
 
+    def activate_zhonya(self):
+        """Active le Sablier de Zhonya. Retourne True si le cooldown est prêt."""
+        current_time = pygame.time.get_ticks()
+        if current_time - self.last_zhonya_time < self.zhonya_cooldown:
+            return False
+        self.last_zhonya_time = current_time
+        return True
+
+    def get_zhonya_cooldown_ratio(self):
+        elapsed = pygame.time.get_ticks() - self.last_zhonya_time
+        return min(1.0, max(0.0, elapsed / self.zhonya_cooldown))
+
     def get_damage_multiplier(self, target_enemy=None):
         """Retourne le multiplicateur de dégâts total.
-        Les bonus se multiplient entre eux : base × 1.5 (cursed) × 1.5 (kitsune)."""
+        Les bonus se multiplient entre eux : base × 1.25 (rabadon) × 1.5 (cursed) × 1.5 (kitsune)."""
         mult = 1.0
+        if self.has_rabadon:
+            mult *= 1.25
         if self.cursed_brand_active and pygame.time.get_ticks() < self.cursed_brand_end_time:
             mult *= 1.5
         if target_enemy and self.has_kitsune_mask:

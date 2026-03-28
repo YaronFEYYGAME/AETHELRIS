@@ -2426,10 +2426,16 @@ class KingBoss(pygame.sprite.Sprite):
         self._red_cache[frame_id] = tinted
         return tinted
 
-    def get_attack_hitbox(self):
-        """Hitbox d'attaque en arc devant le boss."""
-        range_attack = 35
-        width_attack = 30
+    def get_attack_hitbox(self, salve=1):
+        """Hitbox d'attaque en arc devant le boss, ajustée par salve."""
+        if salve <= 2:
+            # Salves 1 & 2 : faux proche du corps, portée courte
+            range_attack = 25
+            width_attack = 30
+        else:
+            # Salve 3 : grand arc final, portée longue mais étroit (centré sur la lame)
+            range_attack = 35
+            width_attack = 16
         attack_rect = pygame.Rect(0, 0, range_attack, width_attack)
         if self.facing == 'right':
             attack_rect.left = self.feet.right - 5
@@ -2577,14 +2583,17 @@ class KingBoss(pygame.sprite.Sprite):
             # 3 salves de dégâts aux frames 2, 4 et 6
             if current_frame in self._damage_frames and current_frame not in self._dealt_frames:
                 self._dealt_frames.add(current_frame)
+                # Salve 1=frame2, salve 2=frame4, salve 3=frame6
+                salve_num = {2: 1, 4: 2, 6: 3}[current_frame]
+                salve_dmg = 5 if salve_num <= 2 else 8  # salve 3 fait + de dégâts
                 self.pending_sounds.append('boss_attack')
-                attack_area = self.get_attack_hitbox()
+                attack_area = self.get_attack_hitbox(salve=salve_num)
                 # Dégâts au joueur 1
                 if player.health > 0 and attack_area.colliderect(player.feet.inflate(20, 20)):
-                    player.damage(self.damage_amount, source_enemy=self)
+                    player.damage(salve_dmg, source_enemy=self)
                 # Dégâts au joueur 2
                 if player2 and player2.health > 0 and attack_area.colliderect(player2.feet.inflate(20, 20)):
-                    player2.damage(self.damage_amount, source_enemy=self)
+                    player2.damage(salve_dmg, source_enemy=self)
         else:
             if target.health > 0:
                 if target.feet.centerx > self.feet.centerx:

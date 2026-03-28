@@ -1410,7 +1410,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                     paralyze_dur = getattr(proj, '_paralyze_duration', 0)
                                     if paralyze_dur and e.health > 0 and hasattr(e, 'paralyze'):
                                         # Boss : durée réduite à 1.5s
-                                        if isinstance(e, (BigEnemy, Necromancer)):
+                                        if isinstance(e, (BigEnemy, Necromancer, Medusa)):
                                             e.paralyze(paralyze_dur // 2)
                                         else:
                                             e.paralyze(paralyze_dur)
@@ -1624,18 +1624,15 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                     # Phase 3 : fade out (700-1000ms)
                     else:
                         alpha = int(255 * (1.0 - (elapsed_rg - 700) / 300.0))
-                    try:
-                        gem_img = pygame.image.load("assets/images/redgem.png").convert_alpha()
-                        gem_img = pygame.transform.scale(gem_img, (128, 128))
-                        gem_img.set_alpha(alpha)
-                        gem_rect = gem_img.get_rect(center=(screen_width // 2, screen_height // 2))
-                        # Flash rouge léger en fond
-                        overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
-                        overlay.fill((255, 50, 50, int(alpha * 0.4)))
-                        screen.blit(overlay, (0, 0))
-                        screen.blit(gem_img, gem_rect)
-                    except Exception:
-                        pass
+                    gem_base = _get_redgem_anim_img()
+                    gem_img = gem_base.copy()
+                    gem_img.set_alpha(alpha)
+                    gem_rect = gem_img.get_rect(center=(screen_width // 2, screen_height // 2))
+                    # Flash rouge léger en fond
+                    overlay = _get_overlay(screen_width, screen_height)
+                    overlay.fill((255, 50, 50, int(alpha * 0.4)))
+                    screen.blit(overlay, (0, 0))
+                    screen.blit(gem_img, gem_rect)
                 else:
                     red_gem_animating = False
 
@@ -1653,7 +1650,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                     mir_img = mir_base.copy()
                     mir_img.set_alpha(alpha)
                     mir_rect = mir_img.get_rect(center=(screen_width // 2, screen_height // 2))
-                    overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+                    overlay = _get_overlay(screen_width, screen_height)
                     overlay.fill((180, 180, 255, int(alpha * 0.3)))
                     screen.blit(overlay, (0, 0))
                     screen.blit(mir_img, mir_rect)
@@ -1670,17 +1667,14 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                         alpha = 255
                     else:
                         alpha = int(255 * (1.0 - (elapsed_cb - 500) / 300.0))
-                    try:
-                        cb_img = pygame.image.load("assets/images/cursed_brand.png").convert_alpha()
-                        cb_img = pygame.transform.scale(cb_img, (128, 128))
-                        cb_img.set_alpha(alpha)
-                        cb_rect = cb_img.get_rect(center=(screen_width // 2, screen_height // 2))
-                        overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
-                        overlay.fill((150, 50, 150, int(alpha * 0.3)))
-                        screen.blit(overlay, (0, 0))
-                        screen.blit(cb_img, cb_rect)
-                    except Exception:
-                        pass
+                    cb_base = _get_cursed_brand_anim_img()
+                    cb_img = cb_base.copy()
+                    cb_img.set_alpha(alpha)
+                    cb_rect = cb_img.get_rect(center=(screen_width // 2, screen_height // 2))
+                    overlay = _get_overlay(screen_width, screen_height)
+                    overlay.fill((150, 50, 150, int(alpha * 0.3)))
+                    screen.blit(overlay, (0, 0))
+                    screen.blit(cb_img, cb_rect)
                 else:
                     cursed_brand_animating = False
 
@@ -2262,17 +2256,14 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                     alpha = 255
                 else:
                     alpha = int(255 * (1.0 - (elapsed_rg - 700) / 300.0))
-                try:
-                    gem_img = pygame.image.load("assets/images/redgem.png").convert_alpha()
-                    gem_img = pygame.transform.scale(gem_img, (128, 128))
-                    gem_img.set_alpha(alpha)
-                    gem_rect = gem_img.get_rect(center=(screen_width // 2, screen_height // 2))
-                    overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
-                    overlay.fill((255, 50, 50, int(alpha * 0.4)))
-                    screen.blit(overlay, (0, 0))
-                    screen.blit(gem_img, gem_rect)
-                except Exception:
-                    pass
+                gem_base = _get_redgem_anim_img()
+                gem_img = gem_base.copy()
+                gem_img.set_alpha(alpha)
+                gem_rect = gem_img.get_rect(center=(screen_width // 2, screen_height // 2))
+                overlay = _get_overlay(screen_width, screen_height)
+                overlay.fill((255, 50, 50, int(alpha * 0.4)))
+                screen.blit(overlay, (0, 0))
+                screen.blit(gem_img, gem_rect)
             else:
                 client_red_gem_animating = False
 
@@ -2287,7 +2278,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 mir_img = mir_base.copy()
                 mir_img.set_alpha(alpha)
                 mir_rect = mir_img.get_rect(center=(screen_width // 2, screen_height // 2))
-                overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+                overlay = _get_overlay(screen_width, screen_height)
                 overlay.fill((180, 180, 255, int(alpha * 0.3)))
                 screen.blit(overlay, (0, 0))
                 screen.blit(mir_img, mir_rect)
@@ -2301,17 +2292,14 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 if elapsed_cb < 200: alpha = int(255 * (elapsed_cb / 200.0))
                 elif elapsed_cb < 500: alpha = 255
                 else: alpha = int(255 * (1.0 - (elapsed_cb - 500) / 300.0))
-                try:
-                    cb_img = pygame.image.load("assets/images/cursed_brand.png").convert_alpha()
-                    cb_img = pygame.transform.scale(cb_img, (128, 128))
-                    cb_img.set_alpha(alpha)
-                    cb_rect = cb_img.get_rect(center=(screen_width // 2, screen_height // 2))
-                    overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
-                    overlay.fill((150, 50, 150, int(alpha * 0.3)))
-                    screen.blit(overlay, (0, 0))
-                    screen.blit(cb_img, cb_rect)
-                except Exception:
-                    pass
+                cb_base = _get_cursed_brand_anim_img()
+                cb_img = cb_base.copy()
+                cb_img.set_alpha(alpha)
+                cb_rect = cb_img.get_rect(center=(screen_width // 2, screen_height // 2))
+                overlay = _get_overlay(screen_width, screen_height)
+                overlay.fill((150, 50, 150, int(alpha * 0.3)))
+                screen.blit(overlay, (0, 0))
+                screen.blit(cb_img, cb_rect)
             else:
                 run_game_mp_client._client_cb_animating = False
 
@@ -2338,6 +2326,41 @@ def _get_mirror_anim_img():
         except Exception:
             _mirror_anim_img = pygame.Surface((128, 128), pygame.SRCALPHA)
     return _mirror_anim_img
+
+_redgem_anim_img = None
+
+def _get_redgem_anim_img():
+    """Retourne l'image red gem mise en cache pour l'animation fullscreen."""
+    global _redgem_anim_img
+    if _redgem_anim_img is None:
+        try:
+            _redgem_anim_img = pygame.image.load("assets/images/redgem.png").convert_alpha()
+            _redgem_anim_img = pygame.transform.scale(_redgem_anim_img, (128, 128))
+        except Exception:
+            _redgem_anim_img = pygame.Surface((128, 128), pygame.SRCALPHA)
+    return _redgem_anim_img
+
+_cursed_brand_anim_img = None
+
+def _get_cursed_brand_anim_img():
+    """Retourne l'image cursed brand mise en cache pour l'animation fullscreen."""
+    global _cursed_brand_anim_img
+    if _cursed_brand_anim_img is None:
+        try:
+            _cursed_brand_anim_img = pygame.image.load("assets/images/cursed_brand.png").convert_alpha()
+            _cursed_brand_anim_img = pygame.transform.scale(_cursed_brand_anim_img, (128, 128))
+        except Exception:
+            _cursed_brand_anim_img = pygame.Surface((128, 128), pygame.SRCALPHA)
+    return _cursed_brand_anim_img
+
+_overlay_cache = {}
+
+def _get_overlay(width, height):
+    """Retourne une surface overlay SRCALPHA mise en cache pour la taille donnée."""
+    key = (width, height)
+    if key not in _overlay_cache:
+        _overlay_cache[key] = pygame.Surface((width, height), pygame.SRCALPHA)
+    return _overlay_cache[key]
 
 def _get_kitsune_mark(size):
     """Retourne la marque kitsune mise en cache pour une taille donnée."""

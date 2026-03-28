@@ -31,6 +31,7 @@ class SoundManager:
         self.sounds = {}
         self.global_sfx_vol = 0.8
         self._next_channel = 0          # round-robin pour les channels
+        self.time_stop_active = False    # bloque certains sons pendant l'arrêt du temps
 
         def load_sound(name, path):
             if not self.enabled:
@@ -93,6 +94,28 @@ class SoundManager:
         }
 
         self.update_sfx_volume(0.8)
+
+    # ------------------------------------------------------------------
+    # Arrêt du temps — pause / reprise globale
+    # ------------------------------------------------------------------
+    def enter_time_stop(self):
+        """Coupe TOUS les sons pour l'arrêt du temps :
+        - pygame.mixer.music en pause
+        - Tous les channels stoppés (one-shots + boucles)
+        """
+        self.time_stop_active = True
+        if not self.enabled:
+            return
+        pygame.mixer.music.pause()
+        pygame.mixer.stop()            # stoppe tous les channels d'un coup
+
+    def exit_time_stop(self):
+        """Reprend l'audio normal après l'arrêt du temps."""
+        self.time_stop_active = False
+        if not self.enabled:
+            return
+        pygame.mixer.music.unpause()
+        # Les boucles de pas redémarreront naturellement via la logique de jeu
 
     # ------------------------------------------------------------------
     # Volume global
@@ -223,7 +246,7 @@ class SoundManager:
 
     def play_remote_step(self, source_pos, listener_pos):
         """Démarre les pas du joueur distant sur un channel dédié (channel 30)."""
-        if not self.enabled or 'step' not in self.sounds:
+        if not self.enabled or 'step' not in self.sounds or self.time_stop_active:
             return
         ch = pygame.mixer.Channel(30)
         if not ch.get_busy():
@@ -232,7 +255,7 @@ class SoundManager:
 
     def update_remote_step_volume(self, source_pos, listener_pos):
         """Met à jour le volume spatial des pas distants (appeler chaque frame)."""
-        if not self.enabled:
+        if not self.enabled or self.time_stop_active:
             return
         ch = pygame.mixer.Channel(30)
         if not ch.get_busy():

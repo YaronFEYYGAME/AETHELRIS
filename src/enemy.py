@@ -2096,7 +2096,7 @@ class Fairy(pygame.sprite.Sprite):
     def __init__(self, x, y, fairy_type=1):
         super().__init__()
         self.fairy_type = fairy_type
-        self.scale_factor = 2.0
+        self.scale_factor = 1.5
         self.frame_index = 0
         self.animation_speed = 0.12
 
@@ -2199,7 +2199,7 @@ class KingBoss(pygame.sprite.Sprite):
 
     def __init__(self, x, y):
         super().__init__()
-        self.scale_factor = 3.5
+        self.scale_factor = 2.0
         self.animations = {'right': {}, 'left': {}}
         self.state = 'idle'
         self.frame_index = 0
@@ -2212,26 +2212,26 @@ class KingBoss(pygame.sprite.Sprite):
         self._load_grid_animation('health', self.SPRITE_DIR + "Health.png")
         self._load_grid_animation('pray',   self.SPRITE_DIR + "Pray.png")
 
-        # Attaque : 5 rangées de 8 frames — on utilise la rangée 0 (droite) et 2 (gauche)
+        # Attaque : 5 rangées de 8 frames — rangée 1 (droite) et rangée 2 (gauche)
         self._load_attack_animation()
 
         self.image = self.animations['right']['idle'][0]
         self.rect = self.image.get_rect()
 
-        hitbox_width = int(20 * self.scale_factor)
-        hitbox_height = int(12 * self.scale_factor)
+        hitbox_width = int(16 * self.scale_factor)
+        hitbox_height = int(10 * self.scale_factor)
         self.feet = pygame.Rect(0, 0, hitbox_width, hitbox_height)
 
-        self.y_offset = int(12 * self.scale_factor)
+        self.y_offset = int(8 * self.scale_factor)
 
         self.position = pygame.math.Vector2(x, y)
         self.feet.midbottom = (round(self.position.x), round(self.position.y))
         self.rect.centerx = self.feet.centerx
         self.rect.bottom = self.feet.bottom + self.y_offset
 
-        # Stats : 2× BigEnemy HP (390 × 2 = 780)
-        self.max_health = 780
-        self.health = 780
+        # Stats
+        self.max_health = 1200
+        self.health = 1200
         self.speed = 1.8  # même vitesse que BigEnemy
         self.damage_amount = 10
 
@@ -2320,24 +2320,23 @@ class KingBoss(pygame.sprite.Sprite):
             print(f"Erreur: Fichier {path} introuvable.")
 
     def _load_attack_animation(self):
-        """Charge l'attaque : 5 rangées × 8 colonnes. Rangée 0=droite, rangée 2=gauche."""
+        """Charge l'attaque : 5 rangées × 8 colonnes. Rangée 1=droite, rangée 2=gauche."""
         try:
             sheet = pygame.image.load(self.SPRITE_DIR + "Attacks.png").convert_alpha()
-            cols = 8
-            rows = 5
             nw = int(self.FRAME_W * self.scale_factor)
             nh = int(self.FRAME_H * self.scale_factor)
 
-            # Rangée 0 : attaque vers la droite
+            # Rangée 1 : attaque vers la droite
             frames_right = []
-            for c in range(cols):
-                frame = sheet.subsurface((c * self.FRAME_W, 0, self.FRAME_W, self.FRAME_H))
+            for c in range(8):
+                frame = sheet.subsurface((c * self.FRAME_W, 1 * self.FRAME_H,
+                                          self.FRAME_W, self.FRAME_H))
                 frame = pygame.transform.scale(frame, (nw, nh))
                 frames_right.append(frame)
 
             # Rangée 2 : attaque vers la gauche
             frames_left = []
-            for c in range(cols):
+            for c in range(8):
                 frame = sheet.subsurface((c * self.FRAME_W, 2 * self.FRAME_H,
                                           self.FRAME_W, self.FRAME_H))
                 frame = pygame.transform.scale(frame, (nw, nh))
@@ -2433,13 +2432,13 @@ class KingBoss(pygame.sprite.Sprite):
 
     def get_attack_hitbox(self):
         """Hitbox d'attaque en arc devant le boss."""
-        range_attack = 100
-        width_attack = 60
+        range_attack = 55
+        width_attack = 30
         attack_rect = pygame.Rect(0, 0, range_attack, width_attack)
         if self.facing == 'right':
-            attack_rect.left = self.feet.right - 10
+            attack_rect.left = self.feet.right - 5
         else:
-            attack_rect.right = self.feet.left + 10
+            attack_rect.right = self.feet.left + 5
         attack_rect.centery = self.feet.centery
         return attack_rect
 

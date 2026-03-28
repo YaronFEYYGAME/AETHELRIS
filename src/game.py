@@ -531,8 +531,9 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                 for enemy in enemies_group:
                     if getattr(enemy, 'health', 0) > 0:
                         body_hitbox = enemy.feet.copy()
-                        body_hitbox.height += 25
-                        body_hitbox.y -= 25
+                        ext = 50 if isinstance(enemy, (BigEnemy, Necromancer, Medusa, KingBoss)) else 25
+                        body_hitbox.height += ext
+                        body_hitbox.y -= ext
                         if projectile.hitbox.colliderect(body_hitbox):
                             # Piercing : skip les ennemis déjà touchés
                             if getattr(projectile, 'piercing', False):
@@ -1683,7 +1684,9 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                     continue
                 for e in list(enemies_group):
                     if getattr(e, 'health', 0) > 0:
-                        body = e.feet.copy(); body.height += 25; body.y -= 25
+                        body = e.feet.copy()
+                        ext = 50 if isinstance(e, (BigEnemy, Necromancer, Medusa, KingBoss)) else 25
+                        body.height += ext; body.y -= ext
                         if proj.hitbox.colliderect(body):
                             # Piercing : skip les ennemis déjà touchés
                             if getattr(proj, 'piercing', False):

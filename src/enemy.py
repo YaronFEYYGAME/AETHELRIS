@@ -311,6 +311,7 @@ class BigEnemy(pygame.sprite.Sprite):
         self.last_attack_time = 0
         self.attack_cooldown = 1500
         self._is_blinking = False
+        self.hit_time = 0
 
         self.slide_dir_x = 1
         self.slide_dir_y = 1
@@ -372,9 +373,10 @@ class BigEnemy(pygame.sprite.Sprite):
     def damage(self, amount):
         if self.in_dialogue or self.invulnerable:
             return
-        if self.health > 0 and self.state != 'hit':
+        if self.health > 0 and self.state != 'death':
             self.health -= amount
             self._is_blinking = True
+            self.hit_time = pygame.time.get_ticks()
 
             if self.health <= 0:
                 self.health = 0
@@ -383,7 +385,7 @@ class BigEnemy(pygame.sprite.Sprite):
                 self.is_attacking = False
                 self.velocity.xy = 0, 0
                 self._is_blinking = False
-                
+
                 if not self.death_sound_played:
                     self.death_sound_played = True
                     self.pending_sounds.append('boss_death')
@@ -391,11 +393,6 @@ class BigEnemy(pygame.sprite.Sprite):
                 if self.bgm_playing:
                     self.bgm_playing = False
                     self.pending_sounds.append('boss_bgm_stop')
-            else:
-                self.state = 'hit'
-                self.frame_index = 0
-                self.is_attacking = False 
-                self.velocity.xy = 0, 0
 
     def get_current_dialogue(self):
         """Retourne le texte de la ligne de dialogue en cours, ou None."""
@@ -428,6 +425,20 @@ class BigEnemy(pygame.sprite.Sprite):
         tinted = frame.copy()
         tinted.fill((255, 200, 50, 255), special_flags=pygame.BLEND_RGBA_MULT)
         self._gold_cache[frame_id] = tinted
+        return tinted
+
+    def _get_red_tinted(self, frame):
+        """Retourne une version teintée en rouge du frame, mise en cache."""
+        frame_id = id(frame)
+        if not hasattr(self, '_red_cache'):
+            self._red_cache = {}
+        if frame_id in self._red_cache:
+            return self._red_cache[frame_id]
+        tinted = frame.copy()
+        mask = pygame.mask.from_surface(tinted)
+        red_overlay = mask.to_surface(setcolor=(255, 0, 0, 150), unsetcolor=(0, 0, 0, 0))
+        tinted.blit(red_overlay, (0, 0))
+        self._red_cache[frame_id] = tinted
         return tinted
 
     def update(self, player, walls):
@@ -509,10 +520,7 @@ class BigEnemy(pygame.sprite.Sprite):
         hit_y = False
         norm_dir = pygame.math.Vector2(0, 0)
 
-        if self.state == 'hit':
-            self.velocity.xy = 0, 0 
-        
-        elif self.is_attacking:
+        if self.is_attacking:
             self.velocity.xy = 0, 0 
             current_frame = int(self.frame_index)
             
@@ -645,27 +653,29 @@ class BigEnemy(pygame.sprite.Sprite):
     def animate(self):
         animation = self.animations[self.facing][self.state]
 
-        # Paralysie : frame figée + teinte bleue
+        # Paralysie : frame figée + teinte (rouge prioritaire si blessure récente)
         if self.paralyzed:
             idx = max(0, min(int(self.frame_index), len(animation) - 1))
-            if self._zhonya_gold:
-                self.image = self._get_gold_tinted(animation[idx])
+            base = animation[idx]
+            if self._is_blinking and pygame.time.get_ticks() - self.hit_time < 150:
+                self.image = self._get_red_tinted(base)
             else:
-                self.image = self._get_blue_tinted(animation[idx])
+                if pygame.time.get_ticks() - self.hit_time >= 150:
+                    self._is_blinking = False
+                if self._zhonya_gold:
+                    self.image = self._get_gold_tinted(base)
+                else:
+                    self.image = self._get_blue_tinted(base)
             return
 
         speed = self.animation_speed
-        if self.state in ['hit', 'death']: speed = 0.1
+        if self.state == 'death': speed = 0.1
 
         self.frame_index += speed
 
         if self.frame_index >= len(animation):
             if self.state == 'death':
                 self.frame_index = len(animation) - 1
-                self._is_blinking = False
-            elif self.state == 'hit':
-                self.state = 'idle'
-                self.frame_index = 0
                 self._is_blinking = False
             elif self.state == 'attack':
                 self.is_attacking = False
@@ -675,15 +685,19 @@ class BigEnemy(pygame.sprite.Sprite):
                 self.frame_index = 0
 
         animation = self.animations[self.facing][self.state]
-        self.image = animation[int(self.frame_index)].copy()
+        base_frame = animation[int(self.frame_index)]
 
         if self.state == 'death':
             self._is_blinking = False
 
-        if self.state == 'hit' or self._is_blinking:
-            mask = pygame.mask.from_surface(self.image)
-            red_overlay = mask.to_surface(setcolor=(255, 0, 0, 150), unsetcolor=(0, 0, 0, 0))
-            self.image.blit(red_overlay, (0, 0))
+        if self._is_blinking:
+            if pygame.time.get_ticks() - self.hit_time < 150:
+                self.image = self._get_red_tinted(base_frame)
+            else:
+                self._is_blinking = False
+                self.image = base_frame.copy()
+        else:
+            self.image = base_frame.copy()
 
     def update_volumes(self, music_vol, sfx_vol):
         # Sons gérés via pending_sounds → SpatialAudioManager, rien à ajuster ici

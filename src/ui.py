@@ -1,4 +1,5 @@
 import pygame
+import math
 from characters import CHARACTER_DEFS
 
 
@@ -87,10 +88,10 @@ class UI:
             self.travelers_cap_img = pygame.transform.scale(self.travelers_cap_img, (64, 64))
 
             self.zhonya_img = pygame.image.load("assets/images/zhonya.png").convert_alpha()
-            self.zhonya_img = pygame.transform.scale(self.zhonya_img, (64, 64))
+            self.zhonya_img = pygame.transform.scale(self.zhonya_img, (52, 52))
 
             self.rabadon_img = pygame.image.load("assets/images/rabadon.png").convert_alpha()
-            self.rabadon_img = pygame.transform.scale(self.rabadon_img, (64, 64))
+            self.rabadon_img = pygame.transform.scale(self.rabadon_img, (52, 52))
         except FileNotFoundError:
             self.sword_img = pygame.Surface((64, 64)); self.sword_img.fill((200, 200, 200))
             self.bow_img = pygame.Surface((64, 64)); self.bow_img.fill((150, 100, 50))
@@ -102,8 +103,8 @@ class UI:
             self.kitsune_mask_img = pygame.Surface((64, 64)); self.kitsune_mask_img.fill((220, 150, 50))
             self.cursed_brand_img = pygame.Surface((64, 64)); self.cursed_brand_img.fill((150, 50, 150))
             self.travelers_cap_img = pygame.Surface((64, 64)); self.travelers_cap_img.fill((100, 50, 150))
-            self.zhonya_img = pygame.Surface((64, 64)); self.zhonya_img.fill((200, 180, 50))
-            self.rabadon_img = pygame.Surface((64, 64)); self.rabadon_img.fill((80, 0, 160))
+            self.zhonya_img = pygame.Surface((52, 52)); self.zhonya_img.fill((200, 180, 50))
+            self.rabadon_img = pygame.Surface((52, 52)); self.rabadon_img.fill((80, 0, 160))
 
     def load_character_icons(self, char_type):
         """Charge les icônes spécifiques à un personnage."""
@@ -375,7 +376,7 @@ class UI:
 
     def _draw_slot(self, x, y, size, icon, is_active=False, cooldown_ratio=1.0,
                    show_cooldown=False, label=None):
-        """Dessine un slot d'inventaire avec cooldown optionnel."""
+        """Dessine un slot d'inventaire avec cooldown optionnel (cercle horaire)."""
         # Fond
         bg_surface = pygame.Surface((size, size), pygame.SRCALPHA)
         bg_color = (50, 50, 60, 200) if is_active else (40, 40, 40, 180)
@@ -389,25 +390,61 @@ class UI:
         if icon is None:
             return
 
+        # Centrer l'icône dans le slot
+        ix = x + (size - icon.get_width()) // 2
+        iy = y + (size - icon.get_height()) // 2
+
         if show_cooldown and cooldown_ratio < 1.0:
             # Icône assombrie
             dark_img = icon.copy()
             dark_img.fill((60, 60, 60, 255), special_flags=pygame.BLEND_RGBA_MULT)
-            self.screen.blit(dark_img, (x, y))
+            self.screen.blit(dark_img, (ix, iy))
 
-            # Remplissage progressif de bas en haut
-            fill_height = int(size * cooldown_ratio)
-            if fill_height > 0:
-                crop_rect = pygame.Rect(0, size - fill_height, size, fill_height)
-                self.screen.blit(icon, (x, y + size - fill_height), area=crop_rect)
+            # Cercle de progression horaire par-dessus
+            if cooldown_ratio > 0.0:
+                self._draw_cooldown_arc(x, y, size, cooldown_ratio)
         else:
-            self.screen.blit(icon, (x, y))
+            self.screen.blit(icon, (ix, iy))
 
         # Label de touche
         if label:
             lbl_font = pygame.font.SysFont(None, 18)
             lbl_surf = lbl_font.render(label, True, (200, 200, 200))
             self.screen.blit(lbl_surf, (x + 3, y + 2))
+
+    def _draw_cooldown_arc(self, x, y, size, ratio):
+        """Dessine un arc de cercle horaire semi-transparent indiquant la progression du cooldown."""
+        cx = x + size // 2
+        cy = y + size // 2
+        radius = size // 2 - 4
+
+        # Angle de départ : midi (−90°), sens horaire
+        start_angle_deg = 90  # pygame mesure en sens trigo, 90° = midi
+        sweep_deg = ratio * 360
+
+        # Dessiner l'arc avec des segments de polygone pour un rendu propre
+        overlay = pygame.Surface((size, size), pygame.SRCALPHA)
+        local_cx = size // 2
+        local_cy = size // 2
+
+        num_segments = max(8, int(sweep_deg / 4))
+        points = [(local_cx, local_cy)]
+
+        for i in range(num_segments + 1):
+            angle_deg = start_angle_deg - (sweep_deg * i / num_segments)
+            angle_rad = math.radians(angle_deg)
+            px = local_cx + radius * math.cos(angle_rad)
+            py = local_cy - radius * math.sin(angle_rad)
+            points.append((px, py))
+
+        if len(points) >= 3:
+            pygame.draw.polygon(overlay, (255, 255, 200, 80), points)
+            # Contour de l'arc
+            arc_points = points[1:]  # sans le centre
+            if len(arc_points) >= 2:
+                pygame.draw.lines(overlay, (255, 255, 200, 180), False, arc_points, 2)
+
+        self.screen.blit(overlay, (x, y))
 
     def _draw_counter(self, x, y, size, count):
         """Dessine un compteur (flèches) en bas à droite du slot."""
@@ -450,21 +487,8 @@ class UI:
 
     def draw_boots_icon(self, has_boots, cooldown_ratio):
         if not has_boots: return
-        x, y = 95, 50
-        bg_surface = pygame.Surface((64, 64), pygame.SRCALPHA)
-        pygame.draw.rect(bg_surface, (40, 40, 40, 180), (0, 0, 64, 64), border_radius=5)
-        self.screen.blit(bg_surface, (x, y))
-        pygame.draw.rect(self.screen, (200, 200, 200), (x, y, 64, 64), 2, border_radius=5)
-        if cooldown_ratio >= 1.0:
-            self.screen.blit(self.boots_img, (x, y))
-        else:
-            dark_img = self.boots_img.copy()
-            dark_img.fill((60, 60, 60, 255), special_flags=pygame.BLEND_RGBA_MULT)
-            self.screen.blit(dark_img, (x, y))
-            fill_height = int(64 * cooldown_ratio)
-            if fill_height > 0:
-                crop_rect = pygame.Rect(0, 64 - fill_height, 64, fill_height)
-                self.screen.blit(self.boots_img, (x, y + 64 - fill_height), area=crop_rect)
+        self._draw_slot(95, 50, 64, self.boots_img, cooldown_ratio=cooldown_ratio,
+                        show_cooldown=True)
 
     def draw_boss_dialogue(self, text, boss_name=None):
         """Boîte de dialogue RPG en bas de l'écran pour les dialogues de boss.

@@ -1158,7 +1158,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                                     nearest_dist = dist
                                                     nearest_enemy = e
                                         if nearest_enemy:
-                                            stun_dur = 1500 if isinstance(nearest_enemy, (BigEnemy, Necromancer, Medusa)) else 3000
+                                            stun_dur = 3000
                                             nearest_enemy.paralyze(stun_dur)
                                             nearest_enemy._zhonya_gold = True
                                             e_pos = (nearest_enemy.feet.centerx, nearest_enemy.feet.centery)

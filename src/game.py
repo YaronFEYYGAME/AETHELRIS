@@ -5,7 +5,7 @@ import random
 
 from player import Player, RemotePlayer
 from sound import SoundManager
-from enemy import Enemy, BigEnemy, Necromancer, Spirit, Medusa, RemoteEnemy
+from enemy import Enemy, BigEnemy, Necromancer, Spirit, Medusa, RemoteEnemy, Fairy, KingBoss
 from ui import UI
 from item import Item
 from projectile import Projectile, HomingProjectile, HealEffect, InstantAOE, FloatingText
@@ -449,6 +449,20 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                                     pygame.mixer.music.play(-1)
                                 except Exception:
                                     pass
+                            elif bs == 'medusa_bgm_start':
+                                try:
+                                    pygame.mixer.music.load("assets/sounds/medusa_ost.mp3")
+                                    pygame.mixer.music.set_volume(global_music_vol)
+                                    pygame.mixer.music.play(-1)
+                                except Exception:
+                                    pass
+                            elif bs == 'king_bgm_start':
+                                try:
+                                    pygame.mixer.music.load("assets/sounds/king_boss_ost.mp3")
+                                    pygame.mixer.music.set_volume(global_music_vol)
+                                    pygame.mixer.music.play(-1)
+                                except Exception:
+                                    pass
                             elif bs == 'boss_bgm_stop':
                                 try:
                                     pygame.mixer.music.fadeout(4000)
@@ -752,6 +766,8 @@ def _serialize_player(p):
 def _serialize_enemy(e):
     if isinstance(e, Medusa):
         etype = 'medusa'
+    elif isinstance(e, KingBoss):
+        etype = 'king'
     elif isinstance(e, Necromancer):
         etype = 'necromancer'
     elif isinstance(e, BigEnemy):
@@ -910,6 +926,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
         items_group       = pygame.sprite.Group()
         rocks_group       = pygame.sprite.Group()
         particles_group   = pygame.sprite.Group()
+        fairies_group     = pygame.sprite.Group()
         walls = []
         exit_zones = []
         player_x, player_y = 100, 100
@@ -965,6 +982,14 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 it = Item(obj.x, obj.y, 'zhonya'); group.add(it); items_group.add(it)
             elif obj_type == "rabadon":
                 it = Item(obj.x, obj.y, 'rabadon'); group.add(it); items_group.add(it)
+            elif obj_type == "king_boss":
+                kb = KingBoss(obj.x, obj.y); group.add(kb); enemies_group.add(kb)
+            elif obj_type == "fee_1":
+                f = Fairy(obj.x, obj.y, 1); group.add(f); fairies_group.add(f)
+            elif obj_type == "fee_2":
+                f = Fairy(obj.x, obj.y, 2); group.add(f); fairies_group.add(f)
+            elif obj_type == "fee_3":
+                f = Fairy(obj.x, obj.y, 3); group.add(f); fairies_group.add(f)
             elif obj_type == "obstacle_rock":
                 r = Rock(obj.x, obj.y); group.add(r); rocks_group.add(r); walls.append(r.hitbox)
 
@@ -1101,6 +1126,17 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                 if not player.inventory_items:
                                     player.inventory_open = False
                         continue
+                    # Skip dialogue avec Entrée (boss + fées)
+                    if event.key == pygame.K_RETURN and not is_paused:
+                        skipped = False
+                        for enemy in enemies_group:
+                            if hasattr(enemy, 'skip_dialogue') and enemy.skip_dialogue():
+                                skipped = True; break
+                        if not skipped:
+                            for fairy in fairies_group:
+                                if fairy.skip_dialogue():
+                                    break
+
                     if not is_paused and player.health > 0 and not player.is_stunned:
                         if event.key == pygame.K_a and can_exit:
                             player_health  = player.health
@@ -1208,6 +1244,11 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                         pygame.time.set_timer(EUREKA_EVENT, 250, 1)
                                         sound_events.append({'sound': 'eureka', 'x': rx, 'y': ry})
                                         break
+                            # Interaction fée (host)
+                            for fairy in fairies_group:
+                                if player.feet.colliderect(fairy.rect.inflate(30, 30)):
+                                    fairy.interact(player, 0)
+                                    break
 
             if not level_running:
                 continue
@@ -1306,6 +1347,16 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                             sound_events.append({'sound': 'zhonya', 'x': e_pos[0], 'y': e_pos[1]})
                         else:
                             player2.last_zhonya_time = -20000
+                # Skip dialogue (client)
+                if net_inputs.get('skip_dialogue'):
+                    skipped = False
+                    for enemy in enemies_group:
+                        if hasattr(enemy, 'skip_dialogue') and enemy.skip_dialogue():
+                            skipped = True; break
+                    if not skipped:
+                        for fairy in fairies_group:
+                            if fairy.skip_dialogue():
+                                break
                 # Dash player2
                 if net_inputs.get('dash') and player2.has_boots:
                     if player2.dash(walls):
@@ -1340,6 +1391,11 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                 pygame.time.set_timer(EUREKA_EVENT, 250, 1)
                                 sound_events.append({'sound': 'eureka', 'x': rx, 'y': ry})
                                 break
+                    # Interaction fée (client)
+                    for fairy in fairies_group:
+                        if player2.feet.colliderect(fairy.rect.inflate(30, 30)):
+                            fairy.interact(player2, 1)
+                            break
 
                 # Drop items player2
                 if net_inputs.get('drop_item'):
@@ -1424,7 +1480,18 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 if isinstance(e, Spirit):
                     spirit_pos = (e.rect.centerx, e.rect.centery)
 
-                e.update(target, walls)
+                if isinstance(e, KingBoss):
+                    e.update(target, walls, player2=player2 if not solo_mode else None)
+                else:
+                    e.update(target, walls)
+
+                # KingBoss : stun global
+                if isinstance(e, KingBoss) and e.pending_global_stun:
+                    e.pending_global_stun = False
+                    if player.health > 0:
+                        player.apply_stun(3000)
+                    if player2 and player2.health > 0:
+                        player2.apply_stun(3000)
 
                 # Spirit qui a explosé/mort : particules rouges
                 if isinstance(e, Spirit) and getattr(e, 'pending_particles', False):
@@ -1433,7 +1500,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                             p = BloodParticle(spirit_pos[0], spirit_pos[1])
                             group.add(p); particles_group.add(p)
                 # Dégâts sur le joueur non-ciblé (boss avec get_attack_hitbox)
-                if player2:
+                # KingBoss gère les 2 joueurs dans son update, pas besoin ici
+                if player2 and not isinstance(e, KingBoss):
                     other = player2 if target is player else player
                     if hasattr(e, 'get_attack_hitbox') and getattr(e, 'is_attacking', False) and other.health > 0:
                         atk = e.get_attack_hitbox()
@@ -1474,6 +1542,20 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                     pygame.mixer.music.play(-1)
                                 except Exception:
                                     pass
+                            elif bs == 'medusa_bgm_start':
+                                try:
+                                    pygame.mixer.music.load("assets/sounds/medusa_ost.mp3")
+                                    pygame.mixer.music.set_volume(global_music_vol)
+                                    pygame.mixer.music.play(-1)
+                                except Exception:
+                                    pass
+                            elif bs == 'king_bgm_start':
+                                try:
+                                    pygame.mixer.music.load("assets/sounds/king_boss_ost.mp3")
+                                    pygame.mixer.music.set_volume(global_music_vol)
+                                    pygame.mixer.music.play(-1)
+                                except Exception:
+                                    pass
                             elif bs == 'boss_bgm_stop':
                                 try:
                                     pygame.mixer.music.fadeout(4000)
@@ -1489,6 +1571,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
 
               projectiles_group.update()
             particles_group.update()
+            fairies_group.update()
 
             # --- Attaque locale (serveur) — nouveau système de bindings ---
             keys = pygame.key.get_pressed()
@@ -1717,6 +1800,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                         ex = (e.rect.centerx - cam_x) * zoom_level + screen_width / 2
                         ey = (e.feet.top + 5 - cam_y) * zoom_level + screen_height / 2
                         mark_size = max(36, int(max(e.rect.width, e.rect.height) * 0.6))
+                        if isinstance(e, Medusa):
+                            mark_size = max(mark_size, 120)
                         mark = _get_kitsune_mark(mark_size)
                         screen.blit(mark, (ex - mark_size // 2, ey - mark_size // 2))
 
@@ -1742,6 +1827,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 if getattr(e, 'has_aggro', False) and getattr(e, 'health', 0) > 0:
                     if isinstance(e, Medusa):
                         ui.draw_boss_health_bar(e.health, e.max_health, "Médusa")
+                    elif isinstance(e, KingBoss):
+                        ui.draw_boss_health_bar(e.health, e.max_health, "Roi reprouve")
                     elif isinstance(e, BigEnemy):
                         ui.draw_boss_health_bar(e.health, e.max_health, "Gardien des profondeurs")
                     elif isinstance(e, Necromancer):
@@ -1752,6 +1839,13 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 dialogue_text = getattr(e, 'get_current_dialogue', lambda: None)()
                 if dialogue_text:
                     ui.draw_boss_dialogue(dialogue_text, getattr(e, 'boss_display_name', None))
+                    break
+
+            # Dialogues de fées
+            for fairy in fairies_group:
+                ftxt = fairy.get_current_dialogue()
+                if ftxt:
+                    ui.draw_boss_dialogue(ftxt, "Fee")
                     break
 
             if show_exit_dialogue:
@@ -1874,6 +1968,13 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 players_list = [_serialize_player(player)]
                 if player2:
                     players_list.append(_serialize_player(player2))
+                # Sérialiser dialogues de fées actifs
+                fairy_dialogues = []
+                for fairy in fairies_group:
+                    ftxt = fairy.get_current_dialogue()
+                    if ftxt:
+                        fairy_dialogues.append(ftxt)
+
                 state = {
                     'level':       current_level_index,
                     'players':     players_list,
@@ -1885,6 +1986,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                     'events':      {'dashes': dash_events, 'sounds': sound_events},
                     'time_stop_active': time_stop_active,
                     'time_stop_activator_idx': time_stop_activator_idx,
+                    'fairy_dialogues': fairy_dialogues,
                 }
                 server.send_state(state)
 
@@ -1989,6 +2091,8 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 is_paused_client = not is_paused_client   # toggle, ne quitte PAS
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+                run_game_mp_client._skip_dialogue = True
 
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if is_paused_client and pause_rects_client:
@@ -2191,6 +2295,20 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                     pygame.mixer.music.play(-1)
                 except Exception:
                     pass
+            elif snd_name == 'medusa_bgm_start':
+                try:
+                    pygame.mixer.music.load("assets/sounds/medusa_ost.mp3")
+                    pygame.mixer.music.set_volume(global_music_vol)
+                    pygame.mixer.music.play(-1)
+                except Exception:
+                    pass
+            elif snd_name == 'king_bgm_start':
+                try:
+                    pygame.mixer.music.load("assets/sounds/king_boss_ost.mp3")
+                    pygame.mixer.music.set_volume(global_music_vol)
+                    pygame.mixer.music.play(-1)
+                except Exception:
+                    pass
             elif snd_name == 'boss_bgm_stop':
                 try:
                     pygame.mixer.music.fadeout(4000)
@@ -2288,6 +2406,10 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                     ey_world = edata['y'] - 20
                     ey = (ey_world - _cam_y) * zoom_level + screen_height / 2
                     mark_size = 40
+                    if edata.get('etype') == 'medusa':
+                        mark_size = 120
+                    elif edata.get('etype') in ('bigenemy', 'necromancer', 'king'):
+                        mark_size = max(mark_size, 80)
                     mark = _get_kitsune_mark(mark_size)
                     screen.blit(mark, (ex - mark_size // 2, ey - mark_size // 2))
 
@@ -2420,6 +2542,10 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                         zhonya_pressed = True
                 active_key += 1
 
+        # Détection du skip dialogue (event-based, pas key state)
+        skip_dialogue_pressed = getattr(run_game_mp_client, '_skip_dialogue', False)
+        run_game_mp_client._skip_dialogue = False
+
         inputs = {
             'up':       bool(keys[pygame.K_z]),
             'down':     bool(keys[pygame.K_s]),
@@ -2435,6 +2561,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             'cursed_brand': cursed_brand_pressed,
             'travelers_cap': travelers_cap_pressed,
             'zhonya':   zhonya_pressed,
+            'skip_dialogue': skip_dialogue_pressed,
         }
         client.send_inputs(inputs)
 
@@ -2463,7 +2590,8 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             if (edata.get('etype') in ('bigenemy', 'necromancer', 'medusa')
                     and edata.get('has_aggro', False)
                     and edata.get('health', 0) > 0):
-                boss_names = {'bigenemy': "Gardien des profondeurs", 'necromancer': "La Faucheuse", 'medusa': "Médusa"}
+                boss_names = {'bigenemy': "Gardien des profondeurs", 'necromancer': "La Faucheuse",
+                              'medusa': "Médusa", 'king': "Roi reprouve"}
                 boss_name = boss_names.get(edata['etype'], "Boss")
                 ui.draw_boss_health_bar(edata['health'], edata['max_health'], boss_name)
                 break  # un seul boss à la fois
@@ -2474,6 +2602,11 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             if dtxt:
                 ui.draw_boss_dialogue(dtxt, edata.get('boss_display_name'))
                 break
+
+        # Dialogues de fées (côté client)
+        for ftxt in state.get('fairy_dialogues', []):
+            ui.draw_boss_dialogue(ftxt, "Fee")
+            break
 
         # Indicateur multijoueur
         mp_surf = font_small.render("● MULTIJOUEUR (CLIENT)", True, (80, 200, 80))

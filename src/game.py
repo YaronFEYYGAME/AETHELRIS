@@ -573,7 +573,7 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
             if time_stop_active:
                 # Overlay gris semi-transparent sur tout l'écran
                 ts_overlay = _get_overlay(screen_width, screen_height)
-                ts_overlay.fill((0, 0, 0, 140))
+                ts_overlay.fill((0, 0, 0, 80))
                 screen.blit(ts_overlay, (0, 0))
 
                 # Joueur activateur en couleur par-dessus (cache par frame d'anim)
@@ -1609,7 +1609,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             if time_stop_active:
                 activator = time_stop_activator if time_stop_activator else player
                 ts_overlay = _get_overlay(screen_width, screen_height)
-                ts_overlay.fill((0, 0, 0, 140))
+                ts_overlay.fill((0, 0, 0, 80))
                 screen.blit(ts_overlay, (0, 0))
 
                 act_sx = (activator.rect.x - cam_x) * zoom_level + screen_width / 2
@@ -2174,7 +2174,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 
             # Overlay gris semi-transparent
             ts_overlay = _get_overlay(screen_width, screen_height)
-            ts_overlay.fill((0, 0, 0, 140))
+            ts_overlay.fill((0, 0, 0, 80))
             screen.blit(ts_overlay, (0, 0))
 
             # Re-blitter l'activateur en couleur

@@ -1255,7 +1255,7 @@ class Medusa(pygame.sprite.Sprite):
     """Boss Médusa. Deux attaques de base + ultime avec stun et vol de vie."""
 
     SPRITE_DIR = "assets/images/Medusa_boss/"
-    RUN_DISTANCE_THRESHOLD = 150  # distance au-delà de laquelle elle court
+    RUN_DISTANCE_THRESHOLD = 120  # distance au-delà de laquelle elle court
 
     def __init__(self, x, y):
         super().__init__()
@@ -1293,7 +1293,7 @@ class Medusa(pygame.sprite.Sprite):
         # Stats (1.5x BigEnemy HP)
         self.max_health = 585
         self.health = 585
-        self.base_speed = 1.17
+        self.base_speed = 1.5
         self.speed = self.base_speed
         self.damage_amount = 7.5
         self.special_damage = 10
@@ -1530,15 +1530,16 @@ class Medusa(pygame.sprite.Sprite):
                     hitbox = self.get_attack_hitbox(attack_state)
                     if hitbox.colliderect(player.feet.inflate(20, 20)) and player.health > 0:
                         if attack_state == 'special':
-                            # Ultime : stun + vol de vie
+                            # Ultime : stun + vol de vie (seulement si les dégâts passent)
                             self.pending_sounds.append('boss_attack')
+                            hp_before = player.health
                             player.damage(self.special_damage, source_enemy=self)
-                            # Stun 2 secondes
-                            player.apply_stun(2000)
-                            # Récupère 50% des PV manquants
-                            missing_hp = self.max_health - self.health
-                            heal = missing_hp * 0.5
-                            self.health = min(self.max_health, self.health + heal)
+                            if player.health < hp_before:
+                                # Dégâts infligés → stun + heal
+                                player.apply_stun(2000)
+                                missing_hp = self.max_health - self.health
+                                heal = missing_hp * 0.5
+                                self.health = min(self.max_health, self.health + heal)
                         else:
                             # Attaque normale
                             self.pending_sounds.append('boss_attack')

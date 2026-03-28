@@ -126,17 +126,47 @@ class UI:
 
     def draw_health_bar(self, current_health, max_health):
         bar_width = 200
-        bar_height = 20
-        x, y = 20, 20
+        bar_height = 22
+        x, y = 20, 18
 
         ratio = current_health / max_health if max_health > 0 else 0
-        if ratio >= 0.8: color = (50, 200, 50)
-        elif ratio >= 0.3: color = (200, 200, 50)
-        else: color = (200, 50, 50)
 
-        pygame.draw.rect(self.screen, (50, 50, 50), (x, y, bar_width, bar_height))
-        pygame.draw.rect(self.screen, color, (x, y, bar_width * ratio, bar_height))
-        pygame.draw.rect(self.screen, (255, 255, 255), (x, y, bar_width, bar_height), 2)
+        # Fond sombre semi-transparent
+        bg = pygame.Surface((bar_width, bar_height), pygame.SRCALPHA)
+        pygame.draw.rect(bg, (20, 20, 30, 220), (0, 0, bar_width, bar_height), border_radius=4)
+        self.screen.blit(bg, (x, y))
+
+        # Barre de remplissage avec dégradé
+        if ratio > 0:
+            fill_w = max(4, int(bar_width * ratio))
+            if ratio >= 0.6:
+                c1, c2 = (40, 180, 60), (70, 220, 90)
+            elif ratio >= 0.3:
+                c1, c2 = (200, 180, 40), (220, 200, 60)
+            else:
+                c1, c2 = (180, 40, 40), (220, 70, 50)
+            fill = pygame.Surface((fill_w, bar_height), pygame.SRCALPHA)
+            pygame.draw.rect(fill, (*c1, 230), (0, 0, fill_w, bar_height), border_radius=4)
+            # Reflet en haut
+            highlight = pygame.Surface((fill_w, bar_height // 3), pygame.SRCALPHA)
+            pygame.draw.rect(highlight, (*c2, 80), (0, 0, fill_w, bar_height // 3), border_radius=3)
+            fill.blit(highlight, (0, 2))
+            self.screen.blit(fill, (x, y))
+
+        # Double bordure style inventaire
+        pygame.draw.rect(self.screen, (180, 150, 100), (x, y, bar_width, bar_height), 2, border_radius=4)
+        pygame.draw.rect(self.screen, (100, 80, 50, 120), (x + 1, y + 1, bar_width - 2, bar_height - 2), 1, border_radius=3)
+
+        # Texte PV
+        if not hasattr(self, '_hp_font'):
+            self._hp_font = pygame.font.SysFont(None, 18)
+        hp_text = f"{int(current_health)}/{int(max_health)}"
+        shadow = self._hp_font.render(hp_text, True, (0, 0, 0))
+        txt = self._hp_font.render(hp_text, True, (255, 240, 200))
+        tx = x + bar_width // 2 - txt.get_width() // 2
+        ty = y + bar_height // 2 - txt.get_height() // 2
+        self.screen.blit(shadow, (tx + 1, ty + 1))
+        self.screen.blit(txt, (tx, ty))
 
     def _get_item_icon(self, item_type):
         """Retourne l'icône 64x64 pour un type d'item."""
@@ -574,28 +604,63 @@ class UI:
 
     def draw_boss_health_bar(self, current_health, max_health, boss_name="Gardien des profondeurs"):
         bar_width = 600
-        bar_height = 40
+        bar_height = 32
         screen_width = self.screen.get_width()
         x = (screen_width - bar_width) // 2
-        y = 40
+        y = 14
 
         ratio = current_health / max_health if max_health > 0 else 0
-        if ratio >= 0.8: color = (50, 200, 50)
-        elif ratio >= 0.3: color = (200, 200, 50)
-        else: color = (200, 50, 50)
 
-        pygame.draw.rect(self.screen, (30, 30, 30), (x, y, bar_width, bar_height))
+        # Nom du boss au-dessus de la barre (style doré)
+        if not hasattr(self, '_boss_bar_name_font'):
+            self._boss_bar_name_font = pygame.font.SysFont(
+                "garamond, times new roman, serif", 24, bold=True)
+        name_surf = self._boss_bar_name_font.render(boss_name, True, (255, 220, 150))
+        name_shadow = self._boss_bar_name_font.render(boss_name, True, (0, 0, 0))
+        nx = screen_width // 2 - name_surf.get_width() // 2
+        ny = y - name_surf.get_height() - 2
+        if ny < 4:
+            ny = 4
+            y = ny + name_surf.get_height() + 4
+        self.screen.blit(name_shadow, (nx + 1, ny + 1))
+        self.screen.blit(name_surf, (nx, ny))
+
+        # Fond sombre semi-transparent
+        bg = pygame.Surface((bar_width, bar_height), pygame.SRCALPHA)
+        pygame.draw.rect(bg, (20, 20, 30, 220), (0, 0, bar_width, bar_height), border_radius=5)
+        self.screen.blit(bg, (x, y))
+
+        # Barre de remplissage avec dégradé
         if ratio > 0:
-            pygame.draw.rect(self.screen, color, (x, y, bar_width * ratio, bar_height))
-        pygame.draw.rect(self.screen, (255, 255, 255), (x, y, bar_width, bar_height), 2)
+            fill_w = max(6, int(bar_width * ratio))
+            if ratio >= 0.6:
+                c1, c2 = (40, 180, 60), (70, 220, 90)
+            elif ratio >= 0.3:
+                c1, c2 = (200, 180, 40), (220, 200, 60)
+            else:
+                c1, c2 = (180, 40, 40), (220, 70, 50)
+            fill = pygame.Surface((fill_w, bar_height), pygame.SRCALPHA)
+            pygame.draw.rect(fill, (*c1, 230), (0, 0, fill_w, bar_height), border_radius=5)
+            # Reflet lumineux en haut
+            highlight = pygame.Surface((fill_w, bar_height // 3), pygame.SRCALPHA)
+            pygame.draw.rect(highlight, (*c2, 80), (0, 0, fill_w, bar_height // 3), border_radius=4)
+            fill.blit(highlight, (0, 2))
+            self.screen.blit(fill, (x, y))
 
-        text_shadow = self.font.render(boss_name, True, (0, 0, 0))
-        shadow_rect = text_shadow.get_rect(center=(screen_width // 2 + 2, y + bar_height // 2 + 2))
-        self.screen.blit(text_shadow, shadow_rect)
+        # Double bordure style inventaire
+        pygame.draw.rect(self.screen, (180, 150, 100), (x, y, bar_width, bar_height), 2, border_radius=5)
+        pygame.draw.rect(self.screen, (100, 80, 50, 120), (x + 1, y + 1, bar_width - 2, bar_height - 2), 1, border_radius=4)
 
-        text_surf = self.font.render(boss_name, True, (255, 255, 255))
-        text_rect = text_surf.get_rect(center=(screen_width // 2, y + bar_height // 2))
-        self.screen.blit(text_surf, text_rect)
+        # Texte PV centré dans la barre
+        if not hasattr(self, '_boss_hp_font'):
+            self._boss_hp_font = pygame.font.SysFont(None, 22)
+        hp_text = f"{int(current_health)} / {int(max_health)}"
+        shadow = self._boss_hp_font.render(hp_text, True, (0, 0, 0))
+        txt = self._boss_hp_font.render(hp_text, True, (255, 240, 200))
+        tx = screen_width // 2 - txt.get_width() // 2
+        ty = y + bar_height // 2 - txt.get_height() // 2
+        self.screen.blit(shadow, (tx + 1, ty + 1))
+        self.screen.blit(txt, (tx, ty))
 
     def _draw_styled_button(self, rect, text, font=None):
         """Bouton style inventaire : fond semi-transparent, bordure dorée au survol."""

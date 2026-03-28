@@ -2,6 +2,34 @@ import pygame
 from characters import CHARACTER_DEFS
 
 
+ITEM_LORE = {
+    'redgem': (
+        "Pierre philosophale",
+        "L'ultime rempart contre le néant. Se consume intégralement pour vous arracher aux griffes de la mort une dernière fois."
+    ),
+    'bluegem': (
+        "Anneau des cieux",
+        "Votre existence devient un mirage céleste. Les lames et les sorts vous traversent sans jamais troubler votre grâce divine."
+    ),
+    'kitsune_mask': (
+        "Masque du Kitsune",
+        "Imprégné de la ruse des anciens esprits, ce masque vous murmure où frapper pour achever ceux qui chancellent déjà."
+    ),
+    'cursed_brand': (
+        "Marque du sacrifice",
+        "Un pacte gravé dans la chair : la vitalité de l'autre devient la lame qui frappe l'ennemi."
+    ),
+    'mirror': (
+        "Miroir de Thémis",
+        "Un éclat d'ordre divin qui renvoie la violence à sa source avec une impartialité absolue."
+    ),
+    'boots': (
+        "Bottes du rayon cosmique",
+        "Forgées dans l'éclat d'une étoile mourante, ces bottes permettent à leur porteur de glisser entre les dimensions le temps d'un battement de cœur."
+    ),
+}
+
+
 class UI:
     def __init__(self, screen):
         self.screen = screen
@@ -200,9 +228,9 @@ class UI:
         overlay.fill((0, 0, 0, 120))
         self.screen.blit(overlay, (0, 0))
 
-        # Panneau central — même taille que le menu pause (450x300)
-        panel_w = 450
-        panel_h = 300
+        # Panneau central
+        panel_w = 500
+        panel_h = 340
         px = (sw - panel_w) // 2
         py = (sh - panel_h) // 2
 
@@ -270,6 +298,42 @@ class UI:
         if not inventory_items:
             empty_txt = self._inv_title_font.render("Inventaire vide", True, (150, 150, 150))
             self.screen.blit(empty_txt, (px + panel_w // 2 - empty_txt.get_width() // 2, slot_y + 25))
+
+        # Nom et description de l'item sous le curseur
+        if inventory_items and 0 <= cursor_idx < len(inventory_items):
+            selected_type = inventory_items[cursor_idx]
+            lore = ITEM_LORE.get(selected_type)
+            if lore:
+                item_name, item_desc = lore
+                if not hasattr(self, '_inv_name_font'):
+                    self._inv_name_font = pygame.font.SysFont(None, 24, bold=True)
+                    self._inv_desc_font = pygame.font.SysFont(None, 20, italic=True)
+
+                name_surf = self._inv_name_font.render(item_name, True, (255, 220, 150))
+                name_y = slot_y + slot_size + 12
+                self.screen.blit(name_surf, (px + panel_w // 2 - name_surf.get_width() // 2, name_y))
+
+                # Description en italique, découpée en lignes
+                desc_y = name_y + name_surf.get_height() + 4
+                max_text_w = panel_w - 30
+                words = item_desc.split()
+                lines = []
+                current_line = ""
+                for word in words:
+                    test = current_line + (" " if current_line else "") + word
+                    if self._inv_desc_font.size(test)[0] <= max_text_w:
+                        current_line = test
+                    else:
+                        if current_line:
+                            lines.append(current_line)
+                        current_line = word
+                if current_line:
+                    lines.append(current_line)
+
+                for line in lines:
+                    line_surf = self._inv_desc_font.render(line, True, (180, 180, 190))
+                    self.screen.blit(line_surf, (px + panel_w // 2 - line_surf.get_width() // 2, desc_y))
+                    desc_y += line_surf.get_height() + 2
 
         # Instructions en bas
         if not hasattr(self, '_inv_help_font'):

@@ -2199,7 +2199,7 @@ class KingBoss(pygame.sprite.Sprite):
 
     def __init__(self, x, y):
         super().__init__()
-        self.scale_factor = 2.0
+        self.scale_factor = 1.5
         self.animations = {'right': {}, 'left': {}}
         self.state = 'idle'
         self.frame_index = 0
@@ -2320,27 +2320,27 @@ class KingBoss(pygame.sprite.Sprite):
             print(f"Erreur: Fichier {path} introuvable.")
 
     def _load_attack_animation(self):
-        """Charge l'attaque : 5 rangées × 8 colonnes. Rangée 1=droite, rangée 2=gauche."""
+        """Charge l'attaque : 5 rangées × 8 colonnes. Rangée 1=gauche, rangée 2=droite."""
         try:
             sheet = pygame.image.load(self.SPRITE_DIR + "Attacks.png").convert_alpha()
             nw = int(self.FRAME_W * self.scale_factor)
             nh = int(self.FRAME_H * self.scale_factor)
 
-            # Rangée 1 : attaque vers la droite
-            frames_right = []
+            # Rangée 1 : attaque vers la gauche
+            frames_left = []
             for c in range(8):
                 frame = sheet.subsurface((c * self.FRAME_W, 1 * self.FRAME_H,
                                           self.FRAME_W, self.FRAME_H))
                 frame = pygame.transform.scale(frame, (nw, nh))
-                frames_right.append(frame)
+                frames_left.append(frame)
 
-            # Rangée 2 : attaque vers la gauche
-            frames_left = []
+            # Rangée 2 : attaque vers la droite
+            frames_right = []
             for c in range(8):
                 frame = sheet.subsurface((c * self.FRAME_W, 2 * self.FRAME_H,
                                           self.FRAME_W, self.FRAME_H))
                 frame = pygame.transform.scale(frame, (nw, nh))
-                frames_left.append(frame)
+                frames_right.append(frame)
 
             self.animations['right']['attack'] = frames_right
             self.animations['left']['attack'] = frames_left

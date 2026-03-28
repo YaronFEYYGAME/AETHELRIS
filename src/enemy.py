@@ -386,7 +386,9 @@ class BigEnemy(pygame.sprite.Sprite):
         return None
 
     def paralyze(self, duration_ms):
-        """Paralyse le boss pour une durée donnée (en ms). Réinitialise si déjà paralysé."""
+        """Paralyse le boss pour une durée donnée (en ms). Ignoré pendant les dialogues."""
+        if self.in_dialogue or not self.dialogue_finished:
+            return
         self.paralyzed = True
         self.paralyze_end_time = pygame.time.get_ticks() + duration_ms
 
@@ -921,6 +923,8 @@ class Necromancer(pygame.sprite.Sprite):
         self._blue_cache = {}
 
     def paralyze(self, duration_ms):
+        if self.in_dialogue or not self.dialogue_finished:
+            return
         self.paralyzed = True
         self.paralyze_end_time = pygame.time.get_ticks() + duration_ms
 
@@ -1363,6 +1367,8 @@ class Medusa(pygame.sprite.Sprite):
             print(f"Erreur: Fichier {path} introuvable.")
 
     def paralyze(self, duration_ms):
+        if self.in_dialogue or not self.dialogue_finished:
+            return
         self.paralyzed = True
         self.paralyze_end_time = pygame.time.get_ticks() + duration_ms
 
@@ -1407,8 +1413,8 @@ class Medusa(pygame.sprite.Sprite):
         if attack_type is None:
             attack_type = self.state if self.state in ('attack1', 'attack2', 'special') else 'attack1'
         if attack_type == 'attack1':
-            width = 45
-            height = 30
+            width = 30
+            height = 25
         elif attack_type == 'attack2':
             width = 55
             height = 35
@@ -1527,8 +1533,8 @@ class Medusa(pygame.sprite.Sprite):
                             # Ultime : stun + vol de vie
                             self.pending_sounds.append('boss_attack')
                             player.damage(self.special_damage, source_enemy=self)
-                            # Stun 3 secondes
-                            player.apply_stun(3000)
+                            # Stun 2 secondes
+                            player.apply_stun(2000)
                             # Récupère 50% des PV manquants
                             missing_hp = self.max_health - self.health
                             heal = missing_hp * 0.5

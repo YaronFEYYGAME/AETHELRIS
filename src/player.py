@@ -563,6 +563,10 @@ class Player(pygame.sprite.Sprite):
                     target_size = 48  # taille par défaut
                     if closest and hasattr(closest, 'rect'):
                         target_size = max(closest.rect.width, closest.rect.height)
+                    # Boss : augmenter le render_scale pour un effet visible
+                    rs = skill.get('render_scale', 1.2)
+                    if closest and hasattr(closest, 'boss_display_name'):
+                        rs = max(rs, 1.5)
                     result['homing'] = {
                         'target_pos': target_pos,
                         'damage': skill.get('damage', 20),
@@ -571,7 +575,7 @@ class Player(pygame.sprite.Sprite):
                         'effect_frames': skill.get('effect_frames', 5),
                         'instant': True,
                         'target_size': target_size,
-                        'render_scale': skill.get('render_scale', 1.2),
+                        'render_scale': rs,
                         'paralyze': skill.get('paralyze', 0),
                     }
                 else:
@@ -809,24 +813,43 @@ class RemotePlayer(pygame.sprite.Sprite):
         if anim_state not in anims:
             anim_state = 'idle'
         frames = anims[anim_state]
-        self.image = frames[int(frame) % len(frames)].copy()
+        base_frame = frames[int(frame) % len(frames)]
+
+        # Déterminer les effets visuels actifs
+        blue_active = state.get('blue_gem_active', False)
+        cb_active = state.get('cursed_brand_active', False) and (pygame.time.get_ticks() // 100) % 2 == 0
+        stunned = state.get('is_stunned', False)
+
+        # Clé de cache basée sur le frame et les effets actifs
+        cache_key = (id(base_frame), blue_active, cb_active, stunned)
+        if not hasattr(self, '_effect_cache'):
+            self._effect_cache = {}
+        if cache_key in self._effect_cache:
+            self.image = self._effect_cache[cache_key]
+            return
+
+        self.image = base_frame.copy()
 
         # Blue Gem : teinte bleue si invincibilité active
-        if state.get('blue_gem_active', False):
+        if blue_active:
             mask = pygame.mask.from_surface(self.image)
             blue_overlay = mask.to_surface(setcolor=(50, 100, 255, 120), unsetcolor=(0, 0, 0, 0))
             self.image.blit(blue_overlay, (0, 0))
 
         # Cursed Brand : clignotement rouge si boost actif
-        if state.get('cursed_brand_active', False):
-            if (pygame.time.get_ticks() // 100) % 2 == 0:
-                mask = pygame.mask.from_surface(self.image)
-                red_overlay = mask.to_surface(setcolor=(255, 50, 50, 100), unsetcolor=(0, 0, 0, 0))
-                self.image.blit(red_overlay, (0, 0))
+        if cb_active:
+            mask = pygame.mask.from_surface(self.image)
+            red_overlay = mask.to_surface(setcolor=(255, 50, 50, 100), unsetcolor=(0, 0, 0, 0))
+            self.image.blit(red_overlay, (0, 0))
 
         # Stun (Médusa) : filtre gris
-        if state.get('is_stunned', False):
+        if stunned:
             self.image.fill((128, 128, 128, 255), special_flags=pygame.BLEND_RGBA_MULT)
+
+        # Limiter la taille du cache
+        if len(self._effect_cache) > 200:
+            self._effect_cache.clear()
+        self._effect_cache[cache_key] = self.image
 
     def update(self):
         pass

@@ -1378,7 +1378,7 @@ class Medusa(pygame.sprite.Sprite):
     def damage(self, amount):
         if self.in_dialogue or self.invulnerable:
             return
-        if self.health > 0 and self.state not in ('death', 'hurt'):
+        if self.health > 0 and self.state != 'death':
             self.health -= amount
             self._is_blinking = True
             self.hit_time = pygame.time.get_ticks()
@@ -1396,11 +1396,6 @@ class Medusa(pygame.sprite.Sprite):
                 if self.bgm_playing:
                     self.bgm_playing = False
                     self.pending_sounds.append('boss_bgm_stop')
-            else:
-                self.state = 'hurt'
-                self.frame_index = 0
-                self.is_attacking = False
-                self.velocity.xy = 0, 0
 
     def get_current_dialogue(self):
         if self.in_dialogue and self.dialogue_index < len(self.dialogue_lines):
@@ -1516,10 +1511,7 @@ class Medusa(pygame.sprite.Sprite):
         hit_y = False
         norm_dir = pygame.math.Vector2(0, 0)
 
-        if self.state == 'hurt':
-            self.velocity.xy = 0, 0
-
-        elif self.is_attacking:
+        if self.is_attacking:
             self.velocity.xy = 0, 0
             current_frame = int(self.frame_index)
             attack_state = self.state
@@ -1673,6 +1665,20 @@ class Medusa(pygame.sprite.Sprite):
             return 3   # mi-animation des 5 frames
         return 0
 
+    def _get_red_tinted(self, frame):
+        """Retourne une version teintée en rouge du frame, mise en cache."""
+        frame_id = id(frame)
+        if not hasattr(self, '_red_cache'):
+            self._red_cache = {}
+        if frame_id in self._red_cache:
+            return self._red_cache[frame_id]
+        tinted = frame.copy()
+        mask = pygame.mask.from_surface(tinted)
+        red_overlay = mask.to_surface(setcolor=(255, 0, 0, 150), unsetcolor=(0, 0, 0, 0))
+        tinted.blit(red_overlay, (0, 0))
+        self._red_cache[frame_id] = tinted
+        return tinted
+
     def animate(self):
         animation = self.animations[self.facing][self.state]
 
@@ -1683,7 +1689,7 @@ class Medusa(pygame.sprite.Sprite):
             return
 
         speed = self.animation_speed
-        if self.state in ('hurt', 'death'):
+        if self.state == 'death':
             speed = 0.1
 
         self.frame_index += speed
@@ -1691,10 +1697,6 @@ class Medusa(pygame.sprite.Sprite):
         if self.frame_index >= len(animation):
             if self.state == 'death':
                 self.frame_index = len(animation) - 1
-                self._is_blinking = False
-            elif self.state == 'hurt':
-                self.state = 'idle'
-                self.frame_index = 0
                 self._is_blinking = False
             elif self.state in ('attack1', 'attack2', 'special'):
                 self.is_attacking = False
@@ -1704,18 +1706,19 @@ class Medusa(pygame.sprite.Sprite):
                 self.frame_index = 0
 
         animation = self.animations[self.facing][self.state]
-        self.image = animation[int(self.frame_index)].copy()
+        base_frame = animation[int(self.frame_index)]
 
         if self.state == 'death':
             self._is_blinking = False
 
-        if self.state == 'hurt' or self._is_blinking:
+        if self._is_blinking:
             if pygame.time.get_ticks() - self.hit_time < 150:
-                mask = pygame.mask.from_surface(self.image)
-                red_overlay = mask.to_surface(setcolor=(255, 0, 0, 150), unsetcolor=(0, 0, 0, 0))
-                self.image.blit(red_overlay, (0, 0))
+                self.image = self._get_red_tinted(base_frame)
             else:
                 self._is_blinking = False
+                self.image = base_frame.copy()
+        else:
+            self.image = base_frame.copy()
 
     def update_volumes(self, music_vol, sfx_vol):
         pygame.mixer.music.set_volume(music_vol)

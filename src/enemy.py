@@ -2247,6 +2247,8 @@ class KingBoss(pygame.sprite.Sprite):
         self.hit_time = 0
 
         self.has_dealt_damage = False
+        self._damage_frames = {2, 4, 6}  # 3 salves de dégâts
+        self._dealt_frames = set()  # frames déjà infligées
         self.has_aggro = False
         self.pending_drop = None
 
@@ -2426,7 +2428,7 @@ class KingBoss(pygame.sprite.Sprite):
 
     def get_attack_hitbox(self):
         """Hitbox d'attaque en arc devant le boss."""
-        range_attack = 55
+        range_attack = 35
         width_attack = 30
         attack_rect = pygame.Rect(0, 0, range_attack, width_attack)
         if self.facing == 'right':
@@ -2572,7 +2574,9 @@ class KingBoss(pygame.sprite.Sprite):
             self.velocity.xy = 0, 0
             current_frame = int(self.frame_index)
 
-            if current_frame == 4 and not self.has_dealt_damage:
+            # 3 salves de dégâts aux frames 2, 4 et 6
+            if current_frame in self._damage_frames and current_frame not in self._dealt_frames:
+                self._dealt_frames.add(current_frame)
                 self.pending_sounds.append('boss_attack')
                 attack_area = self.get_attack_hitbox()
                 # Dégâts au joueur 1
@@ -2581,7 +2585,6 @@ class KingBoss(pygame.sprite.Sprite):
                 # Dégâts au joueur 2
                 if player2 and player2.health > 0 and attack_area.colliderect(player2.feet.inflate(20, 20)):
                     player2.damage(self.damage_amount, source_enemy=self)
-                self.has_dealt_damage = True
         else:
             if target.health > 0:
                 if target.feet.centerx > self.feet.centerx:
@@ -2597,6 +2600,7 @@ class KingBoss(pygame.sprite.Sprite):
                         self.frame_index = 0
                         self.last_attack_time = current_time
                         self.has_dealt_damage = False
+                        self._dealt_frames = set()
                         self.velocity.xy = 0, 0
                     else:
                         self.state = 'idle'

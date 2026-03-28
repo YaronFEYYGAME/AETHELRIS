@@ -184,8 +184,6 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
         time_stop_end_time = 0
         time_stop_activator = None
         time_stop_return_sound_played = False
-        time_stop_gray_cache = None      # surface grayscale mise en cache au 1er frame
-        time_stop_cache_cam = (0, 0)     # position caméra quand le cache a été créé
         time_stop_player_cache = {}      # cache des sprites joueur scalés par frame d'anim
 
         EUREKA_EVENT = pygame.USEREVENT + 1
@@ -388,7 +386,6 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                 if now_ts >= time_stop_end_time:
                     time_stop_active = False
                     time_stop_activator = None
-                    time_stop_gray_cache = None
                     time_stop_player_cache = {}
                     sound_manager.exit_time_stop()
                     # Prolonger les timers figés de 5 secondes
@@ -572,18 +569,12 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
 
             group.draw(screen)
 
-            # --- Effet visuel arrêt du temps (grayscale cacné + joueur en couleur) ---
+            # --- Effet visuel arrêt du temps (overlay gris + joueur en couleur) ---
             if time_stop_active:
-                # 1er frame : capturer le grayscale et le mettre en cache
-                if time_stop_gray_cache is None:
-                    time_stop_gray_cache = pygame.transform.grayscale(screen)
-                    time_stop_cache_cam = (camera_x, camera_y)
-
-                # Blitter le cache gris avec décalage de caméra
-                dx = (time_stop_cache_cam[0] - camera_x) * zoom_level
-                dy = (time_stop_cache_cam[1] - camera_y) * zoom_level
-                screen.fill((20, 20, 20))
-                screen.blit(time_stop_gray_cache, (dx, dy))
+                # Overlay gris semi-transparent sur tout l'écran
+                ts_overlay = _get_overlay(screen_width, screen_height)
+                ts_overlay.fill((0, 0, 0, 140))
+                screen.blit(ts_overlay, (0, 0))
 
                 # Joueur activateur en couleur par-dessus (cache par frame d'anim)
                 p_sx = (player.rect.x - camera_x) * zoom_level + screen_width / 2
@@ -1001,8 +992,6 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
         time_stop_activator = None       # référence au Player qui a activé
         time_stop_activator_idx = -1     # 0 = host, 1 = client
         time_stop_return_sound_played = False
-        time_stop_gray_cache = None
-        time_stop_cache_cam = (0, 0)
         time_stop_player_cache = {}
 
         death_font = pygame.font.SysFont("old english text mt, garamond, times new roman, serif", 120)
@@ -1134,7 +1123,6 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                         time_stop_activator = player
                                         time_stop_activator_idx = 0
                                         time_stop_return_sound_played = False
-                                        time_stop_gray_cache = None
                                         time_stop_player_cache = {}
                                         sound_manager.enter_time_stop()
                                         sound_manager.play_ui_time_stop()
@@ -1248,7 +1236,6 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                         time_stop_activator = player2
                         time_stop_activator_idx = 1
                         time_stop_return_sound_played = False
-                        time_stop_gray_cache = None
                         time_stop_player_cache = {}
                         sound_manager.enter_time_stop()
                         sound_manager.play_ui_time_stop()
@@ -1345,7 +1332,6 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                     time_stop_active = False
                     time_stop_activator = None
                     time_stop_activator_idx = -1
-                    time_stop_gray_cache = None
                     time_stop_player_cache = {}
                     sound_manager.exit_time_stop()
                     for enemy in enemies_group:
@@ -1619,17 +1605,12 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             group.center((cam_x, cam_y))
             group.draw(screen)
 
-            # --- Effet visuel arrêt du temps (cache grayscale + joueur en couleur) ---
+            # --- Effet visuel arrêt du temps (overlay gris + joueur en couleur) ---
             if time_stop_active:
                 activator = time_stop_activator if time_stop_activator else player
-                if time_stop_gray_cache is None:
-                    time_stop_gray_cache = pygame.transform.grayscale(screen)
-                    time_stop_cache_cam = (cam_x, cam_y)
-
-                dx = (time_stop_cache_cam[0] - cam_x) * zoom_level
-                dy = (time_stop_cache_cam[1] - cam_y) * zoom_level
-                screen.fill((20, 20, 20))
-                screen.blit(time_stop_gray_cache, (dx, dy))
+                ts_overlay = _get_overlay(screen_width, screen_height)
+                ts_overlay.fill((0, 0, 0, 140))
+                screen.blit(ts_overlay, (0, 0))
 
                 act_sx = (activator.rect.x - cam_x) * zoom_level + screen_width / 2
                 act_sy = (activator.rect.y - cam_y) * zoom_level + screen_height / 2
@@ -1929,8 +1910,6 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
     client_red_gem_anim_start = 0
     # --- Arrêt du temps côté client ---
     client_prev_time_stop = False
-    client_ts_gray_cache = None
-    client_ts_cache_cam = (0, 0)
     client_ts_player_cache = {}
 
     while True:
@@ -2177,12 +2156,10 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 
         # Détection entrée / sortie du time stop côté client
         if client_time_stop and not client_prev_time_stop:
-            client_ts_gray_cache = None
             client_ts_player_cache = {}
             sound_manager.enter_time_stop()
             sound_manager.play_ui_time_stop()
         elif not client_time_stop and client_prev_time_stop:
-            client_ts_gray_cache = None
             client_ts_player_cache = {}
             sound_manager.exit_time_stop()
         client_prev_time_stop = client_time_stop
@@ -2195,22 +2172,13 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             elif client_ts_activator_idx == 0 and remote_player:
                 ts_activator_sprite = remote_player
 
-            # Cache grayscale au 1er frame
-            if client_ts_gray_cache is None:
-                client_ts_gray_cache = pygame.transform.grayscale(screen)
-                if local_player:
-                    _vw = screen_width / zoom_level
-                    _vh = screen_height / zoom_level
-                    _cx = local_player.feet.centerx
-                    _cy = local_player.feet.centery - 30
-                    if map_pixel_width < _vw: _cx = map_pixel_width // 2
-                    else: _cx = max(_vw // 2, min(_cx, map_pixel_width - _vw // 2))
-                    if map_pixel_height < _vh: _cy = map_pixel_height // 2
-                    else: _cy = max(_vh // 2, min(_cy, map_pixel_height - _vh // 2))
-                    client_ts_cache_cam = (_cx, _cy)
+            # Overlay gris semi-transparent
+            ts_overlay = _get_overlay(screen_width, screen_height)
+            ts_overlay.fill((0, 0, 0, 140))
+            screen.blit(ts_overlay, (0, 0))
 
-            # Blitter le cache gris avec décalage de caméra
-            if local_player:
+            # Re-blitter l'activateur en couleur
+            if ts_activator_sprite and hasattr(ts_activator_sprite, 'rect') and local_player:
                 _vw = screen_width / zoom_level
                 _vh = screen_height / zoom_level
                 _cx = local_player.feet.centerx
@@ -2219,15 +2187,6 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 else: _cx = max(_vw // 2, min(_cx, map_pixel_width - _vw // 2))
                 if map_pixel_height < _vh: _cy = map_pixel_height // 2
                 else: _cy = max(_vh // 2, min(_cy, map_pixel_height - _vh // 2))
-                dx = (client_ts_cache_cam[0] - _cx) * zoom_level
-                dy = (client_ts_cache_cam[1] - _cy) * zoom_level
-            else:
-                dx, dy = 0, 0
-            screen.fill((20, 20, 20))
-            screen.blit(client_ts_gray_cache, (dx, dy))
-
-            # Re-blitter l'activateur en couleur (cache par frame d'anim)
-            if ts_activator_sprite and hasattr(ts_activator_sprite, 'rect') and local_player:
                 act_sx = (ts_activator_sprite.rect.x - _cx) * zoom_level + screen_width / 2
                 act_sy = (ts_activator_sprite.rect.y - _cy) * zoom_level + screen_height / 2
                 ck = (int(getattr(ts_activator_sprite, 'frame_index', 0)),

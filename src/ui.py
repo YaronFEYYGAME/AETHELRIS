@@ -27,6 +27,10 @@ ITEM_LORE = {
         "Bottes du rayon cosmique",
         "Forgées dans l'éclat d'une étoile mourante, ces bottes permettent à leur porteur de glisser entre les dimensions le temps d'un battement de cœur."
     ),
+    'travelers_cap': (
+        "Casquette du voyageur",
+        "Yare Yare Daze..."
+    ),
 }
 
 
@@ -70,6 +74,9 @@ class UI:
 
             self.cursed_brand_img = pygame.image.load("assets/images/cursed_brand.png").convert_alpha()
             self.cursed_brand_img = pygame.transform.scale(self.cursed_brand_img, (64, 64))
+
+            self.travelers_cap_img = pygame.image.load("assets/images/travelers_cap.png").convert_alpha()
+            self.travelers_cap_img = pygame.transform.scale(self.travelers_cap_img, (64, 64))
         except FileNotFoundError:
             self.sword_img = pygame.Surface((64, 64)); self.sword_img.fill((200, 200, 200))
             self.bow_img = pygame.Surface((64, 64)); self.bow_img.fill((150, 100, 50))
@@ -80,6 +87,7 @@ class UI:
             self.mirror_img = pygame.Surface((64, 64)); self.mirror_img.fill((180, 180, 220))
             self.kitsune_mask_img = pygame.Surface((64, 64)); self.kitsune_mask_img.fill((220, 150, 50))
             self.cursed_brand_img = pygame.Surface((64, 64)); self.cursed_brand_img.fill((150, 50, 150))
+            self.travelers_cap_img = pygame.Surface((64, 64)); self.travelers_cap_img.fill((100, 50, 150))
 
     def load_character_icons(self, char_type):
         """Charge les icônes spécifiques à un personnage."""
@@ -120,13 +128,15 @@ class UI:
             'cursed_brand': self.cursed_brand_img, 'pickaxe': self.pickaxe_img,
             'redgem': self.redgem_img, 'mirror': self.mirror_img,
             'kitsune_mask': self.kitsune_mask_img,
+            'travelers_cap': self.travelers_cap_img,
         }
         return icon_map.get(item_type)
 
     def draw_character_hud(self, char_type, current_weapon, skill_cooldowns=None,
                            arrows=0, inventory_items=None,
                            dash_cr=1.0, blue_gem_cr=1.0, cursed_brand_cr=1.0,
-                           arrow_regen_cr=1.0, item_start_key=2):
+                           arrow_regen_cr=1.0, travelers_cap_cr=1.0,
+                           item_start_key=2):
         """Dessine le HUD : skill E → skill 1 → items actifs → items passifs."""
         icons = self.load_character_icons(char_type)
         char_def = CHARACTER_DEFS.get(char_type, CHARACTER_DEFS['soldier'])
@@ -200,6 +210,7 @@ class UI:
         cooldown_map = {
             'boots': dash_cr, 'bluegem': blue_gem_cr,
             'cursed_brand': cursed_brand_cr,
+            'travelers_cap': travelers_cap_cr,
         }
 
         for item_type in inventory_items:

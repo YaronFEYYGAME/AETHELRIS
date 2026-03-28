@@ -3,7 +3,7 @@ from projectile import Projectile
 from characters import get_character_def
 
 # Types d'items
-ACTIVE_ITEMS = {'boots', 'bluegem', 'cursed_brand'}
+ACTIVE_ITEMS = {'boots', 'bluegem', 'cursed_brand', 'travelers_cap'}
 PASSIVE_ITEMS = {'pickaxe', 'redgem', 'mirror', 'kitsune_mask'}
 MAX_INVENTORY_ITEMS = 5
 
@@ -88,6 +88,11 @@ class Player(pygame.sprite.Sprite):
         self.cursed_brand_active = False
         self.cursed_brand_end_time = 0
         self.cursed_brand_triggered = False  # flag pour animation sur la cible
+
+        # Travelers Cap (arrêt du temps)
+        self.has_travelers_cap = False
+        self.travelers_cap_cooldown = 25000  # 25 secondes
+        self.last_travelers_cap_time = -25000
 
         self.is_hit = False
         self.last_hit_time = 0
@@ -204,7 +209,7 @@ class Player(pygame.sprite.Sprite):
             'boots': 'has_boots', 'redgem': 'has_red_gem',
             'bluegem': 'has_blue_gem', 'pickaxe': 'has_pickaxe',
             'mirror': 'has_mirror', 'kitsune_mask': 'has_kitsune_mask',
-            'cursed_brand': 'has_cursed_brand',
+            'cursed_brand': 'has_cursed_brand', 'travelers_cap': 'has_travelers_cap',
         }
         attr = flag_map.get(item_type)
         if attr:
@@ -707,6 +712,18 @@ class Player(pygame.sprite.Sprite):
     def get_cursed_brand_cooldown_ratio(self):
         elapsed = pygame.time.get_ticks() - self.last_cursed_brand_time
         return min(1.0, max(0.0, elapsed / self.cursed_brand_cooldown))
+
+    def activate_travelers_cap(self):
+        """Active la Casquette du voyageur : arrêt du temps pendant 5 secondes."""
+        current_time = pygame.time.get_ticks()
+        if current_time - self.last_travelers_cap_time < self.travelers_cap_cooldown:
+            return False
+        self.last_travelers_cap_time = current_time
+        return True
+
+    def get_travelers_cap_cooldown_ratio(self):
+        elapsed = pygame.time.get_ticks() - self.last_travelers_cap_time
+        return min(1.0, max(0.0, elapsed / self.travelers_cap_cooldown))
 
     def get_damage_multiplier(self, target_enemy=None):
         """Retourne le multiplicateur de dégâts total.

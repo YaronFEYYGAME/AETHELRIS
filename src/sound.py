@@ -65,6 +65,10 @@ class SoundManager:
         load_sound('boss_death', "assets/sounds/boss1_death.wav")
         load_sound('boss_talk', "assets/sounds/boss1_talk.wav")
 
+        # --- SONS ARRÊT DU TEMPS ---
+        load_sound('time_stop', "assets/sounds/time_stop.wav")
+        load_sound('return_time', "assets/sounds/return_time.wav")
+
         self.base_volumes = {
             'step': 0.4,
             'equip_sword': 0.3,
@@ -84,6 +88,8 @@ class SoundManager:
             'boss_attack': 0.4,
             'boss_death': 0.45,
             'boss_talk': 0.35,
+            'time_stop': 0.7,
+            'return_time': 0.6,
         }
 
         self.update_sfx_volume(0.8)
@@ -198,6 +204,12 @@ class SoundManager:
 
     def play_ui_eating(self):
         if 'eating' in self.sounds: self.sounds['eating'].play()
+
+    def play_ui_time_stop(self):
+        if 'time_stop' in self.sounds: self.sounds['time_stop'].play()
+
+    def play_ui_return_time(self):
+        if 'return_time' in self.sounds: self.sounds['return_time'].play()
 
     # ------------------------------------------------------------------
     # PAS DE MARCHE — spatialisés via channel dédié

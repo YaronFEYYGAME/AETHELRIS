@@ -40,6 +40,9 @@ class Item(pygame.sprite.Sprite):
             elif self.item_type == 'cursed_brand':
                 img = pygame.image.load("assets/images/cursed_brand.png").convert_alpha()
                 self.image = pygame.transform.scale(img, (20, 20))
+            elif self.item_type == 'travelers_cap':
+                img = pygame.image.load("assets/images/travelers_cap.png").convert_alpha()
+                self.image = pygame.transform.scale(img, (20, 20))
         except FileNotFoundError:
             self.image = pygame.Surface((32, 32))
             self.image.fill((255, 255, 0)) 

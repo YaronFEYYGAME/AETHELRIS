@@ -150,6 +150,10 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                 new_item = Item(obj.x, obj.y, 'cursed_brand')
                 group.add(new_item)
                 items_group.add(new_item)
+            elif obj_type == "travelers_cap":
+                new_item = Item(obj.x, obj.y, 'travelers_cap')
+                group.add(new_item)
+                items_group.add(new_item)
             elif obj_type == "obstacle_rock":
                 new_rock = Rock(obj.x, obj.y)
                 group.add(new_rock)
@@ -172,8 +176,15 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
         show_mmo = False
         level_running = True
         was_walking = False
-        death_time = None 
-        death_sound_played = False 
+        death_time = None
+        death_sound_played = False
+
+        # --- Arrêt du temps (Casquette du voyageur) ---
+        time_stop_active = False
+        time_stop_end_time = 0
+        time_stop_activator = None
+        time_stop_return_sound_played = False
+        time_stop_music_vol_saved = 0
 
         EUREKA_EVENT = pygame.USEREVENT + 1
 
@@ -363,63 +374,82 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
 
             player.update()
             player.move(walls)
-            
+
             ppos = (player.feet.centerx, player.feet.centery)
-            # Snapshot des spirits avant update pour détecter ceux qui meurent
-            spirits_before = {id(e): e for e in enemies_group if isinstance(e, Spirit)}
 
-            for enemy in list(enemies_group):
-                # Sauvegarder la position du spirit avant update (au cas où il se kill)
-                spirit_pos = None
-                if isinstance(enemy, Spirit):
-                    spirit_pos = (enemy.rect.centerx, enemy.rect.centery)
+            # --- Arrêt du temps : expiration ---
+            if time_stop_active:
+                now_ts = pygame.time.get_ticks()
+                if not time_stop_return_sound_played and now_ts >= time_stop_end_time - 500:
+                    sound_manager.play_ui_return_time()
+                    time_stop_return_sound_played = True
+                if now_ts >= time_stop_end_time:
+                    time_stop_active = False
+                    time_stop_activator = None
+                    pygame.mixer.music.set_volume(time_stop_music_vol_saved)
+                    # Prolonger les timers figés de 5 secondes
+                    for enemy in enemies_group:
+                        if getattr(enemy, 'paralyzed', False) and hasattr(enemy, 'paralyze_end_time'):
+                            enemy.paralyze_end_time += 5000
+                        if hasattr(enemy, 'last_attack_time'):
+                            enemy.last_attack_time += 5000
 
-                enemy.update(player, walls)
+            if not time_stop_active:
+                # Snapshot des spirits avant update pour détecter ceux qui meurent
+                spirits_before = {id(e): e for e in enemies_group if isinstance(e, Spirit)}
 
-                # Spirit qui a explosé ou est mort : spawner des particules rouges
-                if isinstance(enemy, Spirit) and getattr(enemy, 'pending_particles', False):
-                    if spirit_pos:
-                        for _ in range(15):
-                            particle = BloodParticle(spirit_pos[0], spirit_pos[1])
-                            group.add(particle)
-                            particles_group.add(particle)
+                for enemy in list(enemies_group):
+                    # Sauvegarder la position du spirit avant update (au cas où il se kill)
+                    spirit_pos = None
+                    if isinstance(enemy, Spirit):
+                        spirit_pos = (enemy.rect.centerx, enemy.rect.centery)
 
-                if hasattr(enemy, 'pending_summons') and enemy.pending_summons:
-                    owner_ref = enemy if isinstance(enemy, Necromancer) else None
-                    for sx, sy in enemy.pending_summons:
-                        new_spirit = Spirit(sx, sy, owner_necromancer=owner_ref)
-                        group.add(new_spirit)
-                        enemies_group.add(new_spirit)
-                    enemy.pending_summons.clear()
+                    enemy.update(player, walls)
 
-                # Jouer les sons des boss via le SpatialAudioManager
-                if hasattr(enemy, 'pending_sounds') and enemy.pending_sounds:
-                    boss_pos = (enemy.feet.centerx, enemy.feet.centery)
-                    for bs in enemy.pending_sounds:
-                        if bs == 'boss_bgm_start':
-                            try:
-                                pygame.mixer.music.load("assets/sounds/boss1_soundtrack.mp3")
-                                pygame.mixer.music.set_volume(global_music_vol)
-                                pygame.mixer.music.play(-1)
-                            except Exception:
-                                pass
-                        elif bs == 'necro_bgm_start':
-                            try:
-                                pygame.mixer.music.load("assets/sounds/necromancer_song.mp3")
-                                pygame.mixer.music.set_volume(global_music_vol)
-                                pygame.mixer.music.play(-1)
-                            except Exception:
-                                pass
-                        elif bs == 'boss_bgm_stop':
-                            try:
-                                pygame.mixer.music.fadeout(4000)
-                            except Exception:
-                                pass
-                        else:
-                            sound_manager.play_spatial(bs, boss_pos, ppos)
-                    enemy.pending_sounds.clear()
+                    # Spirit qui a explosé ou est mort : spawner des particules rouges
+                    if isinstance(enemy, Spirit) and getattr(enemy, 'pending_particles', False):
+                        if spirit_pos:
+                            for _ in range(15):
+                                particle = BloodParticle(spirit_pos[0], spirit_pos[1])
+                                group.add(particle)
+                                particles_group.add(particle)
 
-            projectiles_group.update()
+                    if hasattr(enemy, 'pending_summons') and enemy.pending_summons:
+                        owner_ref = enemy if isinstance(enemy, Necromancer) else None
+                        for sx, sy in enemy.pending_summons:
+                            new_spirit = Spirit(sx, sy, owner_necromancer=owner_ref)
+                            group.add(new_spirit)
+                            enemies_group.add(new_spirit)
+                        enemy.pending_summons.clear()
+
+                    # Jouer les sons des boss via le SpatialAudioManager
+                    if hasattr(enemy, 'pending_sounds') and enemy.pending_sounds:
+                        boss_pos = (enemy.feet.centerx, enemy.feet.centery)
+                        for bs in enemy.pending_sounds:
+                            if bs == 'boss_bgm_start':
+                                try:
+                                    pygame.mixer.music.load("assets/sounds/boss1_soundtrack.mp3")
+                                    pygame.mixer.music.set_volume(global_music_vol)
+                                    pygame.mixer.music.play(-1)
+                                except Exception:
+                                    pass
+                            elif bs == 'necro_bgm_start':
+                                try:
+                                    pygame.mixer.music.load("assets/sounds/necromancer_song.mp3")
+                                    pygame.mixer.music.set_volume(global_music_vol)
+                                    pygame.mixer.music.play(-1)
+                                except Exception:
+                                    pass
+                            elif bs == 'boss_bgm_stop':
+                                try:
+                                    pygame.mixer.music.fadeout(4000)
+                                except Exception:
+                                    pass
+                            else:
+                                sound_manager.play_spatial(bs, boss_pos, ppos)
+                        enemy.pending_sounds.clear()
+
+                projectiles_group.update()
             particles_group.update()
 
             show_rock_dialogue = False
@@ -537,7 +567,23 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
             group.center((camera_x, camera_y))
 
             group.draw(screen)
-            
+
+            # --- Effet visuel arrêt du temps (grayscale + joueur en couleur) ---
+            if time_stop_active:
+                # Sauvegarder le sprite du joueur avant grayscale
+                player_screen_x = (player.rect.x - camera_x) * zoom_level + screen_width / 2
+                player_screen_y = (player.rect.y - camera_y) * zoom_level + screen_height / 2
+                player_img = player.image.copy()
+                player_img_scaled = pygame.transform.scale(
+                    player_img,
+                    (int(player.rect.width * zoom_level), int(player.rect.height * zoom_level))
+                )
+                # Appliquer le grayscale sur tout l'écran
+                gray_screen = pygame.transform.grayscale(screen)
+                screen.blit(gray_screen, (0, 0))
+                # Remettre le joueur activateur en couleur par-dessus
+                screen.blit(player_img_scaled, (player_screen_x, player_screen_y))
+
             # =================================================================
             # --- DEBUG HITBOXES (POUR RÉGLER TES COLLISIONS) ---
             # =================================================================
@@ -673,6 +719,8 @@ def _serialize_player(p):
         'cursed_brand_active': p.cursed_brand_active,
         'cursed_brand_cr': p.get_cursed_brand_cooldown_ratio(),
         'cursed_brand_triggered': getattr(p, 'cursed_brand_triggered', False),
+        'has_travelers_cap': p.has_travelers_cap,
+        'travelers_cap_cr': p.get_travelers_cap_cooldown_ratio(),
         'arrows':         p.arrows,
         'dash_cr':        dash_cr,
         'arrow_regen_cr': p.get_arrow_regen_cooldown_ratio(),
@@ -894,6 +942,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 it = Item(obj.x, obj.y, 'kitsune_mask'); group.add(it); items_group.add(it)
             elif obj_type == "cursed_brand":
                 it = Item(obj.x, obj.y, 'cursed_brand'); group.add(it); items_group.add(it)
+            elif obj_type == "travelers_cap":
+                it = Item(obj.x, obj.y, 'travelers_cap'); group.add(it); items_group.add(it)
             elif obj_type == "obstacle_rock":
                 r = Rock(obj.x, obj.y); group.add(r); rocks_group.add(r); walls.append(r.hitbox)
 
@@ -931,6 +981,14 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
         mirror_anim_start = 0
         cursed_brand_animating = False
         cursed_brand_anim_start = 0
+
+        # --- Arrêt du temps (Casquette du voyageur) ---
+        time_stop_active = False
+        time_stop_end_time = 0
+        time_stop_activator = None       # référence au Player qui a activé
+        time_stop_activator_idx = -1     # 0 = host, 1 = client
+        time_stop_return_sound_played = False
+        time_stop_music_vol_saved = 0
 
         death_font = pygame.font.SysFont("old english text mt, garamond, times new roman, serif", 120)
         EUREKA_EVENT = pygame.USEREVENT + 1
@@ -1054,6 +1112,17 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                 elif item_name == 'cursed_brand':
                                     ally = player2 if (not solo_mode and player2 and player2.health > 0) else None
                                     player.activate_cursed_brand(ally)
+                                elif item_name == 'travelers_cap':
+                                    if not time_stop_active and player.activate_travelers_cap():
+                                        time_stop_active = True
+                                        time_stop_end_time = pygame.time.get_ticks() + 5000
+                                        time_stop_activator = player
+                                        time_stop_activator_idx = 0
+                                        time_stop_return_sound_played = False
+                                        time_stop_music_vol_saved = global_music_vol
+                                        sound_manager.play_ui_time_stop()
+                                        pygame.mixer.music.set_volume(0)
+                                        sound_events.append({'sound': 'time_stop', 'x': player.feet.centerx, 'y': player.feet.centery})
                         if event.key == pygame.K_LSHIFT and player.has_boots:
                             if player.dash(walls):
                                 host_pos = (player.feet.centerx, player.feet.centery)
@@ -1155,6 +1224,18 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 # Cursed brand player2
                 if net_inputs.get('cursed_brand') and player2.has_cursed_brand:
                     player2.activate_cursed_brand(ally_player=player)
+                # Travelers cap player2
+                if net_inputs.get('travelers_cap') and player2.has_travelers_cap:
+                    if not time_stop_active and player2.activate_travelers_cap():
+                        time_stop_active = True
+                        time_stop_end_time = pygame.time.get_ticks() + 5000
+                        time_stop_activator = player2
+                        time_stop_activator_idx = 1
+                        time_stop_return_sound_played = False
+                        time_stop_music_vol_saved = global_music_vol
+                        sound_manager.play_ui_time_stop()
+                        pygame.mixer.music.set_volume(0)
+                        sound_events.append({'sound': 'time_stop', 'x': player2.feet.centerx, 'y': player2.feet.centery})
                 # Dash player2
                 if net_inputs.get('dash') and player2.has_boots:
                     if player2.dash(walls):
@@ -1236,8 +1317,27 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             if player2 and getattr(player2, 'cursed_brand_triggered', False):
                 player2.cursed_brand_triggered = False
 
-            # --- Ennemis ---
-            for e in list(enemies_group):
+            # --- Arrêt du temps : expiration (MP) ---
+            if time_stop_active:
+                now_ts = pygame.time.get_ticks()
+                if not time_stop_return_sound_played and now_ts >= time_stop_end_time - 500:
+                    sound_manager.play_ui_return_time()
+                    sound_events.append({'sound': 'return_time', 'x': 0, 'y': 0})
+                    time_stop_return_sound_played = True
+                if now_ts >= time_stop_end_time:
+                    time_stop_active = False
+                    time_stop_activator = None
+                    time_stop_activator_idx = -1
+                    pygame.mixer.music.set_volume(time_stop_music_vol_saved)
+                    for enemy in enemies_group:
+                        if getattr(enemy, 'paralyzed', False) and hasattr(enemy, 'paralyze_end_time'):
+                            enemy.paralyze_end_time += 5000
+                        if hasattr(enemy, 'last_attack_time'):
+                            enemy.last_attack_time += 5000
+
+            # --- Ennemis (figés pendant time stop) ---
+            if not time_stop_active:
+              for e in list(enemies_group):
                 # Ciblage : seulement les joueurs vivants
                 all_players = [player] + ([player2] if player2 else [])
                 live = [p for p in all_players if p.health > 0]
@@ -1316,7 +1416,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                             sound_events.append(bs)
                     e.pending_sounds.clear()
 
-            projectiles_group.update()
+              projectiles_group.update()
             particles_group.update()
 
             # --- Attaque locale (serveur) — nouveau système de bindings ---
@@ -1500,6 +1600,20 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             group.center((cam_x, cam_y))
             group.draw(screen)
 
+            # --- Effet visuel arrêt du temps (grayscale + joueur activateur en couleur) ---
+            if time_stop_active:
+                activator = time_stop_activator if time_stop_activator else player
+                act_screen_x = (activator.rect.x - cam_x) * zoom_level + screen_width / 2
+                act_screen_y = (activator.rect.y - cam_y) * zoom_level + screen_height / 2
+                act_img = activator.image.copy()
+                act_img_scaled = pygame.transform.scale(
+                    act_img,
+                    (int(activator.rect.width * zoom_level), int(activator.rect.height * zoom_level))
+                )
+                gray_screen = pygame.transform.grayscale(screen)
+                screen.blit(gray_screen, (0, 0))
+                screen.blit(act_img_scaled, (act_screen_x, act_screen_y))
+
             # --- DEBUG HITBOXES ---
             if DEBUG_HITBOXES:
                 draw_debug_rect(screen, player.feet, (0, 255, 0), cam_x, cam_y, zoom_level, screen_width, screen_height)
@@ -1542,6 +1656,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                   blue_gem_cr=player.get_blue_gem_cooldown_ratio(),
                                   cursed_brand_cr=player.get_cursed_brand_cooldown_ratio(),
                                   arrow_regen_cr=player.get_arrow_regen_cooldown_ratio(),
+                                  travelers_cap_cr=player.get_travelers_cap_cooldown_ratio(),
                                   item_start_key=player.char_def.get('item_start_key', 2))
             # Barre de vie player2 (en haut à droite)
             if player2:
@@ -1692,6 +1807,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                     if not isinstance(pr, HealEffect)],
                     'game_over':   game_over,
                     'events':      {'dashes': dash_events, 'sounds': sound_events},
+                    'time_stop_active': time_stop_active,
+                    'time_stop_activator_idx': time_stop_activator_idx,
                 }
                 server.send_state(state)
 
@@ -1777,7 +1894,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
     prev_lp = {'current_weapon': None, 'has_melee': False, 'has_ranged': False,
                'has_pickaxe': False, 'has_boots': False, 'has_red_gem': False,
                'has_blue_gem': False, 'has_mirror': False, 'has_kitsune_mask': False,
-               'has_cursed_brand': False, 'arrows': 0, 'health': 100}
+               'has_cursed_brand': False, 'has_travelers_cap': False, 'arrows': 0, 'health': 100}
     client_was_walking = False
     client_rp_was_walking = False
     client_red_gem_animating = False
@@ -2021,6 +2138,41 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 
         group.draw(screen)
 
+        # --- Effet visuel arrêt du temps côté client ---
+        client_time_stop = state.get('time_stop_active', False)
+        client_ts_activator_idx = state.get('time_stop_activator_idx', -1)
+        if client_time_stop:
+            # Déterminer le sprite de l'activateur
+            ts_activator_sprite = None
+            if client_ts_activator_idx == 1 and local_player:
+                ts_activator_sprite = local_player
+            elif client_ts_activator_idx == 0 and remote_player:
+                ts_activator_sprite = remote_player
+            # Grayscale
+            gray_screen = pygame.transform.grayscale(screen)
+            screen.blit(gray_screen, (0, 0))
+            # Re-blitter l'activateur en couleur
+            if ts_activator_sprite and hasattr(ts_activator_sprite, 'rect'):
+                lp_cx2 = local_player.feet.centerx if local_player else 0
+                lp_cy2 = local_player.feet.centery - 30 if local_player else 0
+                _vw = screen_width / zoom_level
+                _vh = screen_height / zoom_level
+                _cx = lp_cx2
+                _cy = lp_cy2
+                if map_pixel_width < _vw: _cx = map_pixel_width // 2
+                else: _cx = max(_vw // 2, min(_cx, map_pixel_width - _vw // 2))
+                if map_pixel_height < _vh: _cy = map_pixel_height // 2
+                else: _cy = max(_vh // 2, min(_cy, map_pixel_height - _vh // 2))
+                act_sx = (ts_activator_sprite.rect.x - _cx) * zoom_level + screen_width / 2
+                act_sy = (ts_activator_sprite.rect.y - _cy) * zoom_level + screen_height / 2
+                act_img = ts_activator_sprite.image.copy()
+                act_scaled = pygame.transform.scale(
+                    act_img,
+                    (int(ts_activator_sprite.rect.width * zoom_level),
+                     int(ts_activator_sprite.rect.height * zoom_level))
+                )
+                screen.blit(act_scaled, (act_sx, act_sy))
+
         # --- Marque Kitsune côté client ---
         lp_now = players_state[1] if len(players_state) >= 2 else {}
         if lp_now.get('has_kitsune_mask', False) and local_player:
@@ -2153,6 +2305,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         from player import ACTIVE_ITEMS
         gem_blue_pressed = False
         cursed_brand_pressed = False
+        travelers_cap_pressed = False
         dash_pressed = bool(keys[pygame.K_LSHIFT])
         inv_items = lp_now.get('inventory_items', [])
         item_start = lp_now.get('item_start_key', 2)
@@ -2166,6 +2319,8 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                         gem_blue_pressed = True
                     elif it == 'cursed_brand':
                         cursed_brand_pressed = True
+                    elif it == 'travelers_cap':
+                        travelers_cap_pressed = True
                 active_key += 1
 
         inputs = {
@@ -2181,6 +2336,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             'dash':     dash_pressed,
             'gem_blue': gem_blue_pressed,
             'cursed_brand': cursed_brand_pressed,
+            'travelers_cap': travelers_cap_pressed,
         }
         client.send_inputs(inputs)
 
@@ -2196,6 +2352,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                               blue_gem_cr=lp_state.get('blue_gem_cr', 1.0),
                               cursed_brand_cr=lp_state.get('cursed_brand_cr', 1.0),
                               arrow_regen_cr=lp_state.get('arrow_regen_cr', 1.0),
+                              travelers_cap_cr=lp_state.get('travelers_cap_cr', 1.0),
                               item_start_key=lp_state.get('item_start_key', 2))
 
         # Barre de vie du joueur hôte (en haut à droite)

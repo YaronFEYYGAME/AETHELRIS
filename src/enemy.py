@@ -2770,7 +2770,7 @@ class SbireNeant(pygame.sprite.Sprite):
 
     def __init__(self, x, y):
         super().__init__()
-        self.scale_factor = 2.5
+        self.scale_factor = 2.0
         self.animations = {'right': {}, 'left': {}}
         self.state = 'idle'
         self.frame_index = 0
@@ -2792,9 +2792,9 @@ class SbireNeant(pygame.sprite.Sprite):
         self.rect.centerx = self.feet.centerx
         self.rect.bottom = self.feet.bottom + self.y_offset
 
-        # Stats - 0.75 x BigEnemy (390)
-        self.max_health = 293
-        self.health = 293
+        # Stats
+        self.max_health = 586
+        self.health = 586
         self.speed = 2.5
         self.damage_amount = 8
 
@@ -2823,7 +2823,7 @@ class SbireNeant(pygame.sprite.Sprite):
         self.pending_teleports = []
 
         # Canalisation de soin
-        self.channel_cooldown = 20000
+        self.channel_cooldown = 16000
         self.last_channel_time = -20000
         self.channel_threshold = 0.50
         self.is_channeling = False
@@ -3159,7 +3159,7 @@ class SbireNeant(pygame.sprite.Sprite):
             self.velocity.xy = 0, 0
             current_frame = int(self.frame_index)
 
-            if 6 <= current_frame <= 8 and not self.has_dealt_damage:
+            if 8 <= current_frame <= 10 and not self.has_dealt_damage:
                 self.has_dealt_damage = True
                 self.pending_sounds.append('boss_attack')
                 attack_area = self.get_attack_hitbox()
@@ -3307,18 +3307,20 @@ class SbireNeant(pygame.sprite.Sprite):
 
         # Effet visuel de canalisation : pulsation violette
         if self.is_channeling:
-            t = pygame.time.get_ticks()
-            pulse = abs(_math.sin(t * 0.005))
-            alpha = int(40 + pulse * 80)
-            frame = base_frame.copy()
-            overlay = pygame.Surface(frame.get_size(), pygame.SRCALPHA)
-            overlay.fill((150, 80, 255, alpha))
-            frame.blit(overlay, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
             if self._is_blinking and pygame.time.get_ticks() - self.hit_time < 150:
                 self.image = self._get_red_tinted(base_frame)
             else:
                 if pygame.time.get_ticks() - self.hit_time >= 150:
                     self._is_blinking = False
+                # Pulsation violette uniquement sur les pixels du sprite (via mask)
+                t = pygame.time.get_ticks()
+                pulse = abs(_math.sin(t * 0.005))
+                alpha = int(60 + pulse * 100)
+                frame = base_frame.copy()
+                mask = pygame.mask.from_surface(frame)
+                purple_overlay = mask.to_surface(
+                    setcolor=(150, 80, 255, alpha), unsetcolor=(0, 0, 0, 0))
+                frame.blit(purple_overlay, (0, 0))
                 self.image = frame
             return
 

@@ -5,7 +5,7 @@ import random
 
 from player import Player, RemotePlayer
 from sound import SoundManager
-from enemy import Enemy, BigEnemy, Necromancer, Spirit, Medusa, RemoteEnemy, Fairy, KingBoss
+from enemy import Enemy, BigEnemy, Necromancer, Spirit, Medusa, RemoteEnemy, Fairy, KingBoss, SbireNeant
 from ui import UI
 from item import Item
 from projectile import Projectile, HomingProjectile, HealEffect, InstantAOE, FloatingText
@@ -102,6 +102,12 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                 enemies_group.add(new_enemy)
             elif obj_type == "medusa":
                 new_enemy = Medusa(obj.x, obj.y)
+                if hasattr(new_enemy, 'update_volumes'):
+                    new_enemy.update_volumes(global_music_vol, global_sfx_vol)
+                group.add(new_enemy)
+                enemies_group.add(new_enemy)
+            elif obj_type == "sbire_neant":
+                new_enemy = SbireNeant(obj.x, obj.y)
                 if hasattr(new_enemy, 'update_volumes'):
                     new_enemy.update_volumes(global_music_vol, global_sfx_vol)
                 group.add(new_enemy)
@@ -364,6 +370,8 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                     if getattr(enemy, 'has_aggro', False) and getattr(enemy, 'health', 0) > 0:
                         if isinstance(enemy, Medusa):
                             ui.draw_boss_health_bar(enemy.health, enemy.max_health, "Médusa")
+                        elif isinstance(enemy, SbireNeant):
+                            ui.draw_boss_health_bar(enemy.health, enemy.max_health, "Sbire du neant")
                         elif isinstance(enemy, BigEnemy):
                             ui.draw_boss_health_bar(enemy.health, enemy.max_health, "Gardien des profondeurs")
                         elif isinstance(enemy, Necromancer):
@@ -413,7 +421,21 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                     if isinstance(enemy, Spirit):
                         spirit_pos = (enemy.rect.centerx, enemy.rect.centery)
 
-                    enemy.update(player, walls)
+                    if isinstance(enemy, (KingBoss, SbireNeant)):
+                        enemy.update(player, walls, player2=None)
+                    else:
+                        enemy.update(player, walls)
+
+                    # SbireNeant : particules de teleportation
+                    if isinstance(enemy, SbireNeant) and enemy.pending_teleports:
+                        for (fx, fy, tx, ty) in enemy.pending_teleports:
+                            for _ in range(15):
+                                p = SmokeParticle(fx + random.randint(-15, 15), fy + random.randint(-15, 5))
+                                group.add(p); particles_group.add(p)
+                            for _ in range(15):
+                                p = SmokeParticle(tx + random.randint(-15, 15), ty + random.randint(-15, 5))
+                                group.add(p); particles_group.add(p)
+                        enemy.pending_teleports.clear()
 
                     # Spirit qui a explosé ou est mort : spawner des particules rouges
                     if isinstance(enemy, Spirit) and getattr(enemy, 'pending_particles', False):
@@ -459,6 +481,13 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                             elif bs == 'king_bgm_start':
                                 try:
                                     pygame.mixer.music.load("assets/sounds/king_boss_ost.mp3")
+                                    pygame.mixer.music.set_volume(global_music_vol)
+                                    pygame.mixer.music.play(-1)
+                                except Exception:
+                                    pass
+                            elif bs == 'sbire_bgm_start':
+                                try:
+                                    pygame.mixer.music.load("assets/sounds/sbire_neant.mp3")
                                     pygame.mixer.music.set_volume(global_music_vol)
                                     pygame.mixer.music.play(-1)
                                 except Exception:
@@ -531,7 +560,7 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                 for enemy in enemies_group:
                     if getattr(enemy, 'health', 0) > 0:
                         body_hitbox = enemy.feet.copy()
-                        ext = 50 if isinstance(enemy, (BigEnemy, Necromancer, Medusa, KingBoss)) else 25
+                        ext = 50 if isinstance(enemy, (BigEnemy, Necromancer, Medusa, KingBoss, SbireNeant)) else 25
                         body_hitbox.height += ext
                         body_hitbox.y -= ext
                         if projectile.hitbox.colliderect(body_hitbox):
@@ -654,7 +683,9 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
             
             for enemy in enemies_group:
                 if getattr(enemy, 'has_aggro', False) and getattr(enemy, 'health', 0) > 0:
-                    if isinstance(enemy, BigEnemy):
+                    if isinstance(enemy, SbireNeant):
+                        ui.draw_boss_health_bar(enemy.health, enemy.max_health, "Sbire du neant")
+                    elif isinstance(enemy, BigEnemy):
                         ui.draw_boss_health_bar(enemy.health, enemy.max_health, "Gardien des profondeurs")
                     elif isinstance(enemy, Necromancer):
                         ui.draw_boss_health_bar(enemy.health, enemy.max_health, "La Faucheuse")
@@ -767,6 +798,8 @@ def _serialize_player(p):
 def _serialize_enemy(e):
     if isinstance(e, Medusa):
         etype = 'medusa'
+    elif isinstance(e, SbireNeant):
+        etype = 'sbire'
     elif isinstance(e, KingBoss):
         etype = 'king'
     elif isinstance(e, Necromancer):
@@ -985,6 +1018,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 it = Item(obj.x, obj.y, 'rabadon'); group.add(it); items_group.add(it)
             elif obj_type == "king_boss":
                 kb = KingBoss(obj.x, obj.y); group.add(kb); enemies_group.add(kb)
+            elif obj_type == "sbire_neant":
+                sn = SbireNeant(obj.x, obj.y); group.add(sn); enemies_group.add(sn)
             elif obj_type == "fee_1":
                 f = Fairy(obj.x, obj.y, 1); group.add(f); fairies_group.add(f)
             elif obj_type == "fee_2":
@@ -1340,7 +1375,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                     nearest_dist = dist
                                     nearest_enemy = e
                         if nearest_enemy:
-                            stun_dur = 1500 if isinstance(nearest_enemy, (BigEnemy, Necromancer, Medusa)) else 3000
+                            stun_dur = 3000
                             nearest_enemy.paralyze(stun_dur)
                             nearest_enemy._zhonya_gold = True
                             e_pos = (nearest_enemy.feet.centerx, nearest_enemy.feet.centery)
@@ -1481,10 +1516,21 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 if isinstance(e, Spirit):
                     spirit_pos = (e.rect.centerx, e.rect.centery)
 
-                if isinstance(e, KingBoss):
+                if isinstance(e, (KingBoss, SbireNeant)):
                     e.update(target, walls, player2=player2 if not solo_mode else None)
                 else:
                     e.update(target, walls)
+
+                # SbireNeant : particules de teleportation
+                if isinstance(e, SbireNeant) and e.pending_teleports:
+                    for (fx, fy, tx, ty) in e.pending_teleports:
+                        for _ in range(15):
+                            p = SmokeParticle(fx + random.randint(-15, 15), fy + random.randint(-15, 5))
+                            group.add(p); particles_group.add(p)
+                        for _ in range(15):
+                            p = SmokeParticle(tx + random.randint(-15, 15), ty + random.randint(-15, 5))
+                            group.add(p); particles_group.add(p)
+                    e.pending_teleports.clear()
 
                 # KingBoss : stun global
                 if isinstance(e, KingBoss) and e.pending_global_stun:
@@ -1502,7 +1548,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                             group.add(p); particles_group.add(p)
                 # Dégâts sur le joueur non-ciblé (boss avec get_attack_hitbox)
                 # KingBoss gère les 2 joueurs dans son update, pas besoin ici
-                if player2 and not isinstance(e, KingBoss):
+                if player2 and not isinstance(e, (KingBoss, SbireNeant)):
                     other = player2 if target is player else player
                     if hasattr(e, 'get_attack_hitbox') and getattr(e, 'is_attacking', False) and other.health > 0:
                         atk = e.get_attack_hitbox()
@@ -1553,6 +1599,13 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                             elif bs == 'king_bgm_start':
                                 try:
                                     pygame.mixer.music.load("assets/sounds/king_boss_ost.mp3")
+                                    pygame.mixer.music.set_volume(global_music_vol)
+                                    pygame.mixer.music.play(-1)
+                                except Exception:
+                                    pass
+                            elif bs == 'sbire_bgm_start':
+                                try:
+                                    pygame.mixer.music.load("assets/sounds/sbire_neant.mp3")
                                     pygame.mixer.music.set_volume(global_music_vol)
                                     pygame.mixer.music.play(-1)
                                 except Exception:
@@ -1685,7 +1738,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 for e in list(enemies_group):
                     if getattr(e, 'health', 0) > 0:
                         body = e.feet.copy()
-                        ext = 50 if isinstance(e, (BigEnemy, Necromancer, Medusa, KingBoss)) else 25
+                        ext = 50 if isinstance(e, (BigEnemy, Necromancer, Medusa, KingBoss, SbireNeant)) else 25
                         body.height += ext; body.y -= ext
                         if proj.hitbox.colliderect(body):
                             # Piercing : skip les ennemis déjà touchés
@@ -1830,6 +1883,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 if getattr(e, 'has_aggro', False) and getattr(e, 'health', 0) > 0:
                     if isinstance(e, Medusa):
                         ui.draw_boss_health_bar(e.health, e.max_health, "Médusa")
+                    elif isinstance(e, SbireNeant):
+                        ui.draw_boss_health_bar(e.health, e.max_health, "Sbire du neant")
                     elif isinstance(e, KingBoss):
                         ui.draw_boss_health_bar(e.health, e.max_health, "Roi reprouve")
                     elif isinstance(e, BigEnemy):
@@ -2312,6 +2367,13 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                     pygame.mixer.music.play(-1)
                 except Exception:
                     pass
+            elif snd_name == 'sbire_bgm_start':
+                try:
+                    pygame.mixer.music.load("assets/sounds/sbire_neant.mp3")
+                    pygame.mixer.music.set_volume(global_music_vol)
+                    pygame.mixer.music.play(-1)
+                except Exception:
+                    pass
             elif snd_name == 'boss_bgm_stop':
                 try:
                     pygame.mixer.music.fadeout(4000)
@@ -2590,11 +2652,11 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 
         # Barre de vie du boss (uniquement si aggro et vivant)
         for edata in enemies_state:
-            if (edata.get('etype') in ('bigenemy', 'necromancer', 'medusa')
+            if (edata.get('etype') in ('bigenemy', 'necromancer', 'medusa', 'king', 'sbire')
                     and edata.get('has_aggro', False)
                     and edata.get('health', 0) > 0):
                 boss_names = {'bigenemy': "Gardien des profondeurs", 'necromancer': "La Faucheuse",
-                              'medusa': "Médusa", 'king': "Roi reprouve"}
+                              'medusa': "Médusa", 'king': "Roi reprouve", 'sbire': "Sbire du neant"}
                 boss_name = boss_names.get(edata['etype'], "Boss")
                 ui.draw_boss_health_bar(edata['health'], edata['max_health'], boss_name)
                 break  # un seul boss à la fois

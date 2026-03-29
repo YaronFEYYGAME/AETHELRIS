@@ -2816,11 +2816,9 @@ class SbireNeant(pygame.sprite.Sprite):
         self.slide_dir_x = 1
         self.slide_dir_y = 1
 
-        # Teleportation
-        self.teleport_range = 200
-        self.teleport_cooldown = 5000
-        self.last_teleport_time = -5000
+        # Teleportation (integree a l'attaque)
         self.pending_teleports = []
+        self._has_teleported_attack = False
 
         # Canalisation de soin
         self.channel_cooldown = 16000
@@ -2986,61 +2984,6 @@ class SbireNeant(pygame.sprite.Sprite):
         attack_rect.centery = self.feet.centery
         return attack_rect
 
-    def _try_teleport(self, target, walls, current_time):
-        if current_time - self.last_teleport_time < self.teleport_cooldown:
-            return False
-
-        target_pos = pygame.math.Vector2(target.feet.center)
-        my_pos = pygame.math.Vector2(self.feet.center)
-        dist = target_pos.distance_to(my_pos)
-
-        if dist <= self.teleport_range:
-            return False
-
-        from_x = self.feet.centerx
-        from_y = self.feet.bottom
-
-        direction = target_pos - my_pos
-        if direction.length() > 0:
-            direction = direction.normalize()
-        arrive_pos = target_pos - direction * 30
-
-        self.position.x = arrive_pos.x
-        self.position.y = arrive_pos.y
-        self.feet.centerx = round(self.position.x)
-        self.feet.bottom = round(self.position.y)
-
-        for wall in walls:
-            if self.feet.colliderect(wall):
-                self.position.x = from_x
-                self.position.y = from_y
-                self.feet.centerx = round(from_x)
-                self.feet.bottom = round(from_y)
-                return False
-
-        self.rect.centerx = self.feet.centerx
-        self.rect.bottom = self.feet.bottom + self.y_offset
-
-        to_x = self.feet.centerx
-        to_y = self.feet.bottom
-
-        self.pending_teleports.append((from_x, from_y, to_x, to_y))
-        self.last_teleport_time = current_time
-
-        if target.feet.centerx > self.feet.centerx:
-            self.facing = 'right'
-        else:
-            self.facing = 'left'
-
-        self.is_attacking = True
-        self.state = 'attack'
-        self.frame_index = 0
-        self.last_attack_time = current_time
-        self.has_dealt_damage = False
-        self.velocity.xy = 0, 0
-
-        return True
-
     def update(self, player, walls, player2=None):
         if self.state == 'death':
             self.animate()
@@ -3159,6 +3102,52 @@ class SbireNeant(pygame.sprite.Sprite):
             self.velocity.xy = 0, 0
             current_frame = int(self.frame_index)
 
+            # Frame 7 : teleportation sur le joueur cible juste avant la salve
+            if current_frame >= 7 and not self._has_teleported_attack:
+                self._has_teleported_attack = True
+                # Trouver le joueur cible le plus proche
+                atk_target = target
+                if atk_target.health > 0:
+                    tp_target = pygame.math.Vector2(atk_target.feet.center)
+                    tp_from = pygame.math.Vector2(self.feet.centerx, self.feet.bottom)
+
+                    # Orienter vers le joueur
+                    if atk_target.feet.centerx > self.feet.centerx:
+                        self.facing = 'right'
+                    else:
+                        self.facing = 'left'
+
+                    # Se placer a portee d'attaque du joueur
+                    offset_x = 25 if self.facing == 'right' else -25
+                    new_x = atk_target.feet.centerx - offset_x
+                    new_y = atk_target.feet.bottom
+
+                    from_x = self.feet.centerx
+                    from_y = self.feet.bottom
+
+                    self.position.x = new_x
+                    self.position.y = new_y
+                    self.feet.centerx = round(self.position.x)
+                    self.feet.bottom = round(self.position.y)
+
+                    # Verifier collision mur
+                    blocked = False
+                    for wall in walls:
+                        if self.feet.colliderect(wall):
+                            blocked = True
+                            break
+                    if blocked:
+                        self.position.x = from_x
+                        self.position.y = from_y
+                        self.feet.centerx = round(from_x)
+                        self.feet.bottom = round(from_y)
+                    else:
+                        self.rect.centerx = self.feet.centerx
+                        self.rect.bottom = self.feet.bottom + self.y_offset
+                        self.pending_teleports.append((from_x, from_y,
+                                                       self.feet.centerx, self.feet.bottom))
+
+            # Frames 8-10 : salve de degats
             if 8 <= current_frame <= 10 and not self.has_dealt_damage:
                 self.has_dealt_damage = True
                 self.pending_sounds.append('boss_attack')
@@ -3174,26 +3163,27 @@ class SbireNeant(pygame.sprite.Sprite):
                 else:
                     self.facing = 'left'
 
-                if distance > self.teleport_range:
-                    self._try_teleport(target, walls, current_time)
+                # Attaque depuis la portee normale OU depuis loin (la TP mid-attaque rattrape)
+                attack_area = self.get_attack_hitbox()
+                in_melee = attack_area.colliderect(target.feet.inflate(20, 20))
+                in_aggro = distance < self.aggro_radius
+
+                if (in_melee or in_aggro) and current_time - self.last_attack_time > self.attack_cooldown:
+                    self.is_attacking = True
+                    self.state = 'attack'
+                    self.frame_index = 0
+                    self.last_attack_time = current_time
+                    self.has_dealt_damage = False
+                    self._has_teleported_attack = False
+                    self.velocity.xy = 0, 0
+                elif not in_melee and distance > 0:
+                    self.state = 'run'
+                    norm_dir = target_vector.normalize()
+                    self.velocity.x = norm_dir.x * self.speed
+                    self.velocity.y = norm_dir.y * self.speed
                 else:
-                    attack_area = self.get_attack_hitbox()
-                    if attack_area.colliderect(target.feet.inflate(20, 20)):
-                        if current_time - self.last_attack_time > self.attack_cooldown:
-                            self.is_attacking = True
-                            self.state = 'attack'
-                            self.frame_index = 0
-                            self.last_attack_time = current_time
-                            self.has_dealt_damage = False
-                            self.velocity.xy = 0, 0
-                        else:
-                            self.state = 'idle'
-                            self.velocity.xy = 0, 0
-                    elif distance > 0:
-                        self.state = 'run'
-                        norm_dir = target_vector.normalize()
-                        self.velocity.x = norm_dir.x * self.speed
-                        self.velocity.y = norm_dir.y * self.speed
+                    self.state = 'idle'
+                    self.velocity.xy = 0, 0
             else:
                 self.state = 'idle'
                 self.velocity.xy = 0, 0

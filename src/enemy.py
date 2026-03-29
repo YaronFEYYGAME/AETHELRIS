@@ -1,4 +1,5 @@
 import pygame
+import random
 
 class Enemy(pygame.sprite.Sprite):
     def __init__(self, x, y):
@@ -1526,7 +1527,7 @@ class Medusa(pygame.sprite.Sprite):
                 self._is_blinking = False
                 if not self.death_sound_played:
                     self.death_sound_played = True
-                    self.pending_sounds.append('boss_death')
+                    self.pending_sounds.append('medusa_death')
                 if self.bgm_playing:
                     self.bgm_playing = False
                     self.pending_sounds.append('boss_bgm_stop')
@@ -1549,7 +1550,6 @@ class Medusa(pygame.sprite.Sprite):
             self.has_aggro = True
             if not self.activation_played:
                 self.activation_played = True
-                self.pending_sounds.append('boss_activation')
             if not self.bgm_playing:
                 self.bgm_playing = True
                 self.pending_sounds.append('medusa_bgm_start')
@@ -1636,7 +1636,6 @@ class Medusa(pygame.sprite.Sprite):
                         self.has_aggro = True
                         self.activation_played = True
                         self.bgm_playing = True
-                        self.pending_sounds.append('boss_activation')
                         self.pending_sounds.append('medusa_bgm_start')
                 self.animate()
                 return
@@ -1651,7 +1650,6 @@ class Medusa(pygame.sprite.Sprite):
                 self.has_aggro = True
                 if not self.activation_played:
                     self.activation_played = True
-                    self.pending_sounds.append('boss_activation')
                 if not self.bgm_playing:
                     self.bgm_playing = True
                     self.pending_sounds.append('medusa_bgm_start')
@@ -1679,7 +1677,7 @@ class Medusa(pygame.sprite.Sprite):
                     if hitbox.colliderect(player.feet.inflate(20, 20)) and player.health > 0:
                         if attack_state == 'special':
                             # Ultime : stun + vol de vie (seulement si les dégâts passent)
-                            self.pending_sounds.append('boss_attack')
+                            self.pending_sounds.append(random.choice(['medusa_ult_1', 'medusa_ult_2']))
                             hp_before = player.health
                             player.damage(self.special_damage, source_enemy=self)
                             if player.health < hp_before:
@@ -1690,7 +1688,7 @@ class Medusa(pygame.sprite.Sprite):
                                 self.health = min(self.max_health, self.health + heal)
                         else:
                             # Attaque normale
-                            self.pending_sounds.append('boss_attack')
+                            self.pending_sounds.append(random.choice(['medusa_attack_1', 'medusa_attack_2', 'medusa_attack_3', 'medusa_attack_4']))
                             player.damage(self.damage_amount, source_enemy=self)
         else:
             if player.health > 0 and self.has_aggro:
@@ -1713,7 +1711,7 @@ class Medusa(pygame.sprite.Sprite):
                         self.last_attack_time = current_time
                         self.has_dealt_damage = False
                         self.velocity.xy = 0, 0
-                        self.pending_sounds.append('boss_attack')
+                        self.pending_sounds.append(random.choice(['medusa_ult_1', 'medusa_ult_2']))
                     elif current_time - self.last_attack_time > self.attack_cooldown:
                         chosen = self._choose_attack()
                         self.is_attacking = True
@@ -1722,7 +1720,7 @@ class Medusa(pygame.sprite.Sprite):
                         self.last_attack_time = current_time
                         self.has_dealt_damage = False
                         self.velocity.xy = 0, 0
-                        self.pending_sounds.append('boss_attack')
+                        self.pending_sounds.append(random.choice(['medusa_attack_1', 'medusa_attack_2', 'medusa_attack_3', 'medusa_attack_4']))
                     else:
                         self.state = 'idle'
                         self.velocity.xy = 0, 0

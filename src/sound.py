@@ -66,6 +66,15 @@ class SoundManager:
         load_sound('boss_death', "assets/sounds/boss1_death.wav")
         load_sound('boss_talk', "assets/sounds/boss1_talk.wav")
 
+        # --- SONS DE MÉDUSA ---
+        load_sound('medusa_attack_1', "assets/sounds/medusa_sound_effect/medusa_attack_1.wav")
+        load_sound('medusa_attack_2', "assets/sounds/medusa_sound_effect/medusa_attack_2.wav")
+        load_sound('medusa_attack_3', "assets/sounds/medusa_sound_effect/medusa_attack_3.wav")
+        load_sound('medusa_attack_4', "assets/sounds/medusa_sound_effect/medusa_attack_4.wav")
+        load_sound('medusa_ult_1', "assets/sounds/medusa_sound_effect/medusa_ult_1.wav")
+        load_sound('medusa_ult_2', "assets/sounds/medusa_sound_effect/medusa_ult_2.wav")
+        load_sound('medusa_death', "assets/sounds/medusa_sound_effect/medusa_death.wav")
+
         # --- SONS ARRÊT DU TEMPS ---
         load_sound('time_stop', "assets/sounds/time_stop.wav")
         load_sound('return_time', "assets/sounds/return_time.wav")
@@ -92,6 +101,13 @@ class SoundManager:
             'boss_attack': 0.4,
             'boss_death': 0.45,
             'boss_talk': 0.35,
+            'medusa_attack_1': 0.5,
+            'medusa_attack_2': 0.5,
+            'medusa_attack_3': 0.5,
+            'medusa_attack_4': 0.5,
+            'medusa_ult_1': 0.55,
+            'medusa_ult_2': 0.55,
+            'medusa_death': 0.5,
             'time_stop': 0.7,
             'return_time': 0.6,
             'zhonya': 0.6,
@@ -179,7 +195,9 @@ class SoundManager:
     BOSS_MAX_DISTANCE = 220
 
     # Sons de boss qui utilisent une distance réduite
-    _BOSS_SOUNDS = {'boss_activation', 'boss_attack', 'boss_death', 'boss_talk'}
+    _BOSS_SOUNDS = {'boss_activation', 'boss_attack', 'boss_death', 'boss_talk',
+                     'medusa_attack_1', 'medusa_attack_2', 'medusa_attack_3', 'medusa_attack_4',
+                     'medusa_ult_1', 'medusa_ult_2', 'medusa_death'}
 
     def play_spatial(self, sound_name, source_pos, listener_pos):
         """Joue un son avec volume et panning ajustés à la distance.

@@ -1718,7 +1718,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                     paralyze_dur = getattr(proj, '_paralyze_duration', 0)
                                     if paralyze_dur and e.health > 0 and hasattr(e, 'paralyze'):
                                         # Boss : durée réduite à 1.5s
-                                        if isinstance(e, (BigEnemy, Necromancer, Medusa)):
+                                        if isinstance(e, (BigEnemy, Necromancer, Medusa, KingBoss, SbireNeant)):
                                             e.paralyze(paralyze_dur // 2)
                                         else:
                                             e.paralyze(paralyze_dur)

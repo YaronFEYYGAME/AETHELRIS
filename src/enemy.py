@@ -3102,12 +3102,12 @@ class SbireNeant(pygame.sprite.Sprite):
             self.velocity.xy = 0, 0
             current_frame = int(self.frame_index)
 
-            # Frame 7 : teleportation sur le joueur cible juste avant la salve
+            # Frame 7 : chance 1/2 de teleportation sur le joueur cible juste avant la salve
             if current_frame >= 7 and not self._has_teleported_attack:
                 self._has_teleported_attack = True
-                # Trouver le joueur cible le plus proche
+                import random as _rnd
                 atk_target = target
-                if atk_target.health > 0:
+                if atk_target.health > 0 and _rnd.random() < 0.5:
                     tp_target = pygame.math.Vector2(atk_target.feet.center)
                     tp_from = pygame.math.Vector2(self.feet.centerx, self.feet.bottom)
 
@@ -3163,20 +3163,20 @@ class SbireNeant(pygame.sprite.Sprite):
                 else:
                     self.facing = 'left'
 
-                # Attaque depuis la portee normale OU depuis loin (la TP mid-attaque rattrape)
                 attack_area = self.get_attack_hitbox()
-                in_melee = attack_area.colliderect(target.feet.inflate(20, 20))
-                in_aggro = distance < self.aggro_radius
-
-                if (in_melee or in_aggro) and current_time - self.last_attack_time > self.attack_cooldown:
-                    self.is_attacking = True
-                    self.state = 'attack'
-                    self.frame_index = 0
-                    self.last_attack_time = current_time
-                    self.has_dealt_damage = False
-                    self._has_teleported_attack = False
-                    self.velocity.xy = 0, 0
-                elif not in_melee and distance > 0:
+                if attack_area.colliderect(target.feet.inflate(20, 20)):
+                    if current_time - self.last_attack_time > self.attack_cooldown:
+                        self.is_attacking = True
+                        self.state = 'attack'
+                        self.frame_index = 0
+                        self.last_attack_time = current_time
+                        self.has_dealt_damage = False
+                        self._has_teleported_attack = False
+                        self.velocity.xy = 0, 0
+                    else:
+                        self.state = 'idle'
+                        self.velocity.xy = 0, 0
+                elif distance > 0 and distance < self.aggro_radius:
                     self.state = 'run'
                     norm_dir = target_vector.normalize()
                     self.velocity.x = norm_dir.x * self.speed

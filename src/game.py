@@ -1854,7 +1854,10 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 for e in enemies_group:
                     if getattr(e, 'health', 0) > 0 and e.health <= e.max_health * 0.4:
                         ex = (e.rect.centerx - cam_x) * zoom_level + screen_width / 2
-                        ey = (e.feet.top + 5 - cam_y) * zoom_level + screen_height / 2
+                        mark_y_offset = 5
+                        if isinstance(e, (KingBoss, SbireNeant)):
+                            mark_y_offset = -15
+                        ey = (e.feet.top + mark_y_offset - cam_y) * zoom_level + screen_height / 2
                         mark_size = max(36, int(max(e.rect.width, e.rect.height) * 0.6))
                         if isinstance(e, Medusa):
                             mark_size = max(mark_size, 120)
@@ -2468,7 +2471,10 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 if edata.get('health', 0) > 0 and edata['health'] <= edata.get('max_health', 1) * 0.4:
                     ex = (edata['x'] - _cam_x) * zoom_level + screen_width / 2
                     # edata['y'] = feet.bottom, donc feet.top ≈ y - 15
-                    ey_world = edata['y'] - 20
+                    ey_offset = -20
+                    if edata.get('etype') in ('king', 'sbire'):
+                        ey_offset = -40
+                    ey_world = edata['y'] + ey_offset
                     ey = (ey_world - _cam_y) * zoom_level + screen_height / 2
                     mark_size = 40
                     if edata.get('etype') == 'medusa':

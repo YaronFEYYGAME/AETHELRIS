@@ -9,7 +9,7 @@ from enemy import Enemy, BigEnemy, Necromancer, Spirit, Medusa, RemoteEnemy, Fai
 from ui import UI
 from item import Item
 from projectile import Projectile, HomingProjectile, HealEffect, InstantAOE, FloatingText
-from obstacle import Rock, RockParticle, BloodParticle, SmokeParticle, DarkParticle
+from obstacle import Rock, RockParticle, BloodParticle, SmokeParticle, DarkParticle, Chest
 from characters import get_character_def
 from character_select import character_select_screen_host, character_select_screen_client, character_select_screen_solo
 
@@ -47,6 +47,13 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
     # --- TOGGLE DEBUG DES HITBOXES ---
     DEBUG_HITBOXES = False
 
+    # Items déjà droppés par les coffres (persiste entre niveaux, pas de doublon)
+    chest_dropped_items = set()
+    CHEST_DROPPABLE_ITEMS = [
+        'boots', 'redgem', 'bluegem', 'mirror', 'kitsune_mask',
+        'cursed_brand', 'travelers_cap', 'zhonya', 'rabadon',
+    ]
+
     sound_manager.update_sfx_volume(global_sfx_vol)
     pygame.mixer.music.set_volume(global_music_vol)
 
@@ -66,14 +73,15 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
         group = pyscroll.PyscrollGroup(map_layer=map_layer, default_layer=1)
         projectiles_group = pygame.sprite.Group()
         enemies_group = pygame.sprite.Group()
-        items_group = pygame.sprite.Group() 
-        rocks_group = pygame.sprite.Group() 
-        particles_group = pygame.sprite.Group() 
-        
+        items_group = pygame.sprite.Group()
+        rocks_group = pygame.sprite.Group()
+        particles_group = pygame.sprite.Group()
+        chests_group = pygame.sprite.Group()
+
         walls = []
-        exit_zones = [] 
-        player_x, player_y = 100, 100 
-        
+        exit_zones = []
+        player_x, player_y = 100, 100
+
         for obj in tmx_data.objects:
             obj_type = obj.type.lower() if obj.type else ""
             
@@ -173,6 +181,12 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                 group.add(new_rock)
                 rocks_group.add(new_rock)
                 walls.append(new_rock.hitbox)
+            elif obj_type == "chest_right":
+                c = Chest(obj.x, obj.y, flipped=False)
+                group.add(c); chests_group.add(c)
+            elif obj_type == "chest_left":
+                c = Chest(obj.x, obj.y, flipped=True)
+                group.add(c); chests_group.add(c)
 
         player = Player(player_x, player_y)
         player.has_melee = player_inventory['melee']
@@ -349,11 +363,26 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                                             pygame.time.set_timer(EUREKA_EVENT, 250, 1)
                                             break
 
+                                # --- Interaction coffres (solo) ---
+                                if not time_stop_active:
+                                    for chest in chests_group:
+                                        if not chest.opened and not chest.opening:
+                                            if player.feet.colliderect(chest.hitbox.inflate(40, 40)):
+                                                chest.open()
+                                                available = [it for it in CHEST_DROPPABLE_ITEMS
+                                                             if it not in chest_dropped_items]
+                                                if available:
+                                                    chosen = random.choice(available)
+                                                    chest_dropped_items.add(chosen)
+                                                    drop = Item(chest.rect.centerx + 20, chest.rect.centery, chosen)
+                                                    group.add(drop); items_group.add(drop)
+                                                break
+
                 elif event.type == pygame.KEYUP:
                     if event.key == pygame.K_j: show_mmo = False
 
             if not level_running:
-                continue 
+                continue
 
             if is_paused:
                 group.draw(screen)
@@ -503,6 +532,7 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
 
                 projectiles_group.update()
             particles_group.update()
+            chests_group.update()
 
             show_rock_dialogue = False
             if not player.has_pickaxe and player.health > 0:
@@ -511,7 +541,15 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                     if player.feet.colliderect(detect_zone):
                         show_rock_dialogue = True
                         break
-                        
+
+            show_chest_dialogue = False
+            if player.health > 0 and not time_stop_active:
+                for chest in chests_group:
+                    if not chest.opened and not chest.opening:
+                        if player.feet.colliderect(chest.hitbox.inflate(40, 40)):
+                            show_chest_dialogue = True
+                            break
+
             can_exit = False
             show_exit_dialogue = False
             if player.health > 0:
@@ -701,6 +739,8 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                 ui.draw_dialogue("Voulez vous rentrer ? (A)")
             elif show_rock_dialogue:
                 ui.draw_dialogue("Le chemin semble bloqué...")
+            elif show_chest_dialogue:
+                ui.draw_dialogue("Appuyer sur F pour ouvrir")
 
             if show_mmo:
                 text = font.render("MENU", True, (255, 255, 255))
@@ -920,6 +960,12 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
     zoom_level = 3.8
     DEBUG_HITBOXES = False
 
+    chest_dropped_items = set()
+    CHEST_DROPPABLE_ITEMS = [
+        'boots', 'redgem', 'bluegem', 'mirror', 'kitsune_mask',
+        'cursed_brand', 'travelers_cap', 'zhonya', 'rabadon',
+    ]
+
     sound_manager.update_sfx_volume(global_sfx_vol)
     pygame.mixer.music.set_volume(global_music_vol)
 
@@ -961,6 +1007,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
         rocks_group       = pygame.sprite.Group()
         particles_group   = pygame.sprite.Group()
         fairies_group     = pygame.sprite.Group()
+        chests_group      = pygame.sprite.Group()
         walls = []
         exit_zones = []
         player_x, player_y = 100, 100
@@ -1028,6 +1075,10 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 f = Fairy(obj.x, obj.y, 3); group.add(f); fairies_group.add(f)
             elif obj_type == "obstacle_rock":
                 r = Rock(obj.x, obj.y); group.add(r); rocks_group.add(r); walls.append(r.hitbox)
+            elif obj_type == "chest_right":
+                c = Chest(obj.x, obj.y, flipped=False); group.add(c); chests_group.add(c)
+            elif obj_type == "chest_left":
+                c = Chest(obj.x, obj.y, flipped=True); group.add(c); chests_group.add(c)
 
         # Joueur local (serveur) — avec le personnage choisi
         player = Player(player_x, player_y, char_type=host_char_type)
@@ -1285,6 +1336,20 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                 if player.feet.colliderect(fairy.rect.inflate(30, 30)):
                                     fairy.interact(player, 0)
                                     break
+                            # Interaction coffre (host)
+                            if not time_stop_active:
+                                for chest in chests_group:
+                                    if not chest.opened and not chest.opening:
+                                        if player.feet.colliderect(chest.hitbox.inflate(40, 40)):
+                                            chest.open()
+                                            available = [it for it in CHEST_DROPPABLE_ITEMS
+                                                         if it not in chest_dropped_items]
+                                            if available:
+                                                chosen = random.choice(available)
+                                                chest_dropped_items.add(chosen)
+                                                drop = Item(chest.rect.centerx + 20, chest.rect.centery, chosen)
+                                                group.add(drop); items_group.add(drop)
+                                            break
 
             if not level_running:
                 continue
@@ -1432,6 +1497,20 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                         if player2.feet.colliderect(fairy.rect.inflate(30, 30)):
                             fairy.interact(player2, 1)
                             break
+                    # Interaction coffre (player2)
+                    if not time_stop_active:
+                        for chest in chests_group:
+                            if not chest.opened and not chest.opening:
+                                if player2.feet.colliderect(chest.hitbox.inflate(40, 40)):
+                                    chest.open()
+                                    available = [it for it in CHEST_DROPPABLE_ITEMS
+                                                 if it not in chest_dropped_items]
+                                    if available:
+                                        chosen = random.choice(available)
+                                        chest_dropped_items.add(chosen)
+                                        drop = Item(chest.rect.centerx + 20, chest.rect.centery, chosen)
+                                        group.add(drop); items_group.add(drop)
+                                    break
 
                 # Drop items player2
                 if net_inputs.get('drop_item'):
@@ -1626,6 +1705,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
               projectiles_group.update()
             particles_group.update()
             fairies_group.update()
+            chests_group.update()
 
             # --- Attaque locale (serveur) — nouveau système de bindings ---
             keys = pygame.key.get_pressed()
@@ -1779,6 +1859,14 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                     if player.feet.colliderect(zone):
                         can_exit = True; show_exit_dialogue = True; break
 
+            show_chest_dialogue = False
+            if player.health > 0 and not time_stop_active:
+                for chest in chests_group:
+                    if not chest.opened and not chest.opening:
+                        if player.feet.colliderect(chest.hitbox.inflate(40, 40)):
+                            show_chest_dialogue = True
+                            break
+
             if player.is_moving() and not was_walking:
                 sound_manager.play_step(); was_walking = True
             elif not player.is_moving() and was_walking:
@@ -1911,6 +1999,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
 
             if show_exit_dialogue:
                 ui.draw_dialogue("Voulez vous rentrer ? (A)")
+            elif show_chest_dialogue:
+                ui.draw_dialogue("Appuyer sur F pour ouvrir")
 
             # --- Écran inventaire ---
             if player.inventory_open and player.health > 0:
@@ -2043,6 +2133,10 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                     'items':       [_serialize_item(it)        for it   in items_group],
                     'projectiles': [_serialize_projectile(pr)  for pr   in projectiles_group
                                     if not isinstance(pr, HealEffect)],
+                    'chests':      [{'x': c.rect.centerx, 'y': c.rect.centery,
+                                     'opened': c.opened, 'opening': c.opening,
+                                     'frame': int(c.frame_index),
+                                     'flipped': c.flipped} for c in chests_group],
                     'game_over':   game_over,
                     'events':      {'dashes': dash_events, 'sounds': sound_events},
                     'time_stop_active': time_stop_active,
@@ -2218,12 +2312,14 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             remote_enemy_etypes   = {}   # id → etype (pour particules)
             remote_items          = {}   # (x,y,type) → Item
             remote_projectiles    = {}   # id → Projectile
+            remote_chests         = {}   # (x,y) → Chest
             client_particles_grp  = pygame.sprite.Group()
 
         players_state  = state.get('players',     [{}, {}])
         enemies_state  = state.get('enemies',     [])
         items_state    = state.get('items',       [])
         projs_state    = state.get('projectiles', [])
+        chests_state   = state.get('chests',      [])
 
         # --- Joueurs ---
         if len(players_state) >= 1 and remote_player:
@@ -2271,6 +2367,27 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 it.rect.y = d['y']
                 group.add(it)
                 remote_items[ikey] = it
+
+        # --- Coffres distants ---
+        for cd in chests_state:
+            ckey = (cd['x'], cd['y'])
+            if ckey not in remote_chests:
+                c = Chest(cd['x'], cd['y'], flipped=cd.get('flipped', False))
+                group.add(c)
+                remote_chests[ckey] = c
+            rc = remote_chests[ckey]
+            if cd['opened']:
+                rc.opened = True
+                rc.opening = False
+                rc.frame_index = Chest.NUM_FRAMES - 1
+                rc.image = rc.frames[Chest.NUM_FRAMES - 1]
+                rc.rect = rc.image.get_rect(center=rc.rect.center)
+            elif cd['opening']:
+                rc.opening = True
+                rc.frame_index = cd['frame']
+                idx = min(cd['frame'], Chest.NUM_FRAMES - 1)
+                rc.image = rc.frames[idx]
+                rc.rect = rc.image.get_rect(center=rc.rect.center)
 
         # --- Projectiles distants ---
         current_pids = {p['id'] for p in projs_state}
@@ -2678,6 +2795,16 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         for ftxt in state.get('fairy_dialogues', []):
             ui.draw_boss_dialogue(ftxt, "Fee")
             break
+
+        # Dialogue coffre (côté client)
+        if local_player and lp_state.get('health', 0) > 0 and not state.get('time_stop_active', False):
+            for cd in chests_state:
+                if not cd['opened'] and not cd['opening']:
+                    ckey = (cd['x'], cd['y'])
+                    rc = remote_chests.get(ckey)
+                    if rc and local_player.feet.colliderect(rc.hitbox.inflate(40, 40)):
+                        ui.draw_dialogue("Appuyer sur F pour ouvrir")
+                        break
 
         # Indicateur multijoueur
         mp_surf = font_small.render("● MULTIJOUEUR (CLIENT)", True, (80, 200, 80))

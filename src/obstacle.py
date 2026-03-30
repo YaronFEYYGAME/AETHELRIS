@@ -1,5 +1,6 @@
 import pygame
 import random
+import os
 
 class Rock(pygame.sprite.Sprite):
     def __init__(self, x, y):
@@ -109,26 +110,85 @@ class DarkParticle(pygame.sprite.Sprite):
         super().__init__()
         size = random.randint(3, 8)
         self.image = pygame.Surface((size, size), pygame.SRCALPHA)
-        
+
         # Nuances de noir et gris très sombre
         color = random.choice([(20, 20, 20), (40, 40, 40), (10, 10, 10)])
         self.image.fill(color)
-        
+
         self.rect = self.image.get_rect(center=(x, y))
-        
+
         self.velocity_x = random.uniform(-4, 4)
         self.velocity_y = random.uniform(-5, -1)
-        self.gravity = 0.5 
-        
-        self.life = 255 
+        self.gravity = 0.5
+
+        self.life = 255
 
     def update(self):
         self.velocity_y += self.gravity
         self.rect.x += self.velocity_x
         self.rect.y += self.velocity_y
-        
+
         self.life -= 15
         if self.life <= 0:
-            self.kill() 
+            self.kill()
         else:
             self.image.set_alpha(self.life)
+
+
+class Chest(pygame.sprite.Sprite):
+    """Coffre interactif avec animation d'ouverture."""
+
+    SPRITE_PATH = "assets/images/Chests.png"
+    FRAME_W = 48
+    FRAME_H = 64
+    NUM_FRAMES = 5
+    SCALE = 2.0
+
+    def __init__(self, x, y, flipped=False):
+        super().__init__()
+        self.flipped = flipped
+        self.opened = False
+        self.opening = False
+        self.frame_index = 0.0
+        self.anim_speed = 6  # frames par seconde
+
+        # Charger les frames de la première rangée
+        self.frames = []
+        try:
+            sheet = pygame.image.load(self.SPRITE_PATH).convert_alpha()
+            for i in range(self.NUM_FRAMES):
+                frame = sheet.subsurface(pygame.Rect(
+                    i * self.FRAME_W, 0, self.FRAME_W, self.FRAME_H))
+                scaled = pygame.transform.scale(frame,
+                    (int(self.FRAME_W * self.SCALE), int(self.FRAME_H * self.SCALE)))
+                if flipped:
+                    scaled = pygame.transform.flip(scaled, True, False)
+                self.frames.append(scaled)
+        except Exception:
+            fallback = pygame.Surface((int(self.FRAME_W * self.SCALE),
+                                       int(self.FRAME_H * self.SCALE)))
+            fallback.fill((139, 90, 43))
+            self.frames = [fallback] * self.NUM_FRAMES
+
+        self.image = self.frames[0]
+        self.rect = self.image.get_rect()
+        self.rect.center = (x, y)
+        self.hitbox = self.rect.inflate(-20, -30)
+
+    def open(self):
+        """Déclenche l'animation d'ouverture."""
+        if self.opened or self.opening:
+            return
+        self.opening = True
+        self.frame_index = 0.0
+
+    def update(self):
+        if self.opening and not self.opened:
+            self.frame_index += self.anim_speed / 60.0
+            idx = int(self.frame_index)
+            if idx >= self.NUM_FRAMES:
+                idx = self.NUM_FRAMES - 1
+                self.opened = True
+                self.opening = False
+            self.image = self.frames[idx]
+            self.rect = self.image.get_rect(center=self.rect.center)

@@ -140,9 +140,9 @@ class Chest(pygame.sprite.Sprite):
 
     SPRITE_PATH = "assets/images/Chests.png"
     FRAME_W = 48
-    FRAME_H = 64
+    FRAME_H = 32
     NUM_FRAMES = 5
-    SCALE = 2.0
+    SCALE = 1.5
 
     def __init__(self, x, y, flipped=False):
         super().__init__()
@@ -152,7 +152,7 @@ class Chest(pygame.sprite.Sprite):
         self.frame_index = 0.0
         self.anim_speed = 6  # frames par seconde
 
-        # Charger les frames de la première rangée
+        # Charger les frames de la première rangée (coffre marron, row 0)
         self.frames = []
         try:
             sheet = pygame.image.load(self.SPRITE_PATH).convert_alpha()
@@ -166,14 +166,18 @@ class Chest(pygame.sprite.Sprite):
                 self.frames.append(scaled)
         except Exception:
             fallback = pygame.Surface((int(self.FRAME_W * self.SCALE),
-                                       int(self.FRAME_H * self.SCALE)))
+                                       int(self.FRAME_H * self.SCALE)), pygame.SRCALPHA)
             fallback.fill((139, 90, 43))
             self.frames = [fallback] * self.NUM_FRAMES
 
         self.image = self.frames[0]
         self.rect = self.image.get_rect()
         self.rect.center = (x, y)
-        self.hitbox = self.rect.inflate(-20, -30)
+        # Hitbox de collision solide (plus petite que le sprite)
+        self.hitbox = pygame.Rect(0, 0,
+                                  int(self.FRAME_W * self.SCALE * 0.6),
+                                  int(self.FRAME_H * self.SCALE * 0.5))
+        self.hitbox.center = self.rect.center
 
     def open(self):
         """Déclenche l'animation d'ouverture."""

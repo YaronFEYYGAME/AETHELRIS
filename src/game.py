@@ -184,9 +184,11 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
             elif obj_type == "chest_right":
                 c = Chest(obj.x, obj.y, flipped=False)
                 group.add(c); chests_group.add(c)
+                walls.append(c.hitbox)
             elif obj_type == "chest_left":
                 c = Chest(obj.x, obj.y, flipped=True)
                 group.add(c); chests_group.add(c)
+                walls.append(c.hitbox)
 
         player = Player(player_x, player_y)
         player.has_melee = player_inventory['melee']
@@ -374,7 +376,7 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                                                 if available:
                                                     chosen = random.choice(available)
                                                     chest_dropped_items.add(chosen)
-                                                    drop = Item(chest.rect.centerx + 20, chest.rect.centery, chosen)
+                                                    drop = Item(chest.rect.centerx, chest.rect.bottom + 10, chosen)
                                                     group.add(drop); items_group.add(drop)
                                                 break
 
@@ -1077,8 +1079,10 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 r = Rock(obj.x, obj.y); group.add(r); rocks_group.add(r); walls.append(r.hitbox)
             elif obj_type == "chest_right":
                 c = Chest(obj.x, obj.y, flipped=False); group.add(c); chests_group.add(c)
+                walls.append(c.hitbox)
             elif obj_type == "chest_left":
                 c = Chest(obj.x, obj.y, flipped=True); group.add(c); chests_group.add(c)
+                walls.append(c.hitbox)
 
         # Joueur local (serveur) — avec le personnage choisi
         player = Player(player_x, player_y, char_type=host_char_type)
@@ -1347,7 +1351,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                             if available:
                                                 chosen = random.choice(available)
                                                 chest_dropped_items.add(chosen)
-                                                drop = Item(chest.rect.centerx + 20, chest.rect.centery, chosen)
+                                                drop = Item(chest.rect.centerx, chest.rect.bottom + 10, chosen)
                                                 group.add(drop); items_group.add(drop)
                                             break
 
@@ -1508,7 +1512,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                     if available:
                                         chosen = random.choice(available)
                                         chest_dropped_items.add(chosen)
-                                        drop = Item(chest.rect.centerx + 20, chest.rect.centery, chosen)
+                                        drop = Item(chest.rect.centerx, chest.rect.bottom + 10, chosen)
                                         group.add(drop); items_group.add(drop)
                                     break
 

@@ -753,18 +753,6 @@ class UI:
 
     # --- Interface d'obtention d'item (coffre) ---
 
-    CHEST_ITEM_INFO = {
-        'boots': ("Bottes de dash", "Permet d'effectuer un dash rapide."),
-        'redgem': ("Gemme rouge", "Empêche la mort et restaure tous les PV. Usage unique."),
-        'bluegem': ("Gemme bleue", "Rend invincible pendant 5 secondes."),
-        'mirror': ("Miroir", "Une chance sur 3 de renvoyer les dégâts à l'ennemi."),
-        'kitsune_mask': ("Masque du kitsune", "Inflige 50% de dégâts supplémentaires aux ennemis en dessous de 40% PV."),
-        'cursed_brand': ("Marque maudite", "Sacrifie 30% des PV de l'allié pour obtenir un boost de dégâts de 50%."),
-        'travelers_cap': ("Casquette du voyageur", "Yare Yare Daze... Arrête le temps pendant 5 secondes."),
-        'zhonya': ("Sablier de Zhonya", "Le sable se fige, le destin de votre proie aussi. Immobilise l'ennemi le plus proche pendant 3 secondes."),
-        'rabadon': ("Coiffe de Rabadon", "Une couronne de soie imprégnée de siècles de savoir interdit. Augmente tous les dégâts de 30%."),
-    }
-
     def draw_chest_item_ui(self, item_type, alpha):
         """Dessine l'interface d'obtention d'item de coffre avec le niveau d'opacité donné (0-255)."""
         if alpha <= 0:
@@ -800,7 +788,7 @@ class UI:
         # --- Titre "Nouvel objet" ---
         if not hasattr(self, '_chest_title_font'):
             self._chest_title_font = pygame.font.SysFont(
-                "garamond, times new roman, serif", 56, bold=True)
+                "garamond, times new roman, serif", 56)
         title = self._chest_title_font.render("Nouvel objet", True, (255, 220, 150))
         title.set_alpha(alpha)
         title_shadow = self._chest_title_font.render("Nouvel objet", True, (0, 0, 0))
@@ -844,12 +832,12 @@ class UI:
             self.screen.blit(big_icon, (icon_x, icon_y))
 
         # --- Colonne droite : nom + description ---
-        info = self.CHEST_ITEM_INFO.get(item_type, (item_type, ""))
+        info = ITEM_LORE.get(item_type, (item_type, ""))
         item_name, item_desc = info
 
         if not hasattr(self, '_chest_name_font'):
             self._chest_name_font = pygame.font.SysFont(
-                "garamond, times new roman, serif", 42, bold=True)
+                "garamond, times new roman, serif", 42)
             self._chest_desc_font = pygame.font.SysFont(None, 30)
             self._chest_hint_font = pygame.font.SysFont(None, 22)
 

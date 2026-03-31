@@ -180,7 +180,7 @@ class Chest(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.center = (x, y)
         # Hitbox de collision solide — alignée sur le bas du sprite (corps du coffre)
-        hb_w = int(self.rect.width * 0.7)
+        hb_w = int(self.rect.width * 0.55)
         hb_h = int(self.rect.height * 0.4)
         self.hitbox = pygame.Rect(0, 0, hb_w, hb_h)
         self.hitbox.centerx = self.rect.centerx

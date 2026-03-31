@@ -593,12 +593,15 @@ class UI:
         x = (screen_width - box_width) // 2
         y = screen_height - 100
 
+        # Fond style inventaire/pause
         bg_surface = pygame.Surface((box_width, box_height), pygame.SRCALPHA)
-        pygame.draw.rect(bg_surface, (20, 20, 20, 200), (0, 0, box_width, box_height), border_radius=10)
+        pygame.draw.rect(bg_surface, (20, 20, 30, 220), (0, 0, box_width, box_height), border_radius=6)
         self.screen.blit(bg_surface, (x, y))
-        pygame.draw.rect(self.screen, (255, 255, 255), (x, y, box_width, box_height), 2, border_radius=10)
+        # Double bordure dorée
+        pygame.draw.rect(self.screen, (180, 150, 100), (x, y, box_width, box_height), 2, border_radius=6)
+        pygame.draw.rect(self.screen, (100, 80, 50), (x + 2, y + 2, box_width - 4, box_height - 4), 1, border_radius=5)
 
-        text_surf = self.font.render(text, True, (255, 255, 255))
+        text_surf = self.font.render(text, True, (255, 220, 150))
         text_rect = text_surf.get_rect(center=(x + box_width // 2, y + box_height // 2))
         self.screen.blit(text_surf, text_rect)
 
@@ -771,13 +774,13 @@ class UI:
 
         # Panneau 3/4 de l'écran
         panel_w = int(sw * 0.75)
-        panel_h = int(sh * 0.55)
+        panel_h = int(sh * 0.6)
         px = (sw - panel_w) // 2
         py = (sh - panel_h) // 2
 
         # Overlay sombre
         overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, int(120 * alpha / 255)))
+        overlay.fill((0, 0, 0, int(130 * alpha / 255)))
         self.screen.blit(overlay, (0, 0))
 
         # Panneau principal
@@ -788,75 +791,88 @@ class UI:
 
         # Bordures dorées
         border_surf = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
-        border_col = (180, 150, 100, alpha)
-        inner_col = (100, 80, 50, alpha)
-        pygame.draw.rect(border_surf, border_col, (0, 0, panel_w, panel_h), 2, border_radius=8)
-        pygame.draw.rect(border_surf, inner_col, (2, 2, panel_w - 4, panel_h - 4), 1, border_radius=7)
+        pygame.draw.rect(border_surf, (180, 150, 100, alpha),
+                         (0, 0, panel_w, panel_h), 2, border_radius=8)
+        pygame.draw.rect(border_surf, (100, 80, 50, alpha),
+                         (2, 2, panel_w - 4, panel_h - 4), 1, border_radius=7)
         self.screen.blit(border_surf, (px, py))
 
-        # Titre "Nouvel item"
+        # --- Titre "Nouvel objet" ---
         if not hasattr(self, '_chest_title_font'):
             self._chest_title_font = pygame.font.SysFont(
-                "garamond, times new roman, serif", 42, bold=True)
-        title = self._chest_title_font.render("Nouvel item", True, (255, 220, 150))
+                "garamond, times new roman, serif", 56, bold=True)
+        title = self._chest_title_font.render("Nouvel objet", True, (255, 220, 150))
         title.set_alpha(alpha)
-        title_shadow = self._chest_title_font.render("Nouvel item", True, (0, 0, 0))
+        title_shadow = self._chest_title_font.render("Nouvel objet", True, (0, 0, 0))
         title_shadow.set_alpha(alpha)
         tx = px + panel_w // 2 - title.get_width() // 2
-        ty = py + 20
+        ty = py + 22
         self.screen.blit(title_shadow, (tx + 2, ty + 2))
         self.screen.blit(title, (tx, ty))
 
         # Ligne décorative
-        line_y = ty + title.get_height() + 10
+        line_y = ty + title.get_height() + 12
         line_surf = pygame.Surface((panel_w - 60, 1), pygame.SRCALPHA)
         line_surf.fill((180, 150, 100, alpha))
         self.screen.blit(line_surf, (px + 30, line_y))
 
-        # Zone contenu : icône à gauche, texte à droite
-        content_y = line_y + 20
-        icon_size = min(128, panel_h - 160)
+        # --- Zone contenu : 2 colonnes ---
+        content_y = line_y + 18
+        content_h = panel_h - (content_y - py) - 50  # marge bas pour hint
+        left_col_w = int(panel_w * 0.33)
+        right_col_x = px + left_col_w + 10
 
-        # Icône de l'item (agrandie)
+        # --- Colonne gauche : icône en grand dans un cadre ---
+        icon_size = min(left_col_w - 50, content_h - 20)
+        icon_size = max(icon_size, 80)
         icon = self._get_item_icon(item_type)
         if icon:
-            big_icon = pygame.transform.scale(icon, (icon_size, icon_size))
+            big_icon = pygame.transform.smoothscale(icon, (icon_size, icon_size))
             big_icon.set_alpha(alpha)
-            icon_x = px + 40
-            icon_y = content_y + (panel_h - 160 - icon_size) // 2
-            # Cadre autour de l'icône
-            frame_rect = pygame.Rect(icon_x - 6, icon_y - 6, icon_size + 12, icon_size + 12)
-            frame_surf = pygame.Surface((frame_rect.width, frame_rect.height), pygame.SRCALPHA)
-            pygame.draw.rect(frame_surf, (40, 40, 40, int(180 * alpha / 255)),
-                             (0, 0, frame_rect.width, frame_rect.height), border_radius=5)
+            icon_x = px + (left_col_w - icon_size) // 2
+            icon_y = content_y + (content_h - icon_size) // 2
+            # Cadre
+            pad = 10
+            frame_surf = pygame.Surface((icon_size + pad * 2, icon_size + pad * 2), pygame.SRCALPHA)
+            pygame.draw.rect(frame_surf, (35, 35, 45, int(200 * alpha / 255)),
+                             (0, 0, frame_surf.get_width(), frame_surf.get_height()), border_radius=6)
             pygame.draw.rect(frame_surf, (180, 150, 100, alpha),
-                             (0, 0, frame_rect.width, frame_rect.height), 2, border_radius=5)
-            self.screen.blit(frame_surf, frame_rect.topleft)
+                             (0, 0, frame_surf.get_width(), frame_surf.get_height()), 2, border_radius=6)
+            pygame.draw.rect(frame_surf, (100, 80, 50, alpha),
+                             (2, 2, frame_surf.get_width() - 4, frame_surf.get_height() - 4), 1, border_radius=5)
+            self.screen.blit(frame_surf, (icon_x - pad, icon_y - pad))
             self.screen.blit(big_icon, (icon_x, icon_y))
 
-        # Texte : nom + description
+        # --- Colonne droite : nom + description ---
         info = self.CHEST_ITEM_INFO.get(item_type, (item_type, ""))
         item_name, item_desc = info
 
         if not hasattr(self, '_chest_name_font'):
             self._chest_name_font = pygame.font.SysFont(
-                "garamond, times new roman, serif", 32, bold=True)
-            self._chest_desc_font = pygame.font.SysFont(None, 24)
-            self._chest_hint_font = pygame.font.SysFont(None, 20)
+                "garamond, times new roman, serif", 42, bold=True)
+            self._chest_desc_font = pygame.font.SysFont(None, 30)
+            self._chest_hint_font = pygame.font.SysFont(None, 22)
 
-        text_x = px + 60 + icon_size + 30
-        text_max_w = panel_w - (60 + icon_size + 30) - 30
+        text_x = right_col_x + 15
+        text_max_w = (px + panel_w - 30) - text_x
 
         # Nom de l'item
+        name_y = content_y + 15
         name_surf = self._chest_name_font.render(item_name, True, (255, 220, 150))
         name_surf.set_alpha(alpha)
         name_shadow = self._chest_name_font.render(item_name, True, (0, 0, 0))
         name_shadow.set_alpha(alpha)
-        self.screen.blit(name_shadow, (text_x + 1, content_y + 11))
-        self.screen.blit(name_surf, (text_x, content_y + 10))
+        self.screen.blit(name_shadow, (text_x + 2, name_y + 2))
+        self.screen.blit(name_surf, (text_x, name_y))
+
+        # Ligne séparatrice sous le nom
+        sep_y = name_y + name_surf.get_height() + 10
+        sep_surf = pygame.Surface((text_max_w, 1), pygame.SRCALPHA)
+        sep_surf.fill((100, 80, 50, alpha))
+        self.screen.blit(sep_surf, (text_x, sep_y))
 
         # Description (word-wrap)
-        desc_y = content_y + 10 + name_surf.get_height() + 15
+        desc_y = sep_y + 14
         words = item_desc.split(' ')
         lines = []
         current_line = ""
@@ -870,12 +886,12 @@ class UI:
         if current_line:
             lines.append(current_line)
 
-        for i, line in enumerate(lines):
-            line_surf = self._chest_desc_font.render(line, True, (200, 200, 210))
-            line_surf.set_alpha(alpha)
-            self.screen.blit(line_surf, (text_x, desc_y + i * 28))
+        for i, line_text in enumerate(lines):
+            ls = self._chest_desc_font.render(line_text, True, (210, 210, 220))
+            ls.set_alpha(alpha)
+            self.screen.blit(ls, (text_x, desc_y + i * 34))
 
-        # Indication "Entrée pour skip"
+        # --- Indication "Entrée pour skip" ---
         hint = self._chest_hint_font.render("Entrée pour skip", True, (150, 150, 150))
         hint.set_alpha(alpha)
         self.screen.blit(hint, (px + panel_w - hint.get_width() - 20,

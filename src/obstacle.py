@@ -141,7 +141,7 @@ class Chest(pygame.sprite.Sprite):
     CLOSED_PATH = "assets/images/Chest/Chest.png"
     OPEN_PATH = "assets/images/Chest/ChestOpen.png"
     ANIM_DIR = "assets/images/Chest/Open"
-    SCALE = 1.8
+    SCALE = 1.2
 
     def __init__(self, x, y, flipped=False):
         super().__init__()
@@ -179,11 +179,12 @@ class Chest(pygame.sprite.Sprite):
         self.image = self.closed_img
         self.rect = self.image.get_rect()
         self.rect.center = (x, y)
-        # Hitbox de collision solide
-        self.hitbox = pygame.Rect(0, 0,
-                                  self.rect.width * 0.6,
-                                  self.rect.height * 0.5)
-        self.hitbox.center = self.rect.center
+        # Hitbox de collision solide — alignée sur le bas du sprite (corps du coffre)
+        hb_w = int(self.rect.width * 0.7)
+        hb_h = int(self.rect.height * 0.4)
+        self.hitbox = pygame.Rect(0, 0, hb_w, hb_h)
+        self.hitbox.centerx = self.rect.centerx
+        self.hitbox.bottom = self.rect.bottom
 
     def open(self):
         """Déclenche l'animation d'ouverture."""

@@ -209,6 +209,15 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
         death_time = None
         death_sound_played = False
 
+        # --- Interface d'obtention d'item (coffre) ---
+        chest_ui_active = False
+        chest_ui_item = None
+        chest_ui_start_time = 0
+        chest_ui_closing = False
+        chest_ui_close_time = 0
+        CHEST_UI_FADE_IN = 300
+        CHEST_UI_FADE_OUT = 300
+
         # --- Arrêt du temps (Casquette du voyageur) ---
         time_stop_active = False
         time_stop_end_time = 0
@@ -376,9 +385,23 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                                                 if available:
                                                     chosen = random.choice(available)
                                                     chest_dropped_items.add(chosen)
-                                                    drop = Item(chest.rect.centerx, chest.rect.bottom + 10, chosen)
-                                                    group.add(drop); items_group.add(drop)
+                                                    if player.add_inventory_item(chosen):
+                                                        pass  # ajouté à l'inventaire
+                                                    else:
+                                                        drop = Item(chest.rect.centerx, chest.rect.bottom + 10, chosen)
+                                                        group.add(drop); items_group.add(drop)
+                                                    # Afficher l'interface d'obtention
+                                                    chest_ui_active = True
+                                                    chest_ui_item = chosen
+                                                    chest_ui_start_time = pygame.time.get_ticks()
+                                                    chest_ui_closing = False
+                                                    sound_manager.play_ui_get_item()
                                                 break
+
+                            if event.key == pygame.K_RETURN:
+                                if chest_ui_active and not chest_ui_closing:
+                                    chest_ui_closing = True
+                                    chest_ui_close_time = pygame.time.get_ticks()
 
                 elif event.type == pygame.KEYUP:
                     if event.key == pygame.K_j: show_mmo = False
@@ -776,7 +799,22 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                     screen.blit(death_text, death_rect)
                     
                 if time_since_death > 5000:
-                    return 
+                    return
+
+            # --- Interface coffre (solo) ---
+            if chest_ui_active:
+                now = pygame.time.get_ticks()
+                if chest_ui_closing:
+                    elapsed = now - chest_ui_close_time
+                    if elapsed >= CHEST_UI_FADE_OUT:
+                        chest_ui_active = False
+                    else:
+                        alpha = int(255 * (1.0 - elapsed / CHEST_UI_FADE_OUT))
+                        ui.draw_chest_item_ui(chest_ui_item, alpha)
+                else:
+                    elapsed = now - chest_ui_start_time
+                    alpha = min(255, int(255 * elapsed / CHEST_UI_FADE_IN))
+                    ui.draw_chest_item_ui(chest_ui_item, alpha)
 
             pygame.display.flip()
             clock.tick(60)
@@ -1119,6 +1157,15 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
         cursed_brand_animating = False
         cursed_brand_anim_start = 0
 
+        # --- Interface d'obtention d'item (coffre) ---
+        chest_ui_active = False
+        chest_ui_item = None
+        chest_ui_start_time = 0
+        chest_ui_closing = False
+        chest_ui_close_time = 0
+        CHEST_UI_FADE_IN = 300
+        CHEST_UI_FADE_OUT = 300
+
         # --- Arrêt du temps (Casquette du voyageur) ---
         time_stop_active = False
         time_stop_end_time = 0
@@ -1351,9 +1398,19 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                             if available:
                                                 chosen = random.choice(available)
                                                 chest_dropped_items.add(chosen)
-                                                drop = Item(chest.rect.centerx, chest.rect.bottom + 10, chosen)
-                                                group.add(drop); items_group.add(drop)
+                                                if not player.add_inventory_item(chosen):
+                                                    drop = Item(chest.rect.centerx, chest.rect.bottom + 10, chosen)
+                                                    group.add(drop); items_group.add(drop)
+                                                chest_ui_active = True
+                                                chest_ui_item = chosen
+                                                chest_ui_start_time = pygame.time.get_ticks()
+                                                chest_ui_closing = False
+                                                sound_manager.play_ui_get_item()
                                             break
+                        if event.key == pygame.K_RETURN:
+                            if chest_ui_active and not chest_ui_closing:
+                                chest_ui_closing = True
+                                chest_ui_close_time = pygame.time.get_ticks()
 
             if not level_running:
                 continue
@@ -1512,8 +1569,13 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                     if available:
                                         chosen = random.choice(available)
                                         chest_dropped_items.add(chosen)
-                                        drop = Item(chest.rect.centerx, chest.rect.bottom + 10, chosen)
-                                        group.add(drop); items_group.add(drop)
+                                        if not player2.add_inventory_item(chosen):
+                                            drop = Item(chest.rect.centerx, chest.rect.bottom + 10, chosen)
+                                            group.add(drop); items_group.add(drop)
+                                        sound_events.append({'sound': 'get_item',
+                                                             'x': chest.rect.centerx,
+                                                             'y': chest.rect.centery,
+                                                             'chest_item': chosen})
                                     break
 
                 # Drop items player2
@@ -2149,6 +2211,21 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 }
                 server.send_state(state)
 
+            # --- Interface coffre (host MP) ---
+            if chest_ui_active:
+                now = pygame.time.get_ticks()
+                if chest_ui_closing:
+                    elapsed = now - chest_ui_close_time
+                    if elapsed >= CHEST_UI_FADE_OUT:
+                        chest_ui_active = False
+                    else:
+                        alpha = int(255 * (1.0 - elapsed / CHEST_UI_FADE_OUT))
+                        ui.draw_chest_item_ui(chest_ui_item, alpha)
+                else:
+                    elapsed = now - chest_ui_start_time
+                    alpha = min(255, int(255 * elapsed / CHEST_UI_FADE_IN))
+                    ui.draw_chest_item_ui(chest_ui_item, alpha)
+
             pygame.display.flip()
             clock.tick(60)
 
@@ -2180,6 +2257,15 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 
     font_small = pygame.font.SysFont(None, 24)
     death_font = pygame.font.SysFont("old english text mt, garamond, times new roman, serif", 120)
+
+    # Interface d'obtention d'item (coffre) côté client
+    chest_ui_active = False
+    chest_ui_item = None
+    chest_ui_start_time = 0
+    chest_ui_closing = False
+    chest_ui_close_time = 0
+    CHEST_UI_FADE_IN = 300
+    CHEST_UI_FADE_OUT = 300
 
     def _cleanup_client_audio():
         """Stoppe toute musique et sons en boucle côté client."""
@@ -2252,6 +2338,9 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 is_paused_client = not is_paused_client   # toggle, ne quitte PAS
             if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
                 run_game_mp_client._skip_dialogue = True
+                if chest_ui_active and not chest_ui_closing:
+                    chest_ui_closing = True
+                    chest_ui_close_time = pygame.time.get_ticks()
 
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if is_paused_client and pause_rects_client:
@@ -2383,14 +2472,13 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             if cd['opened']:
                 rc.opened = True
                 rc.opening = False
-                rc.frame_index = Chest.NUM_FRAMES - 1
-                rc.image = rc.frames[Chest.NUM_FRAMES - 1]
+                rc.image = rc.open_img
                 rc.rect = rc.image.get_rect(center=rc.rect.center)
             elif cd['opening']:
                 rc.opening = True
                 rc.frame_index = cd['frame']
-                idx = min(cd['frame'], Chest.NUM_FRAMES - 1)
-                rc.image = rc.frames[idx]
+                idx = min(cd['frame'], rc.num_frames - 1)
+                rc.image = rc.anim_frames[idx]
                 rc.rect = rc.image.get_rect(center=rc.rect.center)
 
         # --- Projectiles distants ---
@@ -2503,6 +2591,15 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                     pygame.mixer.music.fadeout(4000)
                 except Exception:
                     pass
+            elif snd_name == 'get_item':
+                # Le client a ouvert un coffre → afficher l'interface
+                chest_item = snd_event.get('chest_item') if isinstance(snd_event, dict) else None
+                if chest_item:
+                    chest_ui_active = True
+                    chest_ui_item = chest_item
+                    chest_ui_start_time = pygame.time.get_ticks()
+                    chest_ui_closing = False
+                sound_manager.play_ui_get_item()
             elif snd_name == 'dash':
                 sound_manager.play_spatial_dash(src_pos, client_listener)
             else:
@@ -2893,6 +2990,21 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 screen.blit(cb_img, cb_rect)
             else:
                 run_game_mp_client._client_cb_animating = False
+
+        # --- Interface coffre (client) ---
+        if chest_ui_active:
+            now = pygame.time.get_ticks()
+            if chest_ui_closing:
+                elapsed = now - chest_ui_close_time
+                if elapsed >= CHEST_UI_FADE_OUT:
+                    chest_ui_active = False
+                else:
+                    alpha = int(255 * (1.0 - elapsed / CHEST_UI_FADE_OUT))
+                    ui.draw_chest_item_ui(chest_ui_item, alpha)
+            else:
+                elapsed = now - chest_ui_start_time
+                alpha = min(255, int(255 * elapsed / CHEST_UI_FADE_IN))
+                ui.draw_chest_item_ui(chest_ui_item, alpha)
 
         pygame.display.flip()
         clock.tick(60)

@@ -53,6 +53,7 @@ class SoundManager:
         load_sound('eureka', "assets/sounds/eureka.mp3")
         load_sound('death', "assets/sounds/death.wav")
         load_sound('eating', "assets/sounds/eating.wav")
+        load_sound('get_item', "assets/sounds/get_item.wav")
 
         # --- SONS DU DASH ET DE L'ÉQUIPEMENT ---
         load_sound('dash1', "assets/sounds/dash1.wav")
@@ -93,6 +94,7 @@ class SoundManager:
             'shot': 0.6,
             'rock_broke': 0.8,
             'eating': 0.8,
+            'get_item': 0.6,
             'dash1': 0.6,
             'dash2': 0.6,
             'dash3': 0.6,
@@ -249,6 +251,9 @@ class SoundManager:
 
     def play_ui_eating(self):
         if 'eating' in self.sounds: self.sounds['eating'].play()
+
+    def play_ui_get_item(self):
+        if 'get_item' in self.sounds: self.sounds['get_item'].play()
 
     def play_ui_time_stop(self):
         if 'time_stop' in self.sounds: self.sounds['time_stop'].play()

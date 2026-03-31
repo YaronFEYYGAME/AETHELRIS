@@ -138,11 +138,10 @@ class DarkParticle(pygame.sprite.Sprite):
 class Chest(pygame.sprite.Sprite):
     """Coffre interactif avec animation d'ouverture."""
 
-    SPRITE_PATH = "assets/images/Chests.png"
-    FRAME_W = 48
-    FRAME_H = 32
-    NUM_FRAMES = 5
-    SCALE = 1.5
+    CLOSED_PATH = "assets/images/Chest/Chest.png"
+    OPEN_PATH = "assets/images/Chest/ChestOpen.png"
+    ANIM_DIR = "assets/images/Chest/Open"
+    SCALE = 1.8
 
     def __init__(self, x, y, flipped=False):
         super().__init__()
@@ -150,33 +149,40 @@ class Chest(pygame.sprite.Sprite):
         self.opened = False
         self.opening = False
         self.frame_index = 0.0
-        self.anim_speed = 6  # frames par seconde
+        self.anim_speed = 12  # frames par seconde
 
-        # Charger les frames de la première rangée (coffre marron, row 0)
-        self.frames = []
+        def _load_and_scale(path):
+            img = pygame.image.load(path).convert_alpha()
+            w, h = img.get_size()
+            scaled = pygame.transform.scale(img, (int(w * self.SCALE), int(h * self.SCALE)))
+            if flipped:
+                scaled = pygame.transform.flip(scaled, True, False)
+            return scaled
+
         try:
-            sheet = pygame.image.load(self.SPRITE_PATH).convert_alpha()
-            for i in range(self.NUM_FRAMES):
-                frame = sheet.subsurface(pygame.Rect(
-                    i * self.FRAME_W, 0, self.FRAME_W, self.FRAME_H))
-                scaled = pygame.transform.scale(frame,
-                    (int(self.FRAME_W * self.SCALE), int(self.FRAME_H * self.SCALE)))
-                if flipped:
-                    scaled = pygame.transform.flip(scaled, True, False)
-                self.frames.append(scaled)
+            self.closed_img = _load_and_scale(self.CLOSED_PATH)
+            self.open_img = _load_and_scale(self.OPEN_PATH)
+            # Frames d'animation triées numériquement
+            import re
+            anim_files = sorted(os.listdir(self.ANIM_DIR),
+                                key=lambda f: int(re.search(r'(\d+)', f).group(1)))
+            self.anim_frames = [_load_and_scale(os.path.join(self.ANIM_DIR, f))
+                                for f in anim_files if f.endswith('.png')]
         except Exception:
-            fallback = pygame.Surface((int(self.FRAME_W * self.SCALE),
-                                       int(self.FRAME_H * self.SCALE)), pygame.SRCALPHA)
+            fallback = pygame.Surface((int(64 * self.SCALE), int(32 * self.SCALE)), pygame.SRCALPHA)
             fallback.fill((139, 90, 43))
-            self.frames = [fallback] * self.NUM_FRAMES
+            self.closed_img = fallback
+            self.open_img = fallback
+            self.anim_frames = [fallback]
 
-        self.image = self.frames[0]
+        self.num_frames = len(self.anim_frames)
+        self.image = self.closed_img
         self.rect = self.image.get_rect()
         self.rect.center = (x, y)
-        # Hitbox de collision solide (plus petite que le sprite)
+        # Hitbox de collision solide
         self.hitbox = pygame.Rect(0, 0,
-                                  int(self.FRAME_W * self.SCALE * 0.6),
-                                  int(self.FRAME_H * self.SCALE * 0.5))
+                                  self.rect.width * 0.6,
+                                  self.rect.height * 0.5)
         self.hitbox.center = self.rect.center
 
     def open(self):
@@ -190,9 +196,10 @@ class Chest(pygame.sprite.Sprite):
         if self.opening and not self.opened:
             self.frame_index += self.anim_speed / 60.0
             idx = int(self.frame_index)
-            if idx >= self.NUM_FRAMES:
-                idx = self.NUM_FRAMES - 1
+            if idx >= self.num_frames:
                 self.opened = True
                 self.opening = False
-            self.image = self.frames[idx]
+                self.image = self.open_img
+            else:
+                self.image = self.anim_frames[idx]
             self.rect = self.image.get_rect(center=self.rect.center)

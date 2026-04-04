@@ -42,6 +42,7 @@ class Enemy(pygame.sprite.Sprite):
         self.attack_range = 40           # distance d'attaque (pixels)
         self.detection_radius = 200      # distance de détection du joueur
         self.damage_amount = base_dmg    # dégâts infligés au joueur
+        self._current_attack_anim = 'attack'  # animation d'attaque en cours
 
         # --- DIRECTION & MOUVEMENT ---
         self.facing = 'right'
@@ -169,7 +170,17 @@ class Enemy(pygame.sprite.Sprite):
         if self.is_dead:
             self.state = 'death'
         elif self.is_attacking:
-            self.state = 'attack'
+            # Certains mobs ont 'attack', d'autres 'attack1'/'attack2'/'attack3'
+            # On utilise l'animation choisie par get_attack_animation() si elle existe,
+            # sinon on cherche 'attack', sinon la première clé qui contient 'attack'
+            if hasattr(self, '_current_attack_anim') and self._current_attack_anim in self.animations[self.facing]:
+                self.state = self._current_attack_anim
+            elif 'attack' in self.animations[self.facing]:
+                self.state = 'attack'
+            else:
+                # Fallback : trouver la première animation d'attaque disponible
+                attack_keys = [k for k in self.animations[self.facing] if 'attack' in k]
+                self.state = attack_keys[0] if attack_keys else 'idle'
         elif hasattr(self, 'current_velocity') and self.current_velocity.length() > 0.1:
             self.state = 'walk'
         else:
@@ -307,6 +318,11 @@ class Enemy(pygame.sprite.Sprite):
                 self.last_attack_time = current_time
                 self.is_attacking = True
                 self.frame_index = 0
+                # Choisir l'animation d'attaque (les sous-classes peuvent override get_attack_animation)
+                if hasattr(self, 'get_attack_animation'):
+                    self._current_attack_anim = self.get_attack_animation()
+                else:
+                    self._current_attack_anim = 'attack'
                 player.damage(self.damage_amount, source_enemy=self)
 
 

@@ -5,7 +5,9 @@ import random
 
 from player import Player, RemotePlayer
 from sound import SoundManager
-from enemy import Enemy, BigEnemy, Necromancer, Spirit, Medusa, RemoteEnemy, Fairy, KingBoss, SbireNeant
+from enemy import Enemy, RemoteEnemy
+from bosses import BigEnemy, Necromancer, Spirit, Medusa, KingBoss, SbireNeant
+from mobs import Orc, Fairy, Skeleton, Slime, OrcRider, EliteOrc, GreatswordSkeleton, SkeletonArcher
 from ui import UI
 from item import Item
 from projectile import Projectile, HomingProjectile, HealEffect, InstantAOE, FloatingText
@@ -96,6 +98,9 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                 new_enemy = Enemy(obj.x, obj.y)
                 group.add(new_enemy)
                 enemies_group.add(new_enemy)
+            elif obj.type == 'slime' : 
+                enemy = Slime(obj.x, obj.y)
+                enemies_group.add(enemy)
             elif obj_type == "bigenemy":
                 new_enemy = BigEnemy(obj.x, obj.y)
                 if hasattr(new_enemy, 'update_volumes'):

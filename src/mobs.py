@@ -131,10 +131,10 @@ class Fairy(pygame.sprite.Sprite):
 class Skeleton(Enemy):
     def __init__(self, x, y):
         super().__init__(x, y, name="skeleton", base_hp=100, base_dmg=10, base_speed=2.0)
-        self.load_dynamic_animation('idle', "assets/image/mob/Skeleton/Skeleton-Idle.png")
-        self.load_dynamic_animation('walk', "assets/image/mob/Skeleton/Skeleton-Walk.png")
-        self.load_dynamic_animation('attack', "assets/image/mob/Skeleton/Skeleton-Attack01.png")
-        self.load_dynamic_animation('death', "assets/image/mob/Skeleton/Skeleton-Death.png")
+        self.load_dynamic_animation('idle', "assets/images/mob/Skeleton/Skeleton-Idle.png")
+        self.load_dynamic_animation('walk', "assets/images/mob/Skeleton/Skeleton-Walk.png")
+        self.load_dynamic_animation('attack', "assets/images/mob/Skeleton/Skeleton-Attack01.png")
+        self.load_dynamic_animation('death', "assets/images/mob/Skeleton/Skeleton-Death.png")
         
         if 'idle' in self.animations['right']:
             self.image = self.animations['right']['idle'][0]
@@ -146,11 +146,11 @@ class Slime(Enemy):
     def __init__(self, x, y):
         # PV x0.6, Vitesse x1.4, Dégâts x1
         super().__init__(x, y, name="slime", base_hp=60, base_dmg=10, base_speed=2.8)
-        self.load_dynamic_animation('idle', "assets/image/mob/Slime/Slime-Idle.png")
-        self.load_dynamic_animation('walk', "assets/image/mob/Slime/Slime-Walk.png")
-        self.load_dynamic_animation('attack1', "assets/image/mob/Slime/Slime-Attack01.png")
-        self.load_dynamic_animation('attack2', "assets/image/mob/Slime/Slime-Attack02.png")
-        self.load_dynamic_animation('death', "assets/image/mob/Slime/Slime-Death.png")
+        self.load_dynamic_animation('idle', "assets/images/mob/Slime/Slime-Idle.png")
+        self.load_dynamic_animation('walk', "assets/images/mob/Slime/Slime-Walk.png")
+        self.load_dynamic_animation('attack1', "assets/images/mob/Slime/Slime-Attack01.png")
+        self.load_dynamic_animation('attack2', "assets/images/mob/Slime/Slime-Attack02.png")
+        self.load_dynamic_animation('death', "assets/images/mob/Slime/Slime-Death.png")
         
         if 'idle' in self.animations['right']:
             self.image = self.animations['right']['idle'][0]
@@ -176,12 +176,12 @@ class OrcRider(Enemy):
         self.feet = pygame.Rect(0, 0, hitbox_size, hitbox_size)
         self.feet.midbottom = (round(x), round(y))
 
-        self.load_dynamic_animation('idle', "assets/image/mob/Orc_rider/Orc rider-Idle.png")
-        self.load_dynamic_animation('walk', "assets/image/mob/Orc_rider/Orc rider-Walk.png")
-        self.load_dynamic_animation('attack1', "assets/image/mob/Orc_rider/Orc rider-Attack01.png")
-        self.load_dynamic_animation('attack2', "assets/image/mob/Orc_rider/Orc rider-Attack02.png")
-        self.load_dynamic_animation('attack3', "assets/image/mob/Orc_rider/Orc rider-Attack03.png")
-        self.load_dynamic_animation('death', "assets/image/mob/Orc_rider/Orc rider-Death.png")
+        self.load_dynamic_animation('idle', "assets/images/mob/Orc_rider/Orc rider-Idle.png")
+        self.load_dynamic_animation('walk', "assets/images/mob/Orc_rider/Orc rider-Walk.png")
+        self.load_dynamic_animation('attack1', "assets/images/mob/Orc_rider/Orc rider-Attack01.png")
+        self.load_dynamic_animation('attack2', "assets/images/mob/Orc_rider/Orc rider-Attack02.png")
+        self.load_dynamic_animation('attack3', "assets/images/mob/Orc_rider/Orc rider-Attack03.png")
+        self.load_dynamic_animation('death', "assets/images/mob/Orc_rider/Orc rider-Death.png")
         
         if 'idle' in self.animations['right']:
             self.image = self.animations['right']['idle'][0]
@@ -206,12 +206,12 @@ class EliteOrc(Enemy):
     def __init__(self, x, y):
         # PV x4, Dégâts x1.3
         super().__init__(x, y, name="elite_orc", base_hp=400, base_dmg=13, base_speed=2.0)
-        self.load_dynamic_animation('idle', "assets/image/mob/Elite_Orc/Elite Orc-Idle.png")
-        self.load_dynamic_animation('walk', "assets/image/mob/Elite_Orc/Elite Orc-Walk.png")
-        self.load_dynamic_animation('attack1', "assets/image/mob/Elite_Orc/Elite Orc-Attack01.png")
-        self.load_dynamic_animation('attack2', "assets/image/mob/Elite_Orc/Elite Orc-Attack02.png")
-        self.load_dynamic_animation('attack3', "assets/image/mob/Elite_Orc/Elite Orc-Attack03.png")
-        self.load_dynamic_animation('death', "assets/image/mob/Elite_Orc/Elite Orc-Death.png")
+        self.load_dynamic_animation('idle', "assets/images/mob/Elite_Orc/Elite Orc-Idle.png")
+        self.load_dynamic_animation('walk', "assets/images/mob/Elite_Orc/Elite Orc-Walk.png")
+        self.load_dynamic_animation('attack1', "assets/images/mob/Elite_Orc/Elite Orc-Attack01.png")
+        self.load_dynamic_animation('attack2', "assets/images/mob/Elite_Orc/Elite Orc-Attack02.png")
+        self.load_dynamic_animation('attack3', "assets/images/mob/Elite_Orc/Elite Orc-Attack03.png")
+        self.load_dynamic_animation('death', "assets/images/mob/Elite_Orc/Elite Orc-Death.png")
         
         if 'idle' in self.animations['right']:
             self.image = self.animations['right']['idle'][0]
@@ -231,12 +231,12 @@ class GreatswordSkeleton(Enemy):
     def __init__(self, x, y):
         # PV x4
         super().__init__(x, y, name="greatsword_skeleton", base_hp=400, base_dmg=10, base_speed=2.0)
-        self.load_dynamic_animation('idle', "assets/mob/greatsword_skeleton/Greatsword Skeleton-Idle.png")
-        self.load_dynamic_animation('walk', "assets/mob/greatsword_skeleton/Greatsword Skeleton-Walk.png")
-        self.load_dynamic_animation('attack1', "assets/mob/greatsword_skeleton/Greatsword Skeleton-Attack01.png")
-        self.load_dynamic_animation('attack2', "assets/mob/greatsword_skeleton/Greatsword Skeleton-Attack02.png")
-        self.load_dynamic_animation('attack3', "assets/mob/greatsword_skeleton/Greatsword Skeleton-Attack03.png")
-        self.load_dynamic_animation('death', "assets/mob/greatsword_skeleton/Greatsword Skeleton-Death.png")
+        self.load_dynamic_animation('idle', "assets/images/mob/greatsword_skeleton/Greatsword Skeleton-Idle.png")
+        self.load_dynamic_animation('walk', "assets/images/mob/greatsword_skeleton/Greatsword Skeleton-Walk.png")
+        self.load_dynamic_animation('attack1', "assets/images/mob/greatsword_skeleton/Greatsword Skeleton-Attack01.png")
+        self.load_dynamic_animation('attack2', "assets/images/mob/greatsword_skeleton/Greatsword Skeleton-Attack02.png")
+        self.load_dynamic_animation('attack3', "assets/images/mob/greatsword_skeleton/Greatsword Skeleton-Attack03.png")
+        self.load_dynamic_animation('death', "assets/images/mob/greatsword_skeleton/Greatsword Skeleton-Death.png")
         
         if 'idle' in self.animations['right']:
             self.image = self.animations['right']['idle'][0]
@@ -252,10 +252,10 @@ class SkeletonArcher(Enemy):
 
     def __init__(self, x, y):
         super().__init__(x, y, name="skeleton_archer", base_hp=100, base_dmg=10, base_speed=2.0)
-        self.load_dynamic_animation('idle', "assets/mob/skeleton_archer/Skeleton Archer-Idle.png")
-        self.load_dynamic_animation('walk', "assets/mob/skeleton_archer/Skeleton Archer-Walk.png")
-        self.load_dynamic_animation('attack', "assets/mob/skeleton_archer/Skeleton Archer-Attack.png")
-        self.load_dynamic_animation('death', "assets/mob/skeleton_archer/Skeleton Archer-Death.png")
+        self.load_dynamic_animation('idle', "assets/images/mob/skeleton_archer/Skeleton Archer-Idle.png")
+        self.load_dynamic_animation('walk', "assets/images/mob/skeleton_archer/Skeleton Archer-Walk.png")
+        self.load_dynamic_animation('attack', "assets/images/mob/skeleton_archer/Skeleton Archer-Attack.png")
+        self.load_dynamic_animation('death', "assets/images/mob/skeleton_archer/Skeleton Archer-Death.png")
         
         if 'idle' in self.animations['right']:
             self.image = self.animations['right']['idle'][0]
@@ -267,7 +267,7 @@ class SkeletonArcher(Enemy):
             self.rect.centerx, 
             self.rect.centery, 
             direction, 
-            img_path="assets/mob/skeleton_archer/Arrow03(32x32).png", 
+            img_path="assets/images/mob/skeleton_archer/Arrow03(32x32).png", 
             damage=self.damage
         )
         projectiles_group.add(arrow)

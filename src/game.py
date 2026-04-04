@@ -86,11 +86,12 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
         player_x, player_y = 100, 100
 
         for obj in tmx_data.objects:
-            obj_type = obj.type.lower() if obj.type else ""
-            
+            # Robustesse Tiled : obj.type OU obj.name selon la version de Tiled
+            obj_type = (obj.type or obj.name or "").lower()
+
             if obj_type == "collision":
                 walls.append(pygame.Rect(obj.x, obj.y, obj.width, obj.height))
-            elif obj_type == "exit": 
+            elif obj_type == "exit":
                 exit_zones.append(pygame.Rect(obj.x, obj.y, obj.width, obj.height))
             elif obj_type == "player":
                 player_x = obj.x
@@ -99,9 +100,42 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                 new_enemy = Enemy(obj.x, obj.y)
                 group.add(new_enemy)
                 enemies_group.add(new_enemy)
-            elif obj.type == 'slime' : 
-                enemy = Slime(obj.x, obj.y)
-                enemies_group.add(enemy)
+                print(f"[SPAWN] Enemy en ({obj.x}, {obj.y})")
+            elif obj_type == "orc":
+                new_enemy = Orc(obj.x, obj.y)
+                group.add(new_enemy)
+                enemies_group.add(new_enemy)
+                print(f"[SPAWN] Orc en ({obj.x}, {obj.y})")
+            elif obj_type == "slime":
+                new_enemy = Slime(obj.x, obj.y)
+                group.add(new_enemy)
+                enemies_group.add(new_enemy)
+                print(f"[SPAWN] Slime en ({obj.x}, {obj.y})")
+            elif obj_type == "skeleton":
+                new_enemy = Skeleton(obj.x, obj.y)
+                group.add(new_enemy)
+                enemies_group.add(new_enemy)
+                print(f"[SPAWN] Skeleton en ({obj.x}, {obj.y})")
+            elif obj_type == "orc_rider":
+                new_enemy = OrcRider(obj.x, obj.y)
+                group.add(new_enemy)
+                enemies_group.add(new_enemy)
+                print(f"[SPAWN] OrcRider en ({obj.x}, {obj.y})")
+            elif obj_type == "elite_orc":
+                new_enemy = EliteOrc(obj.x, obj.y)
+                group.add(new_enemy)
+                enemies_group.add(new_enemy)
+                print(f"[SPAWN] EliteOrc en ({obj.x}, {obj.y})")
+            elif obj_type == "greatsword_skeleton":
+                new_enemy = GreatswordSkeleton(obj.x, obj.y)
+                group.add(new_enemy)
+                enemies_group.add(new_enemy)
+                print(f"[SPAWN] GreatswordSkeleton en ({obj.x}, {obj.y})")
+            elif obj_type == "skeleton_archer":
+                new_enemy = SkeletonArcher(obj.x, obj.y)
+                group.add(new_enemy)
+                enemies_group.add(new_enemy)
+                print(f"[SPAWN] SkeletonArcher en ({obj.x}, {obj.y})")
             elif obj_type == "bigenemy":
                 new_enemy = BigEnemy(obj.x, obj.y)
                 if hasattr(new_enemy, 'update_volumes'):
@@ -1059,7 +1093,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
         player_x, player_y = 100, 100
 
         for obj in tmx_data.objects:
-            obj_type = obj.type.lower() if obj.type else ""
+            # Robustesse Tiled : obj.type OU obj.name selon la version de Tiled
+            obj_type = (obj.type or obj.name or "").lower()
             if obj_type == "collision":
                 walls.append(pygame.Rect(obj.x, obj.y, obj.width, obj.height))
             elif obj_type == "exit":
@@ -1069,6 +1104,35 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             elif obj_type == "enemy":
                 e = Enemy(obj.x, obj.y); e._mp_id = _next_id()
                 group.add(e); enemies_group.add(e)
+                print(f"[SPAWN] Enemy en ({obj.x:.0f}, {obj.y:.0f})")
+            elif obj_type == "orc":
+                e = Orc(obj.x, obj.y); e._mp_id = _next_id()
+                group.add(e); enemies_group.add(e)
+                print(f"[SPAWN] Orc en ({obj.x:.0f}, {obj.y:.0f})")
+            elif obj_type == "slime":
+                e = Slime(obj.x, obj.y); e._mp_id = _next_id()
+                group.add(e); enemies_group.add(e)
+                print(f"[SPAWN] Slime en ({obj.x:.0f}, {obj.y:.0f})")
+            elif obj_type == "skeleton":
+                e = Skeleton(obj.x, obj.y); e._mp_id = _next_id()
+                group.add(e); enemies_group.add(e)
+                print(f"[SPAWN] Skeleton en ({obj.x:.0f}, {obj.y:.0f})")
+            elif obj_type == "orc_rider":
+                e = OrcRider(obj.x, obj.y); e._mp_id = _next_id()
+                group.add(e); enemies_group.add(e)
+                print(f"[SPAWN] OrcRider en ({obj.x:.0f}, {obj.y:.0f})")
+            elif obj_type == "elite_orc":
+                e = EliteOrc(obj.x, obj.y); e._mp_id = _next_id()
+                group.add(e); enemies_group.add(e)
+                print(f"[SPAWN] EliteOrc en ({obj.x:.0f}, {obj.y:.0f})")
+            elif obj_type == "greatsword_skeleton":
+                e = GreatswordSkeleton(obj.x, obj.y); e._mp_id = _next_id()
+                group.add(e); enemies_group.add(e)
+                print(f"[SPAWN] GreatswordSkeleton en ({obj.x:.0f}, {obj.y:.0f})")
+            elif obj_type == "skeleton_archer":
+                e = SkeletonArcher(obj.x, obj.y); e._mp_id = _next_id()
+                group.add(e); enemies_group.add(e)
+                print(f"[SPAWN] SkeletonArcher en ({obj.x:.0f}, {obj.y:.0f})")
             elif obj_type == "bigenemy":
                 e = BigEnemy(obj.x, obj.y); e._mp_id = _next_id()
                 if hasattr(e, 'update_volumes'): e.update_volumes(global_music_vol, global_sfx_vol)

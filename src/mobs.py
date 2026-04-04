@@ -147,7 +147,7 @@ class Slime(Enemy):
         # PV x0.6, Vitesse x1.4, Dégâts x1
         super().__init__(x, y, name="slime", base_hp=60, base_dmg=10, base_speed=2.8)
         self.load_dynamic_animation('idle', "assets/image/mob/Slime/Slime-Idle.png")
-        self.load_dynamic_animation('walk', "assets/mob/image/Slime/Slime-Walk.png")
+        self.load_dynamic_animation('walk', "assets/image/mob/Slime/Slime-Walk.png")
         self.load_dynamic_animation('attack1', "assets/image/mob/Slime/Slime-Attack01.png")
         self.load_dynamic_animation('attack2', "assets/image/mob/Slime/Slime-Attack02.png")
         self.load_dynamic_animation('death', "assets/image/mob/Slime/Slime-Death.png")

@@ -23,7 +23,7 @@ class Enemy(pygame.sprite.Sprite):
         
         # On ne charge plus d'image d'Orc en dur ici !
         # Les sous-classes s'en chargeront.
-        self.image = pygame.Surface((32, 32)) # Image temporaire par sécurité
+        self.image = pygame.Surface((32, 32), pygame.SRCALPHA) # Image temporaire transparente
         self.rect = self.image.get_rect()
         self.rect.topleft = (x, y)
         
@@ -34,8 +34,31 @@ class Enemy(pygame.sprite.Sprite):
         self.position = pygame.math.Vector2(x, y)
         self.feet.midbottom = (round(self.position.x), round(self.position.y))
         
-        # --- SYSTÈME DE CACHE ET STATUTS (Hérité de l'idée SimpleMob) ---
+        # --- COMBAT ---
+        self.is_dead = False
+        self.death_time = 0
+        self.is_attacking = False
+        self.last_attack_time = 0
+        self.attack_range = 40           # distance d'attaque (pixels)
+        self.detection_radius = 200      # distance de détection du joueur
+        self.damage_amount = base_dmg    # dégâts infligés au joueur
+
+        # --- DIRECTION & MOUVEMENT ---
+        self.facing = 'right'
+        self.current_velocity = pygame.math.Vector2(0, 0)
+        self.empty_space_below = int(43 * scale)  # espace vide sous le sprite
+        self.slide_dir_x = 1
+        self.slide_dir_y = 1
+
+        # --- EFFETS DE STATUT ---
+        self.paralyzed = False
+        self.paralyze_end_time = 0
+        self._zhonya_gold = False
+
+        # --- SYSTÈME DE CACHE ET STATUTS ---
         self._tint_cache = {}
+        self._blue_cache = {}
+        self._gold_cache = {}
         self.is_stunned = False
         self.stun_end_time = 0
         self._is_blinking = False

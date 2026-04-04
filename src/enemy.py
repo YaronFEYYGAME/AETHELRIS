@@ -1,5 +1,6 @@
 import pygame
 import random
+from resource_manager import ResourceManager
 
 class Enemy(pygame.sprite.Sprite):
     
@@ -47,7 +48,7 @@ class Enemy(pygame.sprite.Sprite):
     def load_dynamic_animation(self, anim_name, path):
         """Charge une animation en déduisant le nombre de frames."""
         try:
-            sheet = pygame.image.load(path).convert_alpha()
+            sheet = ResourceManager.get_image(path)
             frame_size = sheet.get_height() 
             num_frames = sheet.get_width() // frame_size
             # On appelle ta méthode existante load_animation (qui doit toujours être dans ta classe)
@@ -82,7 +83,7 @@ class Enemy(pygame.sprite.Sprite):
 
     def load_animation(self, state_name, path, num_frames):
         try:
-            sprite_sheet = pygame.image.load(path).convert_alpha()
+            sprite_sheet = ResourceManager.get_image(path)
             frame_width = sprite_sheet.get_width() // num_frames
             frame_height = sprite_sheet.get_height()
 
@@ -397,7 +398,7 @@ class RemoteEnemy(pygame.sprite.Sprite):
 
     def _load_strip(self, state_name, path, num_frames):
         try:
-            sheet = pygame.image.load(path).convert_alpha()
+            sheet = ResourceManager.get_image(path)
             fw = sheet.get_width() // num_frames
             fh = sheet.get_height()
             rights, lefts = [], []
@@ -415,7 +416,7 @@ class RemoteEnemy(pygame.sprite.Sprite):
     def _load_vstrip(self, state_name, path, num_frames):
         """Charge un sprite sheet vertical (frames empilées en lignes)."""
         try:
-            sheet = pygame.image.load(path).convert_alpha()
+            sheet = ResourceManager.get_image(path)
             fw = sheet.get_width()
             fh = sheet.get_height() // num_frames
             rights, lefts = [], []
@@ -432,7 +433,7 @@ class RemoteEnemy(pygame.sprite.Sprite):
 
     def _load_grid(self, state_name, path, cols, rows, num_frames):
         try:
-            sheet = pygame.image.load(path).convert_alpha()
+            sheet = ResourceManager.get_image(path)
             fw = sheet.get_width() // cols
             fh = sheet.get_height() // rows
             rights, lefts = [], []
@@ -502,7 +503,7 @@ class Fairy(pygame.sprite.Sprite):
         self.frames = []
         try:
             path = self.FAIRY_SPRITES.get(fairy_type, self.FAIRY_SPRITES[1])
-            sheet = pygame.image.load(path).convert_alpha()
+            sheet = ResourceManager.get_image(path)
             fw = sheet.get_width() // 8
             fh = sheet.get_height()
             for i in range(8):

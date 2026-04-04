@@ -14,6 +14,7 @@ from projectile import Projectile, HomingProjectile, HealEffect, InstantAOE, Flo
 from obstacle import Rock, RockParticle, BloodParticle, SmokeParticle, DarkParticle, Chest
 from characters import get_character_def
 from character_select import character_select_screen_host, character_select_screen_client, character_select_screen_solo
+from resource_manager import ResourceManager
 
 # Fonction utilitaire pour dessiner les hitboxes par-dessus le zoom de la caméra
 def draw_debug_rect(screen, world_rect, color, camera_x, camera_y, zoom, screen_width, screen_height):
@@ -30,9 +31,9 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
 
     ui = UI(screen)
     sound_manager = SoundManager()
-    font = pygame.font.SysFont(None, 60)
-    
-    death_font = pygame.font.SysFont("old english text mt, garamond, times new roman, serif", 120) 
+    font = ResourceManager.get_font(60, None)
+
+    death_font = ResourceManager.get_font(120, "old english text mt, garamond, times new roman, serif") 
     
     levels = ["assets/maps/test_map.tmx", "assets/maps/map1.tmx"] 
     current_level_index = 0
@@ -1020,7 +1021,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
         _mp_id_counter[0] += 1
         return _mp_id_counter[0]
 
-    font = pygame.font.SysFont(None, 36)
+    font = ResourceManager.get_font(36, None)
 
     def _cleanup_audio():
         """Stoppe toute musique et sons en boucle avant de quitter."""
@@ -1179,7 +1180,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
         time_stop_return_sound_played = False
         time_stop_player_cache = {}
 
-        death_font = pygame.font.SysFont("old english text mt, garamond, times new roman, serif", 120)
+        death_font = ResourceManager.get_font(120, "old english text mt, garamond, times new roman, serif")
         EUREKA_EVENT = pygame.USEREVENT + 1
 
         while level_running:
@@ -2085,7 +2086,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
 
             # --- Indicateur mode ---
             if not solo_mode:
-                mp_surf = pygame.font.SysFont(None, 24).render("● MULTIJOUEUR", True, (80, 200, 80))
+                mp_surf = ResourceManager.get_font(24, None).render("● MULTIJOUEUR", True, (80, 200, 80))
                 screen.blit(mp_surf, (screen_width - mp_surf.get_width() - 10, 10))
 
             # --- Mort joueur local ---
@@ -2260,8 +2261,8 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
     sound_manager.update_sfx_volume(global_sfx_vol)
     pygame.mixer.music.set_volume(global_music_vol)
 
-    font_small = pygame.font.SysFont(None, 24)
-    death_font = pygame.font.SysFont("old english text mt, garamond, times new roman, serif", 120)
+    font_small = ResourceManager.get_font(24, None)
+    death_font = ResourceManager.get_font(120, "old english text mt, garamond, times new roman, serif")
 
     # Interface d'obtention d'item (coffre) côté client
     chest_ui_active = False
@@ -2294,7 +2295,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             if event.type == pygame.QUIT:
                 _cleanup_client_audio(); client.stop(); pygame.quit(); import sys; sys.exit()
         screen.fill((10, 10, 20))
-        t = pygame.font.SysFont(None, 36).render("Connexion en cours…", True, (200, 200, 200))
+        t = ResourceManager.get_font(36, None).render("Connexion en cours…", True, (200, 200, 200))
         screen.blit(t, t.get_rect(center=(screen_width // 2, screen_height // 2)))
         pygame.display.flip()
         clock.tick(60)
@@ -3029,7 +3030,7 @@ def _get_mirror_anim_img():
     global _mirror_anim_img
     if _mirror_anim_img is None:
         try:
-            _mirror_anim_img = pygame.image.load("assets/images/mirror.png").convert_alpha()
+            _mirror_anim_img = ResourceManager.get_image("assets/images/mirror.png")
             _mirror_anim_img = pygame.transform.scale(_mirror_anim_img, (128, 128))
         except Exception:
             _mirror_anim_img = pygame.Surface((128, 128), pygame.SRCALPHA)
@@ -3042,7 +3043,7 @@ def _get_redgem_anim_img():
     global _redgem_anim_img
     if _redgem_anim_img is None:
         try:
-            _redgem_anim_img = pygame.image.load("assets/images/redgem.png").convert_alpha()
+            _redgem_anim_img = ResourceManager.get_image("assets/images/redgem.png")
             _redgem_anim_img = pygame.transform.scale(_redgem_anim_img, (128, 128))
         except Exception:
             _redgem_anim_img = pygame.Surface((128, 128), pygame.SRCALPHA)
@@ -3055,7 +3056,7 @@ def _get_cursed_brand_anim_img():
     global _cursed_brand_anim_img
     if _cursed_brand_anim_img is None:
         try:
-            _cursed_brand_anim_img = pygame.image.load("assets/images/cursed_brand.png").convert_alpha()
+            _cursed_brand_anim_img = ResourceManager.get_image("assets/images/cursed_brand.png")
             _cursed_brand_anim_img = pygame.transform.scale(_cursed_brand_anim_img, (128, 128))
         except Exception:
             _cursed_brand_anim_img = pygame.Surface((128, 128), pygame.SRCALPHA)
@@ -3077,7 +3078,7 @@ def _get_kitsune_mark(size):
         return _kitsune_mark_cache[size]
     if _kitsune_mark_base is None:
         try:
-            _kitsune_mark_base = pygame.image.load("assets/images/griffe_passif.png").convert_alpha()
+            _kitsune_mark_base = ResourceManager.get_image("assets/images/griffe_passif.png")
         except Exception:
             _kitsune_mark_base = pygame.Surface((32, 32), pygame.SRCALPHA)
             pygame.draw.circle(_kitsune_mark_base, (255, 50, 50, 200), (16, 16), 16)
@@ -3227,14 +3228,14 @@ def _draw_remote_health(screen, health, max_health, label='P2'):
     pygame.draw.rect(screen, (50, 50, 50), (x, y, bar_w, bar_h))
     pygame.draw.rect(screen, color, (x, y, int(bar_w * ratio), bar_h))
     pygame.draw.rect(screen, (255, 255, 255), (x, y, bar_w, bar_h), 2)
-    font = pygame.font.SysFont(None, 20)
+    font = ResourceManager.get_font(20, None)
     lbl = font.render(label, True, (200, 200, 200))
     screen.blit(lbl, (x - lbl.get_width() - 5, y))
 
 
 def _show_disconnected(screen):
     clock = pygame.time.Clock()
-    font = pygame.font.SysFont(None, 48)
+    font = ResourceManager.get_font(48, None)
     start = pygame.time.get_ticks()
     while pygame.time.get_ticks() - start < 3000:
         for event in pygame.event.get():

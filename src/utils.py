@@ -1,4 +1,5 @@
 import pygame
+from resource_manager import ResourceManager
 
 def draw_pixel_text(surface, text, x, y, scale, color):
     font = {
@@ -46,7 +47,7 @@ def draw_button(surface, rect, text):
     pygame.draw.rect(surface, border_color, rect, 2, border_radius=5)
 
     # Texte
-    font = pygame.font.SysFont(None, 30)
+    font = ResourceManager.get_font(30, None)
     txt_color = (255, 240, 200) if hovered else (220, 215, 200)
     txt = font.render(text, True, txt_color)
     surface.blit(txt, txt.get_rect(center=rect.center))

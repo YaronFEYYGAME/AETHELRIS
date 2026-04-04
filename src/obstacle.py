@@ -1,13 +1,14 @@
 import pygame
 import random
 import os
+from resource_manager import ResourceManager
 
 class Rock(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
         
         try:
-            raw_image = pygame.image.load("assets/images/rock.png").convert_alpha()
+            raw_image = ResourceManager.get_image("assets/images/rock.png")
             bbox = raw_image.get_bounding_rect()
             cropped_image = raw_image.subsurface(bbox)
             self.image = pygame.transform.scale(cropped_image, (80, 80))
@@ -152,7 +153,7 @@ class Chest(pygame.sprite.Sprite):
         self.anim_speed = 12  # frames par seconde
 
         def _load_and_scale(path):
-            img = pygame.image.load(path).convert_alpha()
+            img = ResourceManager.get_image(path)
             w, h = img.get_size()
             scaled = pygame.transform.scale(img, (int(w * self.SCALE), int(h * self.SCALE)))
             if flipped:

@@ -1,4 +1,5 @@
 import pygame
+from resource_manager import ResourceManager
 
 class Inventory:
     def __init__(self, screen, width=3, slot_image_path="assets/images/inventaire.png", slot_size=50, padding=10):
@@ -10,7 +11,7 @@ class Inventory:
         self.selected_index = None    # Case sélectionnée
 
         # Charger l'image de la case
-        self.slot_image = pygame.image.load(slot_image_path).convert_alpha()
+        self.slot_image = ResourceManager.get_image(slot_image_path)
         self.slot_image = pygame.transform.scale(self.slot_image, (slot_size, slot_size))
 
         # Position de l'inventaire (bas au milieu)

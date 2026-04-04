@@ -1,4 +1,5 @@
 import pygame
+from resource_manager import ResourceManager
 
 class Item(pygame.sprite.Sprite):
     def __init__(self, x, y, item_type):
@@ -7,47 +8,47 @@ class Item(pygame.sprite.Sprite):
         
         try:
             if self.item_type == 'melee':
-                img = pygame.image.load("assets/images/sword_icon.png").convert_alpha()
+                img = ResourceManager.get_image("assets/images/sword_icon.png")
                 self.image = pygame.transform.scale(img, (20, 20))
             elif self.item_type == 'ranged':
-                img = pygame.image.load("assets/images/arc_icon.png").convert_alpha()
+                img = ResourceManager.get_image("assets/images/arc_icon.png")
                 self.image = pygame.transform.scale(img, (24, 24))
             elif self.item_type == 'pickaxe':
-                img = pygame.image.load("assets/images/pickaxe_icon.png").convert_alpha()
+                img = ResourceManager.get_image("assets/images/pickaxe_icon.png")
                 self.image = pygame.transform.scale(img, (20, 20))
             elif self.item_type == 'arrow':
-                img = pygame.image.load("assets/images/Arrow01(32x32).png").convert_alpha()
+                img = ResourceManager.get_image("assets/images/Arrow01(32x32).png")
                 self.image = pygame.transform.scale(img, (32, 32))
             elif self.item_type == 'apple': 
-                img = pygame.image.load("assets/images/apple.png").convert_alpha()
+                img = ResourceManager.get_image("assets/images/apple.png")
                 self.image = pygame.transform.scale(img, (16, 16))
             # --- NOUVEAU : LES BOTTES ---
             elif self.item_type == 'boots':
-                img = pygame.image.load("assets/images/hermesboots.png").convert_alpha()
+                img = ResourceManager.get_image("assets/images/hermesboots.png")
                 self.image = pygame.transform.scale(img, (24, 24))
             elif self.item_type == 'redgem':
-                img = pygame.image.load("assets/images/redgem.png").convert_alpha()
+                img = ResourceManager.get_image("assets/images/redgem.png")
                 self.image = pygame.transform.scale(img, (20, 20))
             elif self.item_type == 'bluegem':
-                img = pygame.image.load("assets/images/bluegem.png").convert_alpha()
+                img = ResourceManager.get_image("assets/images/bluegem.png")
                 self.image = pygame.transform.scale(img, (20, 20))
             elif self.item_type == 'mirror':
-                img = pygame.image.load("assets/images/mirror.png").convert_alpha()
+                img = ResourceManager.get_image("assets/images/mirror.png")
                 self.image = pygame.transform.scale(img, (20, 20))
             elif self.item_type == 'kitsune_mask':
-                img = pygame.image.load("assets/images/kitsune_mask.png").convert_alpha()
+                img = ResourceManager.get_image("assets/images/kitsune_mask.png")
                 self.image = pygame.transform.scale(img, (18, 18))
             elif self.item_type == 'cursed_brand':
-                img = pygame.image.load("assets/images/cursed_brand.png").convert_alpha()
+                img = ResourceManager.get_image("assets/images/cursed_brand.png")
                 self.image = pygame.transform.scale(img, (20, 20))
             elif self.item_type == 'travelers_cap':
-                img = pygame.image.load("assets/images/travelers_cap.png").convert_alpha()
+                img = ResourceManager.get_image("assets/images/travelers_cap.png")
                 self.image = pygame.transform.scale(img, (20, 20))
             elif self.item_type == 'zhonya':
-                img = pygame.image.load("assets/images/zhonya.png").convert_alpha()
+                img = ResourceManager.get_image("assets/images/zhonya.png")
                 self.image = pygame.transform.scale(img, (20, 20))
             elif self.item_type == 'rabadon':
-                img = pygame.image.load("assets/images/rabadon.png").convert_alpha()
+                img = ResourceManager.get_image("assets/images/rabadon.png")
                 self.image = pygame.transform.scale(img, (20, 20))
         except FileNotFoundError:
             self.image = pygame.Surface((32, 32))

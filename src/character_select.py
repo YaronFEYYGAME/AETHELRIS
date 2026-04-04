@@ -4,6 +4,7 @@ Affiche les 5 personnages avec synchronisation réseau en temps réel.
 """
 import pygame
 from characters import CHARACTER_DEFS, get_all_character_types
+from resource_manager import ResourceManager
 
 
 def _load_preview(char_type, size=160):
@@ -11,7 +12,7 @@ def _load_preview(char_type, size=160):
     char_def = CHARACTER_DEFS[char_type]
     path, num_frames = char_def['animations']['idle']
     try:
-        sheet = pygame.image.load(path).convert_alpha()
+        sheet = ResourceManager.get_image(path)
         fw = sheet.get_width() // num_frames
         fh = sheet.get_height()
         frame = sheet.subsurface((0, 0, fw, fh))
@@ -27,9 +28,9 @@ def character_select_screen_host(screen, server):
     """Écran de sélection pour l'hôte. Retourne (host_char, client_char) ou None."""
     clock = pygame.time.Clock()
     sw, sh = screen.get_size()
-    font = pygame.font.SysFont(None, 30)
-    font_big = pygame.font.SysFont(None, 40)
-    font_small = pygame.font.SysFont(None, 24)
+    font = ResourceManager.get_font(30, None)
+    font_big = ResourceManager.get_font(40, None)
+    font_small = ResourceManager.get_font(24, None)
 
     char_types = get_all_character_types()
     previews = {ct: _load_preview(ct) for ct in char_types}
@@ -175,9 +176,9 @@ def character_select_screen_client(screen, client):
     """Écran de sélection pour le client. Retourne (host_char, client_char) ou None."""
     clock = pygame.time.Clock()
     sw, sh = screen.get_size()
-    font = pygame.font.SysFont(None, 30)
-    font_big = pygame.font.SysFont(None, 40)
-    font_small = pygame.font.SysFont(None, 24)
+    font = ResourceManager.get_font(30, None)
+    font_big = ResourceManager.get_font(40, None)
+    font_small = ResourceManager.get_font(24, None)
 
     char_types = get_all_character_types()
     previews = {ct: _load_preview(ct) for ct in char_types}
@@ -302,8 +303,8 @@ def character_select_screen_solo(screen):
     """Écran de sélection solo. Retourne le char_type choisi ou None."""
     clock = pygame.time.Clock()
     sw, sh = screen.get_size()
-    font = pygame.font.SysFont(None, 30)
-    font_big = pygame.font.SysFont(None, 40)
+    font = ResourceManager.get_font(30, None)
+    font_big = ResourceManager.get_font(40, None)
 
     char_types = get_all_character_types()
     previews = {ct: _load_preview(ct) for ct in char_types}

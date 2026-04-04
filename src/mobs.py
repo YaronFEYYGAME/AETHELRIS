@@ -2,6 +2,7 @@ import pygame
 import random
 from enemy import Enemy
 from projectile import Projectile  # Nécessaire pour l'archer
+from resource_manager import ResourceManager
 
 # ==========================================
 # MOB 0 : L'ORC CLASSIQUE (L'original refait)
@@ -42,7 +43,7 @@ class Fairy(pygame.sprite.Sprite):
         self.frames = []
         try:
             path = self.FAIRY_SPRITES.get(fairy_type, self.FAIRY_SPRITES[1])
-            sheet = pygame.image.load(path).convert_alpha()
+            sheet = ResourceManager.get_image(path)
             fw = sheet.get_width() // 8
             fh = sheet.get_height()
             for i in range(8):

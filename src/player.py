@@ -1,6 +1,7 @@
 import pygame
 from projectile import Projectile
 from characters import get_character_def
+from resource_manager import ResourceManager
 
 # Types d'items
 ACTIVE_ITEMS = {'boots', 'bluegem', 'cursed_brand', 'travelers_cap', 'zhonya'}
@@ -133,7 +134,7 @@ class Player(pygame.sprite.Sprite):
 
     def load_animation(self, state_name, path, num_frames):
         try:
-            sprite_sheet = pygame.image.load(path).convert_alpha()
+            sprite_sheet = ResourceManager.get_image(path)
             frame_width = sprite_sheet.get_width() // num_frames
             frame_height = sprite_sheet.get_height()
             frames_right = []
@@ -819,7 +820,7 @@ class RemotePlayer(pygame.sprite.Sprite):
 
     def _load_anim(self, state_name, path, num_frames):
         try:
-            sheet = pygame.image.load(path).convert_alpha()
+            sheet = ResourceManager.get_image(path)
             fw = sheet.get_width() // num_frames
             fh = sheet.get_height()
             rights, lefts = [], []

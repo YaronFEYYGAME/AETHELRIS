@@ -1,6 +1,7 @@
 import pygame
 import random
 import math
+from resource_manager import ResourceManager
 
 # On importe les bases depuis tes autres fichiers
 from enemy import Enemy
@@ -95,7 +96,7 @@ class BigEnemy(pygame.sprite.Sprite):
 
     def load_animation(self, state_name, path, num_frames):
         try:
-            sprite_sheet = pygame.image.load(path).convert_alpha()
+            sprite_sheet = ResourceManager.get_image(path)
             frame_width = sprite_sheet.get_width()
             frame_height = sprite_sheet.get_height() // num_frames
             
@@ -548,7 +549,7 @@ class Spirit(pygame.sprite.Sprite):
     def load_grid_animation(self, state_name, path, cols, rows, num_frames, scale_override=None):
         scale = scale_override if scale_override is not None else self.scale_factor
         try:
-            sprite_sheet = pygame.image.load(path).convert_alpha()
+            sprite_sheet = ResourceManager.get_image(path)
             frame_width = sprite_sheet.get_width() // cols
             frame_height = sprite_sheet.get_height() // rows
             frames_right = []
@@ -778,7 +779,7 @@ class Necromancer(pygame.sprite.Sprite):
 
     def load_grid_animation(self, state_name, path, cols, rows, num_frames):
         try:
-            sprite_sheet = pygame.image.load(path).convert_alpha()
+            sprite_sheet = ResourceManager.get_image(path)
             frame_width = sprite_sheet.get_width() // cols
             frame_height = sprite_sheet.get_height() // rows
             frames_right = []
@@ -1214,7 +1215,7 @@ class Medusa(pygame.sprite.Sprite):
 
     def load_animation(self, state_name, path, num_frames):
         try:
-            sprite_sheet = pygame.image.load(path).convert_alpha()
+            sprite_sheet = ResourceManager.get_image(path)
             frame_width = sprite_sheet.get_width() // num_frames
             frame_height = sprite_sheet.get_height()
             frames_right = []
@@ -1751,7 +1752,7 @@ class KingBoss(pygame.sprite.Sprite):
     def _load_grid_animation(self, state_name, path):
         """Charge une spritesheet en grille de FRAME_W × FRAME_H."""
         try:
-            sheet = pygame.image.load(path).convert_alpha()
+            sheet = ResourceManager.get_image(path)
             cols = sheet.get_width() // self.FRAME_W
             rows = sheet.get_height() // self.FRAME_H
             frames_right = []
@@ -1773,7 +1774,7 @@ class KingBoss(pygame.sprite.Sprite):
     def _load_attack_animation(self):
         """Charge l'attaque : rangée 3, même pattern que _load_grid_animation (raw=right, flip=left)."""
         try:
-            sheet = pygame.image.load(self.SPRITE_DIR + "Attacks.png").convert_alpha()
+            sheet = ResourceManager.get_image(self.SPRITE_DIR + "Attacks.png")
             nw = int(self.FRAME_W * self.scale_factor)
             nh = int(self.FRAME_H * self.scale_factor)
 
@@ -2308,7 +2309,7 @@ class SbireNeant(pygame.sprite.Sprite):
     def _load_spritesheet(self):
         """Charge toutes les animations depuis NightBorne.png."""
         try:
-            sheet = pygame.image.load(self.SPRITE_PATH).convert_alpha()
+            sheet = ResourceManager.get_image(self.SPRITE_PATH)
         except FileNotFoundError:
             print(f"Erreur: {self.SPRITE_PATH} introuvable.")
             return

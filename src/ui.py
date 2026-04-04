@@ -1,6 +1,7 @@
 import pygame
 import math
 from characters import CHARACTER_DEFS
+from resource_manager import ResourceManager
 
 
 ITEM_LORE = {
@@ -46,7 +47,7 @@ ITEM_LORE = {
 class UI:
     def __init__(self, screen):
         self.screen = screen
-        self.font = pygame.font.SysFont(None, 30)
+        self.font = ResourceManager.get_font(30, None)
 
         # Icônes par défaut (soldier)
         self._icon_cache = {}
@@ -55,42 +56,42 @@ class UI:
     def _load_default_icons(self):
         """Charge les icônes par défaut du soldier."""
         try:
-            self.sword_img = pygame.image.load("assets/images/sword_icon.png").convert_alpha()
+            self.sword_img = ResourceManager.get_image("assets/images/sword_icon.png")
             self.sword_img = pygame.transform.scale(self.sword_img, (64, 64))
 
-            self.bow_img = pygame.image.load("assets/images/arc_icon.png").convert_alpha()
+            self.bow_img = ResourceManager.get_image("assets/images/arc_icon.png")
             self.bow_img = pygame.transform.scale(self.bow_img, (64, 64))
 
-            self.pickaxe_img = pygame.image.load("assets/images/pickaxe_icon.png").convert_alpha()
+            self.pickaxe_img = ResourceManager.get_image("assets/images/pickaxe_icon.png")
             self.pickaxe_img = pygame.transform.scale(self.pickaxe_img, (64, 64))
 
-            self.boots_img = pygame.image.load("assets/images/hermesboots.png").convert_alpha()
+            self.boots_img = ResourceManager.get_image("assets/images/hermesboots.png")
             self.boots_img = pygame.transform.scale(self.boots_img, (64, 64))
 
-            self.redgem_img = pygame.image.load("assets/images/redgem.png").convert_alpha()
+            self.redgem_img = ResourceManager.get_image("assets/images/redgem.png")
             self.redgem_img = pygame.transform.scale(self.redgem_img, (64, 64))
 
-            self.bluegem_img = pygame.image.load("assets/images/bluegem.png").convert_alpha()
+            self.bluegem_img = ResourceManager.get_image("assets/images/bluegem.png")
             self.bluegem_img = pygame.transform.scale(self.bluegem_img, (64, 64))
 
-            self.mirror_img = pygame.image.load("assets/images/mirror.png").convert_alpha()
+            self.mirror_img = ResourceManager.get_image("assets/images/mirror.png")
             self.mirror_img = pygame.transform.scale(self.mirror_img, (64, 64))
 
-            _km_raw = pygame.image.load("assets/images/kitsune_mask.png").convert_alpha()
+            _km_raw = ResourceManager.get_image("assets/images/kitsune_mask.png")
             _km_raw = pygame.transform.scale(_km_raw, (48, 48))
             self.kitsune_mask_img = pygame.Surface((64, 64), pygame.SRCALPHA)
             self.kitsune_mask_img.blit(_km_raw, (8, 8))  # centré dans le slot 64x64
 
-            self.cursed_brand_img = pygame.image.load("assets/images/cursed_brand.png").convert_alpha()
+            self.cursed_brand_img = ResourceManager.get_image("assets/images/cursed_brand.png")
             self.cursed_brand_img = pygame.transform.scale(self.cursed_brand_img, (64, 64))
 
-            self.travelers_cap_img = pygame.image.load("assets/images/travelers_cap.png").convert_alpha()
+            self.travelers_cap_img = ResourceManager.get_image("assets/images/travelers_cap.png")
             self.travelers_cap_img = pygame.transform.scale(self.travelers_cap_img, (64, 64))
 
-            self.zhonya_img = pygame.image.load("assets/images/zhonya.png").convert_alpha()
+            self.zhonya_img = ResourceManager.get_image("assets/images/zhonya.png")
             self.zhonya_img = pygame.transform.scale(self.zhonya_img, (52, 52))
 
-            self.rabadon_img = pygame.image.load("assets/images/rabadon.png").convert_alpha()
+            self.rabadon_img = ResourceManager.get_image("assets/images/rabadon.png")
             self.rabadon_img = pygame.transform.scale(self.rabadon_img, (52, 52))
         except FileNotFoundError:
             self.sword_img = pygame.Surface((64, 64)); self.sword_img.fill((200, 200, 200))
@@ -115,7 +116,7 @@ class UI:
         icons = {}
         for slot, path in char_def.get('icons', {}).items():
             try:
-                img = pygame.image.load(path).convert_alpha()
+                img = ResourceManager.get_image(path)
                 img = pygame.transform.scale(img, (64, 64))
                 icons[slot] = img
             except FileNotFoundError:
@@ -159,7 +160,7 @@ class UI:
 
         # Texte PV
         if not hasattr(self, '_hp_font'):
-            self._hp_font = pygame.font.SysFont(None, 18)
+            self._hp_font = ResourceManager.get_font(18, None)
         hp_text = f"{int(current_health)}/{int(max_health)}"
         shadow = self._hp_font.render(hp_text, True, (0, 0, 0))
         txt = self._hp_font.render(hp_text, True, (255, 240, 200))
@@ -302,7 +303,7 @@ class UI:
 
         # Titre
         if not hasattr(self, '_inv_title_font'):
-            self._inv_title_font = pygame.font.SysFont(None, 28)
+            self._inv_title_font = ResourceManager.get_font(28, None)
         title = self._inv_title_font.render("INVENTAIRE", True, (255, 255, 240))
         self.screen.blit(title, (px + panel_w // 2 - title.get_width() // 2, py + 15))
 
@@ -367,8 +368,8 @@ class UI:
             if lore:
                 item_name, item_desc = lore
                 if not hasattr(self, '_inv_name_font'):
-                    self._inv_name_font = pygame.font.SysFont(None, 24, bold=True)
-                    self._inv_desc_font = pygame.font.SysFont(None, 20, italic=True)
+                    self._inv_name_font = ResourceManager.get_font(24, None)
+                    self._inv_desc_font = ResourceManager.get_font(20, None)
 
                 name_surf = self._inv_name_font.render(item_name, True, (255, 220, 150))
                 name_y = slot_y + slot_size + 12
@@ -398,7 +399,7 @@ class UI:
 
         # Instructions en bas
         if not hasattr(self, '_inv_help_font'):
-            self._inv_help_font = pygame.font.SysFont(None, 22)
+            self._inv_help_font = ResourceManager.get_font(22, None)
         help_text = "[E] Saisir   [Q/D] Deplacer   [A] Jeter   [I/Echap] Fermer"
         help_surf = self._inv_help_font.render(help_text, True, (180, 180, 180))
         self.screen.blit(help_surf, (px + panel_w // 2 - help_surf.get_width() // 2,
@@ -438,7 +439,7 @@ class UI:
 
         # Label de touche
         if label:
-            lbl_font = pygame.font.SysFont(None, 18)
+            lbl_font = ResourceManager.get_font(18, None)
             lbl_surf = lbl_font.render(label, True, (200, 200, 200))
             self.screen.blit(lbl_surf, (x + 3, y + 2))
 
@@ -530,11 +531,9 @@ class UI:
         max_text_w = box_w - padding * 2
 
         if not hasattr(self, '_boss_dialogue_font'):
-            self._boss_dialogue_font = pygame.font.SysFont(
-                "garamond, times new roman, serif", 26)
+            self._boss_dialogue_font = ResourceManager.get_font(26, "garamond, times new roman, serif")
         if not hasattr(self, '_boss_name_font'):
-            self._boss_name_font = pygame.font.SysFont(
-                "garamond, times new roman, serif", 22, bold=True)
+            self._boss_name_font = ResourceManager.get_font(22, "garamond, times new roman, serif")
 
         # Calculer la hauteur du nom
         name_h = 0
@@ -616,8 +615,7 @@ class UI:
 
         # Nom du boss au-dessus de la barre (style doré)
         if not hasattr(self, '_boss_bar_name_font'):
-            self._boss_bar_name_font = pygame.font.SysFont(
-                "garamond, times new roman, serif", 24, bold=True)
+            self._boss_bar_name_font = ResourceManager.get_font(24, "garamond, times new roman, serif")
         name_surf = self._boss_bar_name_font.render(boss_name, True, (255, 220, 150))
         name_shadow = self._boss_bar_name_font.render(boss_name, True, (0, 0, 0))
         nx = screen_width // 2 - name_surf.get_width() // 2
@@ -656,7 +654,7 @@ class UI:
 
         # Texte PV centré dans la barre
         if not hasattr(self, '_boss_hp_font'):
-            self._boss_hp_font = pygame.font.SysFont(None, 22)
+            self._boss_hp_font = ResourceManager.get_font(22, None)
         hp_text = f"{int(current_health)} / {int(max_health)}"
         shadow = self._boss_hp_font.render(hp_text, True, (0, 0, 0))
         txt = self._boss_hp_font.render(hp_text, True, (255, 240, 200))
@@ -670,7 +668,7 @@ class UI:
         mouse_pos = pygame.mouse.get_pos()
         hovered = rect.collidepoint(mouse_pos)
         if font is None:
-            font = pygame.font.SysFont(None, 30)
+            font = ResourceManager.get_font(30, None)
 
         bg = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
         if hovered:
@@ -703,7 +701,7 @@ class UI:
         pygame.draw.rect(self.screen, (100, 80, 50), (x + 2, y + 2, menu_w - 4, menu_h - 4), 1, border_radius=5)
 
         # Titre
-        title_font = pygame.font.SysFont(None, 36)
+        title_font = ResourceManager.get_font(36, None)
         title_text = "PAUSE" if action_text != "Retour" else "PARAMÈTRES"
         title = title_font.render(title_text, True, (255, 220, 150))
         self.screen.blit(title, (x + menu_w // 2 - title.get_width() // 2, y + 18))
@@ -713,7 +711,7 @@ class UI:
         pygame.draw.line(self.screen, (180, 150, 100), (x + 30, line_y), (x + menu_w - 30, line_y), 1)
 
         # Labels volume
-        label_font = pygame.font.SysFont(None, 28)
+        label_font = ResourceManager.get_font(28, None)
         music_txt = label_font.render(f"Musique : {int(music_vol * 100)}%", True, (220, 215, 200))
         self.screen.blit(music_txt, (x + 30, y + 75))
 
@@ -721,7 +719,7 @@ class UI:
         self.screen.blit(sfx_txt, (x + 30, y + 135))
 
         # Boutons +/- volume (style inventaire)
-        btn_font = pygame.font.SysFont(None, 30)
+        btn_font = ResourceManager.get_font(30, None)
         btn_mus_min = pygame.Rect(x + 300, y + 68, 40, 40)
         btn_mus_pl = pygame.Rect(x + 360, y + 68, 40, 40)
         self._draw_styled_button(btn_mus_min, "-", btn_font)
@@ -787,8 +785,7 @@ class UI:
 
         # --- Titre "Nouvel objet" ---
         if not hasattr(self, '_chest_title_font'):
-            self._chest_title_font = pygame.font.SysFont(
-                "garamond, times new roman, serif", 56)
+            self._chest_title_font = ResourceManager.get_font(56, "garamond, times new roman, serif")
         title = self._chest_title_font.render("Nouvel objet", True, (255, 220, 150))
         title.set_alpha(alpha)
         title_shadow = self._chest_title_font.render("Nouvel objet", True, (0, 0, 0))
@@ -836,10 +833,9 @@ class UI:
         item_name, item_desc = info
 
         if not hasattr(self, '_chest_name_font'):
-            self._chest_name_font = pygame.font.SysFont(
-                "garamond, times new roman, serif", 42)
-            self._chest_desc_font = pygame.font.SysFont(None, 30)
-            self._chest_hint_font = pygame.font.SysFont(None, 22)
+            self._chest_name_font = ResourceManager.get_font(42, "garamond, times new roman, serif")
+            self._chest_desc_font = ResourceManager.get_font(30, None)
+            self._chest_hint_font = ResourceManager.get_font(22, None)
 
         text_x = right_col_x + 15
         text_max_w = (px + panel_w - 30) - text_x

@@ -1,5 +1,6 @@
 import pygame
 import math
+from resource_manager import ResourceManager
 
 
 class Projectile(pygame.sprite.Sprite):
@@ -23,7 +24,7 @@ class Projectile(pygame.sprite.Sprite):
         display_size = 128 if is_effect else 32
 
         try:
-            arrow_img = pygame.image.load(img_path).convert_alpha()
+            arrow_img = ResourceManager.get_image(img_path)
             # Les effets de wizard sont des sprite sheets, prendre la première frame
             if arrow_img.get_width() > arrow_img.get_height() * 1.5:
                 frame_size = arrow_img.get_height()
@@ -78,7 +79,7 @@ class HomingProjectile(pygame.sprite.Sprite):
         self._frames = []
         if img_path:
             try:
-                sheet = pygame.image.load(img_path).convert_alpha()
+                sheet = ResourceManager.get_image(img_path)
                 fh = sheet.get_height()
                 fw = fh  # frames carrées
                 num = sheet.get_width() // fw
@@ -149,7 +150,7 @@ class HealEffect(pygame.sprite.Sprite):
         self._frames = []
         if img_path:
             try:
-                sheet = pygame.image.load(img_path).convert_alpha()
+                sheet = ResourceManager.get_image(img_path)
                 fh = sheet.get_height()
                 fw = fh
                 num = sheet.get_width() // fw
@@ -201,7 +202,7 @@ class InstantAOE(pygame.sprite.Sprite):
         self._frames = []
         if img_path:
             try:
-                sheet = pygame.image.load(img_path).convert_alpha()
+                sheet = ResourceManager.get_image(img_path)
                 fh = sheet.get_height()
                 fw = fh
                 num = sheet.get_width() // fw
@@ -242,7 +243,7 @@ class FloatingText(pygame.sprite.Sprite):
 
     def __init__(self, x, y, text="fail...", duration=700):
         super().__init__()
-        self._font = pygame.font.SysFont(None, 22)
+        self._font = ResourceManager.get_font(22, None)
         self._text = text
         self._base_y = y
         self.start_time = pygame.time.get_ticks()

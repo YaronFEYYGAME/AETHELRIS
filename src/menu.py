@@ -5,6 +5,7 @@ from utils import draw_pixel_text, draw_button
 from ui import UI
 from sound import SoundManager
 from network import GameServer, GameClient, get_local_ip, ip_to_code, resolve_host
+from resource_manager import ResourceManager
 
 
 def start_menu(screen):
@@ -31,7 +32,7 @@ def start_menu(screen):
 
     # Logo du jeu
     try:
-        logo_img = pygame.image.load("assets/images/logo_game.png").convert_alpha()
+        logo_img = ResourceManager.get_image("assets/images/logo_game.png")
         # Redimensionner proportionnellement (hauteur ~120px)
         logo_h = 120
         logo_w = int(logo_img.get_width() * (logo_h / logo_img.get_height()))
@@ -40,7 +41,7 @@ def start_menu(screen):
         logo_img = None
 
     try:
-        bg_image = pygame.image.load("assets/images/acceuil.jpeg").convert()
+        bg_image = ResourceManager.get_image("assets/images/acceuil.jpeg")
         bg_image = pygame.transform.scale(bg_image, (screen_width, screen_height))
     except FileNotFoundError:
         bg_image = None
@@ -134,10 +135,10 @@ def _hosting_screen(screen):
     """Démarre le serveur, affiche le code + l'IP, attend un client.
     Retourne le GameServer une fois connecté, ou None si annulé."""
     clock      = pygame.time.Clock()
-    font_big   = pygame.font.SysFont(None, 90)
-    font_med   = pygame.font.SysFont(None, 38)
-    font_small = pygame.font.SysFont(None, 28)
-    font_hint  = pygame.font.SysFont(None, 24)
+    font_big   = ResourceManager.get_font(90, None)
+    font_med   = ResourceManager.get_font(38, None)
+    font_small = ResourceManager.get_font(28, None)
+    font_hint  = ResourceManager.get_font(24, None)
 
     local_ip = get_local_ip()
     code     = ip_to_code(local_ip)
@@ -219,10 +220,10 @@ def _join_screen(screen):
     """Affiche un champ de saisie (code OU IP).
     Retourne le GameClient connecté, ou None si annulé."""
     clock      = pygame.time.Clock()
-    font_big   = pygame.font.SysFont(None, 72)
-    font_med   = pygame.font.SysFont(None, 38)
-    font_small = pygame.font.SysFont(None, 28)
-    font_hint  = pygame.font.SysFont(None, 24)
+    font_big   = ResourceManager.get_font(72, None)
+    font_med   = ResourceManager.get_font(38, None)
+    font_small = ResourceManager.get_font(28, None)
+    font_hint  = ResourceManager.get_font(24, None)
 
     sw, sh = screen.get_size()
     cy     = sh // 2
@@ -363,7 +364,7 @@ def _draw_centered(surface, font, text, cy, color):
 def _show_error(screen, message):
     """Affiche un message d'erreur plein écran pendant 4 secondes."""
     clock  = pygame.time.Clock()
-    font   = pygame.font.SysFont(None, 30)
+    font   = ResourceManager.get_font(30, None)
     start  = pygame.time.get_ticks()
     lines  = message.split('\n')
     while pygame.time.get_ticks() - start < 4000:

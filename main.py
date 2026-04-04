@@ -6,6 +6,7 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
 from menu import start_menu
 from game import run_game, run_game_mp_server, run_game_mp_client, run_game_solo
+from resource_manager import ResourceManager
 
 def show_splash_screen(screen, logo_path, total_duration_ms=3000):
     fade_in_time = 1000
@@ -16,7 +17,7 @@ def show_splash_screen(screen, logo_path, total_duration_ms=3000):
         return
 
     try:
-        logo_img = pygame.image.load(logo_path).convert_alpha()
+        logo_img = ResourceManager.get_image(logo_path)
         logo_rect = logo_img.get_rect(center=screen.get_rect().center)
     except FileNotFoundError:
         return

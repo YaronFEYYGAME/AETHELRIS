@@ -131,9 +131,10 @@ class GameServer:
     def _accept_loop(self):
         try:
             conn, addr = self._server_sock.accept()
-            # Pas de timeout sur le socket de jeu : on veut des recv bloquants
-            # dans le thread, la boucle s'arrête proprement quand recv renvoie b"".
-            conn.settimeout(None)
+            # Timeout de 30s : détecte les déconnexions silencieuses (WiFi coupé,
+            # PC éteint) sans bloquer le recv indéfiniment. Si déclenché,
+            # _recv_exact() lève une exception capturée → connected = False proprement.
+            conn.settimeout(30)
             with self._lock:
                 self._client_sock = conn
                 self.connected = True
@@ -202,9 +203,9 @@ class GameClient:
             # Timeout uniquement pendant la phase de connexion initiale
             s.settimeout(timeout)
             s.connect((host_ip, self.PORT))
-            # Une fois connecté, on passe en mode bloquant pour les recv du thread.
-            # Le thread lit en continu ; il s'arrête proprement quand recv → b"".
-            s.settimeout(None)
+            # Timeout de 30s après connexion : détecte les déconnexions silencieuses
+            # (câble coupé, hôte qui crashe) via exception dans _recv_exact.
+            s.settimeout(30)
             self._sock = s
             self.connected = True
             self._running = True

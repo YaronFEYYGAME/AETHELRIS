@@ -948,9 +948,16 @@ class RemotePlayer(pygame.sprite.Sprite):
         anim_state = state.get('state', 'idle')
         frame = state.get('frame', 0)
         self.health = state.get('health', 100)
-        self.max_health = state.get('max_health', 100)
+        # max_health n'est plus transmis (invariant à 100) — valeur par défaut utilisée
 
-        self.feet.midbottom = (round(x), round(y))
+        # Interpolation linéaire (lerp) : le sprite glisse vers sa position réseau
+        # plutôt que de se téléporter. Facteur 0.35 = 35% par frame à 60fps.
+        _LERP = 0.35
+        target_cx     = round(x)
+        target_bottom = round(y)
+        new_cx     = round(self.feet.centerx + (target_cx     - self.feet.centerx) * _LERP)
+        new_bottom = round(self.feet.bottom   + (target_bottom - self.feet.bottom)  * _LERP)
+        self.feet.midbottom = (new_cx, new_bottom)
         self.rect.centerx = self.feet.centerx
         self.rect.bottom = self.feet.bottom
 

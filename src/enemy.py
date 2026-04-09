@@ -211,11 +211,13 @@ class Enemy(pygame.sprite.Sprite):
             else:
                 self.frame_index = 0
 
-        self.image = animation[int(self.frame_index)]
+        base_frame = animation[int(self.frame_index)]
 
+        # Utilise le cache de teinte au lieu de copy+fill à chaque frame de hit
         if not self.is_dead and pygame.time.get_ticks() - self.hit_time < 150:
-            self.image = self.image.copy()
-            self.image.fill((255, 50, 50, 255), special_flags=pygame.BLEND_RGBA_MULT)
+            self.image = self.get_tinted_frame(base_frame, 'red')
+        else:
+            self.image = base_frame
 
     def update(self, player, walls):
         # --- Dégâts différés (ex: attaque2 du Slime) ---
@@ -258,12 +260,16 @@ class Enemy(pygame.sprite.Sprite):
         target_center = pygame.math.Vector2(player.feet.center)
         my_center = pygame.math.Vector2(self.feet.center)
         target_vector = target_center - my_center
-        distance = target_vector.length()
+        # Comparaison au carré : évite un sqrt() inutile pour les seuils de distance
+        dist_sq = target_vector.x ** 2 + target_vector.y ** 2
+        detection_sq   = self.detection_radius ** 2
+        attack_sq      = self.attack_range ** 2
+        attack_inner_sq = (self.attack_range * 0.5) ** 2
 
         velocity_x, velocity_y = 0, 0
         hit_x, hit_y = False, False
 
-        if distance < self.detection_radius and distance > (self.attack_range * 0.5) and not self.is_attacking:
+        if dist_sq < detection_sq and dist_sq > attack_inner_sq and not self.is_attacking:
             norm_dir = target_vector.normalize()
             velocity_x = norm_dir.x * self.speed
             velocity_y = norm_dir.y * self.speed
@@ -333,7 +339,7 @@ class Enemy(pygame.sprite.Sprite):
         self.rect.centerx = self.feet.centerx
         self.rect.bottom = self.feet.bottom + self.empty_space_below
 
-        if distance < self.attack_range and not self.is_attacking and player.health > 0:
+        if dist_sq < attack_sq and not self.is_attacking and player.health > 0:
             current_time = pygame.time.get_ticks()
             if current_time - self.last_attack_time > 1500:
                 self.last_attack_time = current_time
@@ -527,7 +533,14 @@ class RemoteEnemy(pygame.sprite.Sprite):
         self.health = state.get('health', 1)
         self.max_health = state.get('max_health', 1)
 
-        self.feet.midbottom = (round(x), round(y))
+        # Interpolation linéaire (lerp) : glissement vers la position réseau cible
+        # Facteur 0.35 = 35% de la distance par frame → mouvement lissé, pas de téléportation
+        _LERP = 0.35
+        target_cx     = round(x)
+        target_bottom = round(y)
+        new_cx     = round(self.feet.centerx + (target_cx     - self.feet.centerx) * _LERP)
+        new_bottom = round(self.feet.bottom   + (target_bottom - self.feet.bottom)  * _LERP)
+        self.feet.midbottom = (new_cx, new_bottom)
         self.rect.centerx = self.feet.centerx
         self.rect.bottom = self.feet.bottom + int(self.empty_below)
 

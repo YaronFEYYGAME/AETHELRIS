@@ -1015,7 +1015,7 @@ def _serialize_player(p):
         'direction': p.facing,
         'frame': p.frame_index,
         'health': p.health,
-        'max_health': p.max_health,
+        # max_health invariant (toujours 100) → non transmis chaque frame
         'current_weapon': p.current_weapon,
         'has_melee':      p.has_melee,
         'has_ranged':     p.has_ranged,
@@ -1041,7 +1041,7 @@ def _serialize_player(p):
         'arrows':         p.arrows,
         'dash_cr':        dash_cr,
         'arrow_regen_cr': p.get_arrow_regen_cooldown_ratio(),
-        'char_type':      getattr(p, 'char_type', 'soldier'),
+        # char_type invariant — le client connaît déjà son propre type via la sélection
         'skill_cooldowns': skill_crs,
         'inventory_items': getattr(p, 'inventory_items', []),
         'item_start_key': p.char_def.get('item_start_key', 2),
@@ -1387,6 +1387,17 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
         time_stop_return_sound_played = False
         time_stop_player_cache = {}
 
+        # --- Surfaces pré-allouées (évite 60+ allocations/sec en boucle) ---
+        # Time-stop : overlay fixe pré-rempli, simplement blitté à chaque frame active
+        _ts_overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+        _ts_overlay.fill((0, 0, 0, 110))
+        # Death fade : surface opaque, l'alpha global varie via set_alpha()
+        _death_overlay = pygame.Surface((screen_width, screen_height))
+        _death_overlay.fill((100, 0, 0))
+        # Compteur de frames réseau (tick rate 30/s = 1 envoi tous les 2 frames à 60fps)
+        _net_frame_counter = 0
+        NET_TICK_EVERY = 2
+
         # --- Cape de l'assassin (leurre / decoy) ---
         active_decoy = None  # référence au Decoy sprite actif
         decoy_owner = None   # joueur qui a activé la cape
@@ -1538,15 +1549,17 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                 elif item_name == 'zhonya':
                                     if player.activate_zhonya():
                                         # Trouver l'ennemi le plus proche dans un rayon de 200
+                                        # Comparaison au carré : pas de sqrt() dans la boucle
                                         nearest_enemy = None
-                                        nearest_dist = float('inf')
+                                        nearest_dist_sq = float('inf')
+                                        ZHONYA_RADIUS_SQ = 200 ** 2
                                         px, py = player.feet.centerx, player.feet.centery
                                         for e in enemies_group:
                                             if getattr(e, 'health', 0) > 0 and not getattr(e, 'paralyzed', False):
                                                 ex, ey = e.feet.centerx, e.feet.centery
-                                                dist = ((px - ex) ** 2 + (py - ey) ** 2) ** 0.5
-                                                if dist <= 200 and dist < nearest_dist:
-                                                    nearest_dist = dist
+                                                d_sq = (px - ex) ** 2 + (py - ey) ** 2
+                                                if d_sq <= ZHONYA_RADIUS_SQ and d_sq < nearest_dist_sq:
+                                                    nearest_dist_sq = d_sq
                                                     nearest_enemy = e
                                         if nearest_enemy:
                                             stun_dur = 3000
@@ -1740,15 +1753,17 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 # Zhonya player2
                 if net_inputs.get('zhonya') and player2.has_zhonya:
                     if player2.activate_zhonya():
+                        # Comparaison au carré : pas de sqrt() dans la boucle
                         nearest_enemy = None
-                        nearest_dist = float('inf')
+                        nearest_dist_sq = float('inf')
+                        ZHONYA_RADIUS_SQ = 200 ** 2
                         p2x, p2y = player2.feet.centerx, player2.feet.centery
                         for e in enemies_group:
                             if getattr(e, 'health', 0) > 0 and not getattr(e, 'paralyzed', False):
                                 ex, ey = e.feet.centerx, e.feet.centery
-                                dist = ((p2x - ex) ** 2 + (p2y - ey) ** 2) ** 0.5
-                                if dist <= 200 and dist < nearest_dist:
-                                    nearest_dist = dist
+                                d_sq = (p2x - ex) ** 2 + (p2y - ey) ** 2
+                                if d_sq <= ZHONYA_RADIUS_SQ and d_sq < nearest_dist_sq:
+                                    nearest_dist_sq = d_sq
                                     nearest_enemy = e
                         if nearest_enemy:
                             stun_dur = 3000
@@ -2340,9 +2355,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             # --- Effet visuel arrêt du temps (overlay gris + joueur en couleur) ---
             if time_stop_active:
                 activator = time_stop_activator if time_stop_activator else player
-                ts_overlay = _get_overlay(screen_width, screen_height)
-                ts_overlay.fill((0, 0, 0, 110))
-                screen.blit(ts_overlay, (0, 0))
+                # Surface pré-allouée et pré-remplie — pas de fill() à chaque frame
+                screen.blit(_ts_overlay, (0, 0))
 
                 act_sx = (activator.rect.x - cam_x) * zoom_level + screen_width / 2
                 act_sy = (activator.rect.y - cam_y) * zoom_level + screen_height / 2
@@ -2474,9 +2488,9 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                     if not death_sound_played:
                         sound_manager.play_death(); death_sound_played = True
                     prog = min(1.0, (elapsed - 1000) / 2000.0)
-                    surf = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
-                    surf.fill((100, 0, 0, int(200 * prog)))
-                    screen.blit(surf, (0, 0))
+                    # Surface pré-allouée : set_alpha() remplace le fill() variable chaque frame
+                    _death_overlay.set_alpha(int(200 * prog))
+                    screen.blit(_death_overlay, (0, 0))
                     dt_surf = death_font.render("Vous êtes mort", True, (255, 255, 255))
                     dt_surf.set_alpha(int(255 * prog))
                     screen.blit(dt_surf, dt_surf.get_rect(center=(screen_width // 2, screen_height // 2)))
@@ -2559,8 +2573,9 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 else:
                     cursed_brand_animating = False
 
-            # --- Envoi état au client (multijoueur uniquement) ---
-            if not solo_mode and server:
+            # --- Envoi état au client (tick rate 30/s = 1 frame sur 2 à 60fps) ---
+            _net_frame_counter += 1
+            if not solo_mode and server and (_net_frame_counter % NET_TICK_EVERY == 0):
                 players_list = [_serialize_player(player)]
                 if player2:
                     players_list.append(_serialize_player(player2))
@@ -2691,6 +2706,12 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
     death_sound_played = False
     is_paused_client   = False
     pause_rects_client = {}
+
+    # --- Surfaces pré-allouées côté client (même logique que le serveur) ---
+    _client_ts_overlay    = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+    _client_ts_overlay.fill((0, 0, 0, 110))
+    _client_death_overlay = pygame.Surface((screen_width, screen_height))
+    _client_death_overlay.fill((100, 0, 0))
 
     # État précédent du joueur local pour détecter les changements d'inventaire
     prev_lp = {'current_weapon': None, 'has_melee': False, 'has_ranged': False,
@@ -3022,10 +3043,8 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             elif client_ts_activator_idx == 0 and remote_player:
                 ts_activator_sprite = remote_player
 
-            # Overlay gris semi-transparent
-            ts_overlay = _get_overlay(screen_width, screen_height)
-            ts_overlay.fill((0, 0, 0, 110))
-            screen.blit(ts_overlay, (0, 0))
+            # Overlay pré-alloué et pré-rempli — pas de fill() à chaque frame
+            screen.blit(_client_ts_overlay, (0, 0))
 
             # Re-blitter l'activateur en couleur
             if ts_activator_sprite and hasattr(ts_activator_sprite, 'rect') and local_player:
@@ -3305,9 +3324,9 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 if not death_sound_played:
                     sound_manager.play_death(); death_sound_played = True
                 prog = min(1.0, (elapsed - 1000) / 2000.0)
-                surf = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
-                surf.fill((100, 0, 0, int(200 * prog)))
-                screen.blit(surf, (0, 0))
+                # Surface pré-allouée — set_alpha() remplace le fill() variable
+                _client_death_overlay.set_alpha(int(200 * prog))
+                screen.blit(_client_death_overlay, (0, 0))
                 dt_surf = death_font.render("Vous êtes mort", True, (255, 255, 255))
                 dt_surf.set_alpha(int(255 * prog))
                 screen.blit(dt_surf, dt_surf.get_rect(center=(screen_width // 2, screen_height // 2)))

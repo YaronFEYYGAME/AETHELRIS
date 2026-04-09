@@ -41,6 +41,10 @@ ITEM_LORE = {
         "Coiffe de Rabadon",
         "Une couronne de soie imprégnée de siècles de savoir interdit. Insufflez une puissance démesurée à vos armes par la seule force de l'esprit."
     ),
+    'cap_assassin': (
+        "Cape de l'assassin",
+        "Ce linceul de soie a recueilli le dernier soupir de mille cibles dans l'ombre des palais. Revêtez le manteau des maîtres de l'invisible pour tromper la mort et frapper là où le cœur bat encore."
+    ),
 }
 
 
@@ -93,6 +97,9 @@ class UI:
 
             self.rabadon_img = ResourceManager.get_image("assets/images/rabadon.png")
             self.rabadon_img = pygame.transform.scale(self.rabadon_img, (52, 52))
+
+            self.cap_assassin_img = ResourceManager.get_image("assets/images/cap_assassin.png")
+            self.cap_assassin_img = pygame.transform.scale(self.cap_assassin_img, (52, 52))
         except FileNotFoundError:
             self.sword_img = pygame.Surface((64, 64)); self.sword_img.fill((200, 200, 200))
             self.bow_img = pygame.Surface((64, 64)); self.bow_img.fill((150, 100, 50))
@@ -106,6 +113,7 @@ class UI:
             self.travelers_cap_img = pygame.Surface((64, 64)); self.travelers_cap_img.fill((100, 50, 150))
             self.zhonya_img = pygame.Surface((52, 52)); self.zhonya_img.fill((200, 180, 50))
             self.rabadon_img = pygame.Surface((52, 52)); self.rabadon_img.fill((80, 0, 160))
+            self.cap_assassin_img = pygame.Surface((52, 52)); self.cap_assassin_img.fill((40, 20, 60))
 
     def load_character_icons(self, char_type):
         """Charge les icônes spécifiques à un personnage."""
@@ -126,8 +134,8 @@ class UI:
         return icons
 
     def draw_health_bar(self, current_health, max_health):
-        bar_width = 200
-        bar_height = 22
+        bar_width = 220
+        bar_height = 26
         x, y = 20, 18
 
         ratio = current_health / max_health if max_health > 0 else 0
@@ -158,16 +166,77 @@ class UI:
         pygame.draw.rect(self.screen, (180, 150, 100), (x, y, bar_width, bar_height), 2, border_radius=4)
         pygame.draw.rect(self.screen, (100, 80, 50, 120), (x + 1, y + 1, bar_width - 2, bar_height - 2), 1, border_radius=3)
 
-        # Texte PV
-        if not hasattr(self, '_hp_font'):
-            self._hp_font = ResourceManager.get_font(18, None)
-        hp_text = f"{int(current_health)}/{int(max_health)}"
-        shadow = self._hp_font.render(hp_text, True, (0, 0, 0))
-        txt = self._hp_font.render(hp_text, True, (255, 240, 200))
-        tx = x + bar_width // 2 - txt.get_width() // 2
-        ty = y + bar_height // 2 - txt.get_height() // 2
-        self.screen.blit(shadow, (tx + 1, ty + 1))
-        self.screen.blit(txt, (tx, ty))
+    def draw_stamina_bar(self, current_stamina, max_stamina):
+        bar_width = 220
+        bar_height = 26  # même taille que la barre de vie
+        x, y = 20, 48   # juste sous la barre de vie
+
+        ratio = current_stamina / max_stamina if max_stamina > 0 else 0
+
+        # Fond sombre
+        bg = pygame.Surface((bar_width, bar_height), pygame.SRCALPHA)
+        pygame.draw.rect(bg, (20, 20, 30, 220), (0, 0, bar_width, bar_height), border_radius=4)
+        self.screen.blit(bg, (x, y))
+
+        # Barre bleue
+        if ratio > 0:
+            fill_w = max(4, int(bar_width * ratio))
+            fill = pygame.Surface((fill_w, bar_height), pygame.SRCALPHA)
+            pygame.draw.rect(fill, (40, 120, 220, 230), (0, 0, fill_w, bar_height), border_radius=4)
+            # Reflet
+            highlight = pygame.Surface((fill_w, bar_height // 3), pygame.SRCALPHA)
+            pygame.draw.rect(highlight, (100, 180, 255, 80), (0, 0, fill_w, bar_height // 3), border_radius=3)
+            fill.blit(highlight, (0, 2))
+            self.screen.blit(fill, (x, y))
+
+        # Bordure
+        pygame.draw.rect(self.screen, (180, 150, 100), (x, y, bar_width, bar_height), 2, border_radius=4)
+        pygame.draw.rect(self.screen, (100, 80, 50, 120), (x + 1, y + 1, bar_width - 2, bar_height - 2), 1, border_radius=3)
+
+    def draw_xp_bar(self, current_xp, xp_to_next, level):
+        bar_width = 180  # plus courte que les autres
+        bar_height = 10
+        x, y = 20, 80   # sous la stamina (48 + 26 + 6)
+
+        ratio = current_xp / xp_to_next if xp_to_next > 0 else 0
+
+        # Fond sombre
+        bg = pygame.Surface((bar_width, bar_height), pygame.SRCALPHA)
+        pygame.draw.rect(bg, (20, 20, 30, 220), (0, 0, bar_width, bar_height), border_radius=2)
+        self.screen.blit(bg, (x, y))
+
+        # Barre blanche
+        if ratio > 0:
+            fill_w = max(2, int(bar_width * ratio))
+            fill = pygame.Surface((fill_w, bar_height), pygame.SRCALPHA)
+            pygame.draw.rect(fill, (220, 220, 230, 220), (0, 0, fill_w, bar_height), border_radius=2)
+            self.screen.blit(fill, (x, y))
+
+        # Bordure
+        pygame.draw.rect(self.screen, (180, 150, 100), (x, y, bar_width, bar_height), 1, border_radius=2)
+
+        # Texte niveau
+        if not hasattr(self, '_lvl_font'):
+            self._lvl_font = ResourceManager.get_font(14, None)
+        lvl_txt = self._lvl_font.render(f"Niv.{level}", True, (220, 210, 180))
+        self.screen.blit(lvl_txt, (x + bar_width + 6, y - 2))
+
+    def draw_level_up_message(self, progress, player_screen_x, player_screen_y):
+        """Affiche 'NIVEAU SUPÉRIEUR!' flottant au-dessus du sprite du joueur.
+        progress : 0.0 (début) → 1.0 (fin, disparaît).
+        player_screen_x/y : position écran du joueur."""
+        if not hasattr(self, '_lu_font'):
+            self._lu_font = ResourceManager.get_font(32, None)
+        alpha = max(0, int(255 * (1.0 - progress)))
+        offset_y = int(40 * progress)  # monte progressivement
+        txt_surf = self._lu_font.render("NIVEAU SUPÉRIEUR!", True, (255, 230, 100))
+        shadow_surf = self._lu_font.render("NIVEAU SUPÉRIEUR!", True, (0, 0, 0))
+        x = player_screen_x - txt_surf.get_width() // 2
+        y = player_screen_y - 30 - offset_y  # au-dessus du sprite, moins haut
+        txt_surf.set_alpha(alpha)
+        shadow_surf.set_alpha(alpha)
+        self.screen.blit(shadow_surf, (x + 1, y + 1))
+        self.screen.blit(txt_surf, (x, y))
 
     def _get_item_icon(self, item_type):
         """Retourne l'icône 64x64 pour un type d'item."""
@@ -179,6 +248,7 @@ class UI:
             'travelers_cap': self.travelers_cap_img,
             'zhonya': self.zhonya_img,
             'rabadon': self.rabadon_img,
+            'cap_assassin': self.cap_assassin_img,
         }
         return icon_map.get(item_type)
 
@@ -186,7 +256,7 @@ class UI:
                            arrows=0, inventory_items=None,
                            dash_cr=1.0, blue_gem_cr=1.0, cursed_brand_cr=1.0,
                            arrow_regen_cr=1.0, travelers_cap_cr=1.0,
-                           zhonya_cr=1.0, item_start_key=2):
+                           zhonya_cr=1.0, cap_assassin_cr=1.0, item_start_key=2):
         """Dessine le HUD : skill E → skill 1 → items actifs → items passifs."""
         icons = self.load_character_icons(char_type)
         char_def = CHARACTER_DEFS.get(char_type, CHARACTER_DEFS['soldier'])
@@ -196,7 +266,7 @@ class UI:
             inventory_items = []
 
         x_offset = 20
-        y = 50
+        y = 100
         slot_size = 64
         gap = 8
 
@@ -262,6 +332,7 @@ class UI:
             'cursed_brand': cursed_brand_cr,
             'travelers_cap': travelers_cap_cr,
             'zhonya': zhonya_cr,
+            'cap_assassin': cap_assassin_cr,
         }
 
         for item_type in inventory_items:
@@ -414,8 +485,8 @@ class UI:
         pygame.draw.rect(bg_surface, bg_color, (0, 0, size, size), border_radius=5)
         self.screen.blit(bg_surface, (x, y))
 
-        # Bordure
-        border_color = (200, 200, 100) if is_active else (200, 200, 200)
+        # Bordure dorée (même style que les barres de vie/endurance)
+        border_color = (220, 180, 80) if is_active else (180, 150, 100)
         pygame.draw.rect(self.screen, border_color, (x, y, size, size), 2, border_radius=5)
 
         if icon is None:

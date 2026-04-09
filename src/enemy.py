@@ -4,14 +4,13 @@ from resource_manager import ResourceManager
 
 class Enemy(pygame.sprite.Sprite):
     
-    def __init__(self, x, y, name="ennemi", base_hp=100, base_dmg=10, base_speed=2.0, scale=1.5):
+    def __init__(self, x, y, name="ennemi", base_hp=100, base_dmg=10, base_speed=2.0, scale=1.7):
         super().__init__()
         self.name = name
         
         # --- STATS DE BASE ---
         self.max_health = base_hp
         self.health = self.max_health
-        self.damage = base_dmg
         self.speed = base_speed
         
         # --- GESTION DES ANIMATIONS ---
@@ -40,14 +39,15 @@ class Enemy(pygame.sprite.Sprite):
         self.is_attacking = False
         self.last_attack_time = 0
         self.attack_range = 40           # distance d'attaque (pixels)
-        self.detection_radius = 200      # distance de détection du joueur
+        self.detection_radius = 180      # distance de détection du joueur
         self.damage_amount = base_dmg    # dégâts infligés au joueur
         self._current_attack_anim = 'attack'  # animation d'attaque en cours
+        self._pending_damage = None  # (timestamp_trigger, amount, player) pour dégâts différés
 
         # --- DIRECTION & MOUVEMENT ---
         self.facing = 'right'
         self.current_velocity = pygame.math.Vector2(0, 0)
-        self.empty_space_below = int(43 * scale)  # espace vide sous le sprite
+        self.empty_space_below = int(42 * scale)  # espace vide sous le sprite
         self.slide_dir_x = 1
         self.slide_dir_y = 1
 
@@ -198,14 +198,14 @@ class Enemy(pygame.sprite.Sprite):
             return
 
         speed = self.animation_speed
-        if self.state == 'attack': speed *= 1.5
+        if 'attack' in self.state: speed *= 1.5
 
         self.frame_index += speed
 
         if self.frame_index >= len(animation):
             if self.state == 'death':
                 self.frame_index = len(animation) - 1
-            elif self.state == 'attack':
+            elif 'attack' in self.state:
                 self.is_attacking = False
                 self.frame_index = 0
             else:
@@ -218,10 +218,28 @@ class Enemy(pygame.sprite.Sprite):
             self.image.fill((255, 50, 50, 255), special_flags=pygame.BLEND_RGBA_MULT)
 
     def update(self, player, walls):
+        # --- Dégâts différés (ex: attaque2 du Slime) ---
+        if self._pending_damage is not None and not self.is_dead:
+            trigger_time, dmg, target = self._pending_damage
+            if pygame.time.get_ticks() >= trigger_time:
+                target.damage(dmg, source_enemy=self)
+                self._pending_damage = None
+
         if self.is_dead:
+            self._pending_damage = None  # Annule tout dégât différé si le mob est mort
             self.animate()
-            if pygame.time.get_ticks() - self.death_time > 3000:
+            self.rect.size = self.image.get_size()
+            self.rect.centerx = self.feet.centerx
+            self.rect.bottom = self.feet.bottom + self.empty_space_below
+            elapsed = pygame.time.get_ticks() - self.death_time
+            if elapsed > 3000:
                 self.kill()
+            elif elapsed > 2500:
+                # Fondu sur les 500 dernières ms (2500ms → 3000ms)
+                fade_progress = (elapsed - 2500) / 500.0  # 0.0 → 1.0
+                alpha = int(255 * (1.0 - fade_progress))
+                self.image = self.image.copy()
+                self.image.set_alpha(alpha)
             return
 
         # Paralysie : figé, pas de mouvement ni d'attaque
@@ -232,6 +250,9 @@ class Enemy(pygame.sprite.Sprite):
             else:
                 self.current_velocity = pygame.math.Vector2(0, 0)
                 self.animate()
+                self.rect.size = self.image.get_size()
+                self.rect.centerx = self.feet.centerx
+                self.rect.bottom = self.feet.bottom + self.empty_space_below
                 return
 
         target_center = pygame.math.Vector2(player.feet.center)
@@ -242,7 +263,7 @@ class Enemy(pygame.sprite.Sprite):
         velocity_x, velocity_y = 0, 0
         hit_x, hit_y = False, False
 
-        if distance < self.detection_radius and distance > 0 and not self.is_attacking:
+        if distance < self.detection_radius and distance > (self.attack_range * 0.5) and not self.is_attacking:
             norm_dir = target_vector.normalize()
             velocity_x = norm_dir.x * self.speed
             velocity_y = norm_dir.y * self.speed
@@ -306,13 +327,13 @@ class Enemy(pygame.sprite.Sprite):
                 self.feet.centerx = round(self.position.x)
 
         self.current_velocity = pygame.math.Vector2(velocity_x, velocity_y)
-        
+
+        self.animate()
+        self.rect.size = self.image.get_size()
         self.rect.centerx = self.feet.centerx
         self.rect.bottom = self.feet.bottom + self.empty_space_below
 
-        self.animate()
-
-        if distance < self.attack_range and not self.is_attacking:
+        if distance < self.attack_range and not self.is_attacking and player.health > 0:
             current_time = pygame.time.get_ticks()
             if current_time - self.last_attack_time > 1500:
                 self.last_attack_time = current_time
@@ -323,7 +344,13 @@ class Enemy(pygame.sprite.Sprite):
                     self._current_attack_anim = self.get_attack_animation()
                 else:
                     self._current_attack_anim = 'attack'
-                player.damage(self.damage_amount, source_enemy=self)
+
+                # Dégâts immédiats ou différés selon get_damage_delay()
+                delay = self.get_damage_delay(self._current_attack_anim) if hasattr(self, 'get_damage_delay') else 0
+                if delay > 0:
+                    self._pending_damage = (current_time + delay, self.damage_amount, player)
+                else:
+                    player.damage(self.damage_amount, source_enemy=self)
 
 
 

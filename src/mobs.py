@@ -9,7 +9,7 @@ from resource_manager import ResourceManager
 # ==========================================
 class Orc(Enemy):
     def __init__(self, x, y):
-        super().__init__(x, y, name="orc", base_hp=100, base_dmg=10, base_speed=2.0)
+        super().__init__(x, y, name="orc", base_hp=50, base_dmg=7, base_speed=1.0)
         
         self.load_dynamic_animation('idle', "assets/images/Orc-Idle.png")
         self.load_dynamic_animation('walk', "assets/images/Orc-Walk.png")
@@ -130,7 +130,7 @@ class Fairy(pygame.sprite.Sprite):
 # ==========================================
 class Skeleton(Enemy):
     def __init__(self, x, y):
-        super().__init__(x, y, name="skeleton", base_hp=100, base_dmg=10, base_speed=2.0)
+        super().__init__(x, y, name="skeleton", base_hp=50, base_dmg=7, base_speed=1.0)
         self.load_dynamic_animation('idle', "assets/images/mob/Skeleton/Skeleton-Idle.png")
         self.load_dynamic_animation('walk', "assets/images/mob/Skeleton/Skeleton-Walk.png")
         self.load_dynamic_animation('attack', "assets/images/mob/Skeleton/Skeleton-Attack01.png")
@@ -145,19 +145,14 @@ class Skeleton(Enemy):
 class Slime(Enemy):
     def __init__(self, x, y):
         # PV x0.6, Vitesse x1.4, Dégâts x1
-        super().__init__(x, y, name="slime", base_hp=60, base_dmg=10, base_speed=2.8)
+        super().__init__(x, y, name="slime", base_hp=30, base_dmg=7, base_speed=1.4)
         self.load_dynamic_animation('idle', "assets/images/mob/Slime/Slime-Idle.png")
         self.load_dynamic_animation('walk', "assets/images/mob/Slime/Slime-Walk.png")
-        self.load_dynamic_animation('attack1', "assets/images/mob/Slime/Slime-Attack01.png")
-        self.load_dynamic_animation('attack2', "assets/images/mob/Slime/Slime-Attack02.png")
+        self.load_dynamic_animation('attack', "assets/images/mob/Slime/Slime-Attack01.png")
         self.load_dynamic_animation('death', "assets/images/mob/Slime/Slime-Death.png")
-        
+
         if 'idle' in self.animations['right']:
             self.image = self.animations['right']['idle'][0]
-
-    def get_attack_animation(self):
-        """Choisit aléatoirement l'animation d'attaque 50/50"""
-        return random.choice(['attack1', 'attack2'])
 
 # ==========================================
 # MOB 3 : ORC RIDER
@@ -169,7 +164,7 @@ class OrcRider(Enemy):
 
     def __init__(self, x, y):
         # PV x2
-        super().__init__(x, y, name="orc_rider", base_hp=200, base_dmg=10, base_speed=2.0)
+        super().__init__(x, y, name="orc_rider", base_hp=100, base_dmg=7, base_speed=1.0)
         
         # Hitbox plus grande pour le cavalier
         hitbox_size = int(15 * self.scale_factor)
@@ -205,7 +200,7 @@ class EliteOrc(Enemy):
 
     def __init__(self, x, y):
         # PV x4, Dégâts x1.3
-        super().__init__(x, y, name="elite_orc", base_hp=400, base_dmg=13, base_speed=2.0)
+        super().__init__(x, y, name="elite_orc", base_hp=200, base_dmg=13, base_speed=1.0)
         self.load_dynamic_animation('idle', "assets/images/mob/Elite_Orc/Elite Orc-Idle.png")
         self.load_dynamic_animation('walk', "assets/images/mob/Elite_Orc/Elite Orc-Walk.png")
         self.load_dynamic_animation('attack1', "assets/images/mob/Elite_Orc/Elite Orc-Attack01.png")
@@ -230,7 +225,7 @@ class EliteOrc(Enemy):
 class GreatswordSkeleton(Enemy):
     def __init__(self, x, y):
         # PV x4
-        super().__init__(x, y, name="greatsword_skeleton", base_hp=400, base_dmg=10, base_speed=2.0)
+        super().__init__(x, y, name="greatsword_skeleton", base_hp=200, base_dmg=7, base_speed=1.0)
         self.load_dynamic_animation('idle', "assets/images/mob/greatsword_skeleton/Greatsword Skeleton-Idle.png")
         self.load_dynamic_animation('walk', "assets/images/mob/greatsword_skeleton/Greatsword Skeleton-Walk.png")
         self.load_dynamic_animation('attack1', "assets/images/mob/greatsword_skeleton/Greatsword Skeleton-Attack01.png")
@@ -244,30 +239,141 @@ class GreatswordSkeleton(Enemy):
     def get_attack_animation(self):
         return random.choice(['attack1', 'attack2', 'attack3'])
 
+    def get_damage_delay(self, anim_name):
+        """Dégâts différés selon l'animation d'attaque."""
+        if anim_name == 'attack2':
+            return 350  # ms — épée qui descend (légèrement avancé)
+        if anim_name == 'attack1':
+            return 150  # ms — coup rapide, délai très léger
+        return 0
+
 # ==========================================
 # MOB 6 : SKELETON ARCHER
 # ==========================================
 class SkeletonArcher(Enemy):
-    ARCHER_ATTACK_RANGE = 250 # Reste à distance
+    ARCHER_ATTACK_RANGE = 200  # portée de tir
+    ALIGN_TOLERANCE = 8        # tolérance verticale pour considérer qu'on est aligné
 
     def __init__(self, x, y):
-        super().__init__(x, y, name="skeleton_archer", base_hp=100, base_dmg=10, base_speed=2.0)
+        super().__init__(x, y, name="skeleton_archer", base_hp=50, base_dmg=7, base_speed=1.0)
+        self.attack_range = self.ARCHER_ATTACK_RANGE
+        self.detection_radius = 250
+        self._arrow_fired = False  # True une fois la flèche tirée pendant l'animation
         self.load_dynamic_animation('idle', "assets/images/mob/skeleton_archer/Skeleton Archer-Idle.png")
         self.load_dynamic_animation('walk', "assets/images/mob/skeleton_archer/Skeleton Archer-Walk.png")
         self.load_dynamic_animation('attack', "assets/images/mob/skeleton_archer/Skeleton Archer-Attack.png")
         self.load_dynamic_animation('death', "assets/images/mob/skeleton_archer/Skeleton Archer-Death.png")
-        
+
         if 'idle' in self.animations['right']:
             self.image = self.animations['right']['idle'][0]
 
-    def fire_arrow(self, target, projectiles_group):
-        """Tire une flèche en direction du joueur cible."""
-        direction = "right" if target.position.x > self.position.x else "left"
+    def update(self, player, walls):
+        """Override complet : l'archer s'aligne en Y puis tire de loin."""
+        # --- Dégâts différés ---
+        if self._pending_damage is not None and not self.is_dead:
+            trigger_time, dmg, target = self._pending_damage
+            if pygame.time.get_ticks() >= trigger_time:
+                target.damage(dmg, source_enemy=self)
+                self._pending_damage = None
+
+        if self.is_dead:
+            self._pending_damage = None
+            self.animate()
+            self.rect.size = self.image.get_size()
+            self.rect.centerx = self.feet.centerx
+            self.rect.bottom = self.feet.bottom + self.empty_space_below
+            if pygame.time.get_ticks() - self.death_time > 3000:
+                self.kill()
+            return
+
+        if self.paralyzed:
+            if pygame.time.get_ticks() >= self.paralyze_end_time:
+                self.paralyzed = False
+                self._zhonya_gold = False
+            else:
+                self.current_velocity = pygame.math.Vector2(0, 0)
+                self.animate()
+                self.rect.size = self.image.get_size()
+                self.rect.centerx = self.feet.centerx
+                self.rect.bottom = self.feet.bottom + self.empty_space_below
+                return
+
+        target_center = pygame.math.Vector2(player.feet.center)
+        my_center = pygame.math.Vector2(self.feet.center)
+        target_vector = target_center - my_center
+        distance = target_vector.length()
+
+        velocity_x, velocity_y = 0, 0
+
+        if distance < self.detection_radius and not self.is_attacking and player.health > 0:
+            dy = target_center.y - my_center.y
+            aligned = abs(dy) < self.ALIGN_TOLERANCE
+
+            # Faire face au joueur
+            if target_center.x > my_center.x:
+                self.facing = "right"
+            else:
+                self.facing = "left"
+
+            if not aligned:
+                # Pas encore aligné → se déplacer uniquement en Y
+                velocity_y = self.speed if dy > 0 else -self.speed
+                self.position.y += velocity_y
+                self.feet.bottom = round(self.position.y)
+                for wall in walls:
+                    if self.feet.colliderect(wall):
+                        if velocity_y > 0:
+                            self.feet.bottom = wall.top
+                        else:
+                            self.feet.top = wall.bottom
+                        self.position.y = self.feet.bottom
+                        break
+            elif distance > self.ARCHER_ATTACK_RANGE * 0.7:
+                # Aligné mais trop loin → se rapprocher en X
+                dx_dir = 1 if target_center.x > my_center.x else -1
+                velocity_x = self.speed * dx_dir
+                self.position.x += velocity_x
+                self.feet.centerx = round(self.position.x)
+                for wall in walls:
+                    if self.feet.colliderect(wall):
+                        if velocity_x > 0:
+                            self.feet.right = wall.left
+                        else:
+                            self.feet.left = wall.right
+                        self.position.x = self.feet.centerx
+                        break
+
+        self.current_velocity = pygame.math.Vector2(velocity_x, velocity_y)
+
+        self.animate()
+        self.rect.size = self.image.get_size()
+        self.rect.centerx = self.feet.centerx
+        self.rect.bottom = self.feet.bottom + self.empty_space_below
+
+        # --- Tir à distance ---
+        if (distance < self.ARCHER_ATTACK_RANGE
+                and not self.is_attacking
+                and player.health > 0
+                and abs(target_center.y - my_center.y) < self.ALIGN_TOLERANCE):
+            current_time = pygame.time.get_ticks()
+            if current_time - self.last_attack_time > 2000:
+                self.last_attack_time = current_time
+                self.is_attacking = True
+                self.frame_index = 0
+                self._current_attack_anim = 'attack'
+                self._arrow_fired = False  # Flèche pas encore tirée
+
+    def fire_arrow(self, target, group, enemy_projectiles_group):
+        """Tire une flèche vers la cible. Appelé par game.py au milieu de l'animation."""
+        direction = "right" if target.feet.centerx > self.feet.centerx else "left"
         arrow = Projectile(
-            self.rect.centerx, 
-            self.rect.centery, 
-            direction, 
-            img_path="assets/images/mob/skeleton_archer/Arrow03(32x32).png", 
-            damage=self.damage
+            self.feet.centerx,
+            self.rect.centery + int(5 * self.scale_factor),
+            direction,
+            img_path="assets/images/mob/skeleton_archer/Arrow03(32x32).png",
+            damage=self.damage_amount
         )
-        projectiles_group.add(arrow)
+        arrow._is_enemy_projectile = True
+        group.add(arrow)
+        enemy_projectiles_group.add(arrow)
+        self._arrow_fired = True

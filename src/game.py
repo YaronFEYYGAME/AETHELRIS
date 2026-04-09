@@ -25,6 +25,110 @@ def draw_debug_rect(screen, world_rect, color, camera_x, camera_y, zoom, screen_
     screen_h = world_rect.height * zoom
     pygame.draw.rect(screen, color, (screen_x, screen_y, screen_w, screen_h), 2)
 
+
+def _spawn_damage_number(enemy, actual_damage, attacker, group, particles_group, is_crit=False):
+    """Crée un texte flottant de dégâts au-dessus de l'ennemi touché.
+    La couleur dépend du ratio dégâts réels / dégâts de base du personnage.
+    La taille de police est proportionnelle au scale_factor de l'ennemi."""
+    # Dégâts de base du personnage (melee ou ranged selon l'arme courante)
+    base_dmg = 1
+    if attacker and hasattr(attacker, 'char_def'):
+        if getattr(attacker, 'current_weapon', 'melee') == 'ranged':
+            base_dmg = attacker.char_def.get('ranged_damage', 10.5)
+        else:
+            base_dmg = attacker.char_def.get('melee_damage', 10)
+        # Pour les personnages à skills (Wizard, Priest) dont melee/ranged_damage = 0,
+        # on prend le dégât brut minimum de leurs abilities comme base de référence.
+        if base_dmg <= 0:
+            base_dmg = max(attacker.char_def.get('melee_damage', 0),
+                           attacker.char_def.get('ranged_damage', 0))
+            if base_dmg <= 0:
+                abilities = attacker.char_def.get('abilities', {})
+                skill_dmgs = [s.get('damage', 0) for s in abilities.values() if s.get('damage', 0) > 0]
+                base_dmg = min(skill_dmgs) if skill_dmgs else 1
+
+    # Couleur selon le ratio de bonus
+    if actual_damage >= 2.5 * base_dmg:
+        color = (200, 50, 255)    # Violet — +150% ou plus
+    elif actual_damage >= 2.0 * base_dmg:
+        color = (255, 230, 0)     # Jaune — +100%
+    elif actual_damage >= 1.5 * base_dmg:
+        color = (255, 150, 0)     # Orange — +50%
+    else:
+        color = (255, 50, 50)     # Rouge — normal
+    # Un coup critique garantit au minimum la couleur jaune
+    if is_crit and color == (255, 50, 50):
+        color = (255, 230, 0)
+
+    # Taille de police proportionnelle à l'ennemi
+    scale = getattr(enemy, 'scale_factor', 1.7)
+    font_size = max(12, min(32, int(12 * scale)))
+
+    # Position : côté gauche ou droit au hasard, jamais centré
+    # Les boss (aggro_radius) ont un grand sprite → offset plus large et plus haut
+    is_boss = hasattr(enemy, 'aggro_radius')
+    side = random.choice((-1, 1))
+    if is_boss:
+        ox = side * random.randint(40, 70)
+        oy = random.randint(-15, 5)
+        # Partir du centre du rect pour être au milieu du sprite, pas aux pieds
+        x = enemy.rect.centerx + ox
+        y = enemy.rect.centery + 30 + oy  # +30 pour descendre légèrement, FloatingText ajoute -40
+    else:
+        ox = side * random.randint(15, 30)
+        oy = random.randint(-10, 10)
+        x = enemy.feet.centerx + ox
+        y = enemy.feet.centery + 30 + oy  # +30 pour compenser le -40 de FloatingText
+
+    ft = FloatingText(x, y, text=str(int(actual_damage)),
+                      duration=500, color=color, font_size=font_size)
+    group.add(ft)
+    particles_group.add(ft)
+
+
+class Decoy(pygame.sprite.Sprite):
+    """Leurre immobile créé par la Cape de l'assassin.
+    Sprite = idle frame du joueur, teinté marron. Attire l'aggro des ennemis."""
+
+    _tint_cache = {}  # cache partagé pour éviter de recalculer la teinte chaque frame
+
+    def __init__(self, x, y, player):
+        super().__init__()
+        # Récupérer la frame idle du joueur (direction courante)
+        idle_anim = player.animations.get(player.facing, {}).get('idle', [])
+        if idle_anim:
+            base_frame = idle_anim[0]
+        else:
+            base_frame = player.image
+
+        # Teinte marron via cache
+        cache_key = (id(base_frame), player.facing)
+        if cache_key not in Decoy._tint_cache:
+            tinted = base_frame.copy()
+            tinted.fill((140, 80, 40, 255), special_flags=pygame.BLEND_RGBA_MULT)
+            Decoy._tint_cache[cache_key] = tinted
+        self.image = Decoy._tint_cache[cache_key]
+
+        self.rect = self.image.get_rect()
+        # Hitbox pieds — même position que le joueur au moment de l'activation
+        self.feet = pygame.Rect(0, 0, 15, 15)
+        self.feet.midbottom = player.feet.midbottom
+        # Positionner le rect comme le joueur : rect.bottom = feet.bottom
+        self.rect.centerx = self.feet.centerx
+        self.rect.bottom = self.feet.bottom
+        self.health = 50
+        self.max_health = 50
+        self.position = pygame.math.Vector2(self.feet.centerx, self.feet.bottom)
+        self._is_player_decoy = True  # Immunité aux attaques du joueur propriétaire
+
+    def damage(self, amount, source_enemy=None):
+        """Le leurre encaisse les coups."""
+        self.health -= amount
+        if self.health <= 0:
+            self.health = 0
+            self.kill()
+
+
 def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
     clock = pygame.time.Clock()
     screen_width, screen_height = screen.get_size()
@@ -48,7 +152,7 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
     pause_rects = {}
     
     # --- TOGGLE DEBUG DES HITBOXES ---
-    DEBUG_HITBOXES = False
+    DEBUG_HITBOXES = True
 
     # Items déjà droppés par les coffres (persiste entre niveaux, pas de doublon)
     chest_dropped_items = set()
@@ -420,6 +524,7 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                                         if not chest.opened and not chest.opening:
                                             if player.feet.colliderect(chest.hitbox.inflate(40, 40)):
                                                 chest.open()
+                                                _grant_xp(50, [player], group, particles_group, sound_manager)
                                                 available = [it for it in CHEST_DROPPABLE_ITEMS
                                                              if it not in chest_dropped_items]
                                                 if available:
@@ -452,14 +557,19 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
             if is_paused:
                 group.draw(screen)
                 ui.draw_health_bar(player.health, player.max_health)
+                ui.draw_stamina_bar(player.stamina, player.max_stamina)
+                ui.draw_xp_bar(player.xp, player.xp_to_next_level, player.level)
+                _lu_elapsed = pygame.time.get_ticks() - player.level_up_time
+                if _lu_elapsed < 2000:
+                    ui.draw_level_up_message(_lu_elapsed / 2000.0, screen_width // 2, screen_height // 2)
                 ui.draw_weapon_icon(player.current_weapon)
                 ui.draw_pickaxe_icon(player.has_pickaxe)
                 ui.draw_ammo_count(player.current_weapon, player.arrows)
-                
+
                 cooldown_ratio = (pygame.time.get_ticks() - player.last_dash_time) / player.dash_cooldown
                 cooldown_ratio = min(1.0, max(0.0, cooldown_ratio))
                 ui.draw_boots_icon(player.has_boots, cooldown_ratio)
-                
+
                 for enemy in enemies_group:
                     if getattr(enemy, 'has_aggro', False) and getattr(enemy, 'health', 0) > 0:
                         if isinstance(enemy, Medusa):
@@ -483,6 +593,7 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                 continue 
 
             player.update()
+            player.update_stamina()
             player.move(walls)
 
             ppos = (player.feet.centerx, player.feet.centery)
@@ -630,12 +741,19 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                 attack_result = player.attack()
                 if attack_result:
                     type_attack, data = attack_result
-                    if type_attack == 'melee':
+                    if type_attack == 'no_stamina':
+                        _now = pygame.time.get_ticks()
+                        if _now - player._last_no_stamina_ft_time > 1000:
+                            player._last_no_stamina_ft_time = _now
+                            ft = FloatingText(player.feet.centerx, player.feet.centery, text="Endurance insuffisante...")
+                            group.add(ft); particles_group.add(ft)
+                    elif type_attack == 'melee':
                         sound_manager.play_spatial('sword', ppos, ppos)
                         for enemy in enemies_group:
                             if getattr(enemy, 'health', 0) > 0 and data.colliderect(enemy.feet):
                                 dmg = player.melee_damage * player.get_damage_multiplier(target_enemy=enemy)
                                 enemy.damage(dmg)
+                                _spawn_damage_number(enemy, dmg, player, group, particles_group)
                                 player.lifesteal(dmg)
 
                                 if hasattr(enemy, 'pending_drop') and enemy.pending_drop:
@@ -651,7 +769,12 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                                         particle = ParticleClass(enemy.rect.centerx, enemy.rect.centery)
                                         group.add(particle)
                                         particles_group.add(particle)
-                                
+                                    # --- XP ---
+                                    if not getattr(enemy, '_xp_granted', False):
+                                        enemy._xp_granted = True
+                                        xp = _get_enemy_xp(enemy)
+                                        _grant_xp(xp, [player], group, particles_group, sound_manager)
+
             new_projectile = player.check_ranged_attack()
             if new_projectile:
                 group.add(new_projectile)
@@ -677,6 +800,7 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                             sound_manager.play_spatial('shot', hit_pos, ppos)
                             proj_dmg = projectile.damage_amount * player.get_damage_multiplier(target_enemy=enemy)
                             enemy.damage(proj_dmg)
+                            _spawn_damage_number(enemy, proj_dmg, player, group, particles_group)
 
                             if hasattr(enemy, 'pending_drop') and enemy.pending_drop:
                                 drop = Item(enemy.rect.centerx, enemy.rect.centery, enemy.pending_drop)
@@ -690,6 +814,11 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                                     particle = ParticleClass(enemy.rect.centerx, enemy.rect.centery)
                                     group.add(particle)
                                     particles_group.add(particle)
+                                # --- XP ---
+                                if not getattr(enemy, '_xp_granted', False):
+                                    enemy._xp_granted = True
+                                    xp = _get_enemy_xp(enemy)
+                                    _grant_xp(xp, [player], group, particles_group, sound_manager)
 
                             if not getattr(projectile, 'piercing', False):
                                 projectile.kill()
@@ -776,10 +905,15 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
             # =================================================================
             
             ui.draw_health_bar(player.health, player.max_health)
+            ui.draw_stamina_bar(player.stamina, player.max_stamina)
+            ui.draw_xp_bar(player.xp, player.xp_to_next_level, player.level)
+            _lu_elapsed = pygame.time.get_ticks() - player.level_up_time
+            if _lu_elapsed < 2000:
+                ui.draw_level_up_message(_lu_elapsed / 2000.0, screen_width // 2, screen_height // 2)
             ui.draw_weapon_icon(player.current_weapon)
             ui.draw_pickaxe_icon(player.has_pickaxe)
             ui.draw_ammo_count(player.current_weapon, player.arrows)
-            
+
             cooldown_ratio = (pygame.time.get_ticks() - player.last_dash_time) / player.dash_cooldown
             cooldown_ratio = min(1.0, max(0.0, cooldown_ratio))
             ui.draw_boots_icon(player.has_boots, cooldown_ratio)
@@ -912,6 +1046,12 @@ def _serialize_player(p):
         'inventory_items': getattr(p, 'inventory_items', []),
         'item_start_key': p.char_def.get('item_start_key', 2),
         'is_stunned': getattr(p, 'is_stunned', False),
+        'stamina': getattr(p, 'stamina', 100),
+        'max_stamina': getattr(p, 'max_stamina', 100),
+        'xp': getattr(p, 'xp', 0),
+        'xp_to_next_level': getattr(p, 'xp_to_next_level', 100),
+        'level': getattr(p, 'level', 1),
+        'level_up_time': getattr(p, 'level_up_time', 0),
     }
 
 
@@ -1038,7 +1178,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
     is_paused  = False
     pause_rects = {}
     zoom_level = 3.8
-    DEBUG_HITBOXES = False
+    DEBUG_HITBOXES = True
 
     chest_dropped_items = set()
     CHEST_DROPPABLE_ITEMS = [
@@ -1082,6 +1222,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
         group = pyscroll.PyscrollGroup(map_layer=map_layer, default_layer=1)
 
         projectiles_group = pygame.sprite.Group()
+        enemy_projectiles_group = pygame.sprite.Group()
         enemies_group     = pygame.sprite.Group()
         items_group       = pygame.sprite.Group()
         rocks_group       = pygame.sprite.Group()
@@ -1173,6 +1314,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 it = Item(obj.x, obj.y, 'zhonya'); group.add(it); items_group.add(it)
             elif obj_type == "rabadon":
                 it = Item(obj.x, obj.y, 'rabadon'); group.add(it); items_group.add(it)
+            elif obj_type == "cap_assassin":
+                it = Item(obj.x, obj.y, 'cap_assassin'); group.add(it); items_group.add(it)
             elif obj_type == "king_boss":
                 kb = KingBoss(obj.x, obj.y); group.add(kb); enemies_group.add(kb)
             elif obj_type == "sbire_neant":
@@ -1243,6 +1386,10 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
         time_stop_activator_idx = -1     # 0 = host, 1 = client
         time_stop_return_sound_played = False
         time_stop_player_cache = {}
+
+        # --- Cape de l'assassin (leurre / decoy) ---
+        active_decoy = None  # référence au Decoy sprite actif
+        decoy_owner = None   # joueur qui a activé la cape
 
         death_font = ResourceManager.get_font(120, "old english text mt, garamond, times new roman, serif")
         EUREKA_EVENT = pygame.USEREVENT + 1
@@ -1415,6 +1562,20 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                             ft = FloatingText(player.feet.centerx, player.feet.centery,
                                                               text="Aucun ennemi à portée")
                                             group.add(ft); particles_group.add(ft)
+                                elif item_name == 'cap_assassin':
+                                    if player.activate_cap_assassin():
+                                        # Détruire l'ancien leurre s'il existait
+                                        if active_decoy:
+                                            active_decoy.kill()
+                                        decoy = Decoy(player.feet.centerx, player.feet.centery, player)
+                                        group.add(decoy)
+                                        active_decoy = decoy
+                                        decoy_owner = player
+                                        # Particules de fumée à l'activation
+                                        for _ in range(15):
+                                            smoke = SmokeParticle(player.feet.centerx + random.randint(-15, 15),
+                                                                  player.feet.bottom + random.randint(-10, 5))
+                                            group.add(smoke); particles_group.add(smoke)
                         if event.key == pygame.K_LSHIFT and player.has_boots:
                             if player.dash(walls):
                                 host_pos = (player.feet.centerx, player.feet.centery)
@@ -1463,6 +1624,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                     if not chest.opened and not chest.opening:
                                         if player.feet.colliderect(chest.hitbox.inflate(40, 40)):
                                             chest.open()
+                                            _players = [player, player2] if player2 else [player]
+                                            _grant_xp(50, _players, group, particles_group, sound_manager)
                                             available = [it for it in CHEST_DROPPABLE_ITEMS
                                                          if it not in chest_dropped_items]
                                             if available:
@@ -1488,6 +1651,11 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             if is_paused:
                 group.draw(screen)
                 ui.draw_health_bar(player.health, player.max_health)
+                ui.draw_stamina_bar(player.stamina, player.max_stamina)
+                ui.draw_xp_bar(player.xp, player.xp_to_next_level, player.level)
+                _lu_elapsed = pygame.time.get_ticks() - player.level_up_time
+                if _lu_elapsed < 2000:
+                    ui.draw_level_up_message(_lu_elapsed / 2000.0, screen_width // 2, screen_height // 2)
                 pause_rects = ui.draw_pause_menu(global_music_vol, global_sfx_vol)
                 pygame.display.flip()
                 clock.tick(60)
@@ -1512,18 +1680,30 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                             res = player2.trigger_attack(binding)
                             if res:
                                 typ, data = res
-                                if typ == 'melee':
+                                if typ == 'no_stamina':
+                                    _now = pygame.time.get_ticks()
+                                    if _now - player2._last_no_stamina_ft_time > 1000:
+                                        player2._last_no_stamina_ft_time = _now
+                                        ft = FloatingText(player2.feet.centerx, player2.feet.centery, text="Endurance insuffisante...")
+                                        group.add(ft); particles_group.add(ft)
+                                elif typ == 'melee':
                                     p2_pos = (player2.feet.centerx, player2.feet.centery)
                                     sound_manager.play_spatial('sword', p2_pos, host_pos)
                                     for e in list(enemies_group):
                                         if getattr(e, 'health', 0) > 0 and data.colliderect(e.feet):
                                             dmg2 = player2.melee_damage * player2.get_damage_multiplier(target_enemy=e)
                                             e.damage(dmg2)
+                                            _spawn_damage_number(e, dmg2, player2, group, particles_group)
                                             player2.lifesteal(dmg2)
                                             if e.health <= 0:
                                                 e_pos = (e.feet.centerx, e.feet.centery)
                                                 sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
                                             _handle_enemy_death(e, group, items_group, particles_group)
+                                            if e.health <= 0 and not getattr(e, '_xp_granted', False):
+                                                e._xp_granted = True
+                                                xp = _get_enemy_xp(e)
+                                                _players = [player, player2] if player2 else [player]
+                                                _grant_xp(xp, _players, group, particles_group, sound_manager)
                                 elif typ == 'skill':
                                     p2_pos = (player2.feet.centerx, player2.feet.centery)
                                     sound_manager.play_spatial('sword', p2_pos, host_pos)
@@ -1634,6 +1814,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                             if not chest.opened and not chest.opening:
                                 if player2.feet.colliderect(chest.hitbox.inflate(40, 40)):
                                     chest.open()
+                                    _players = [player, player2] if player2 else [player]
+                                    _grant_xp(50, _players, group, particles_group, sound_manager)
                                     available = [it for it in CHEST_DROPPABLE_ITEMS
                                                  if it not in chest_dropped_items]
                                     if available:
@@ -1665,9 +1847,11 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
 
                 # Régénération de flèches player2 (Archer)
                 player2.update_arrow_regen()
+                player2.update_stamina()
 
             # --- Joueur local ---
             player.update()
+            player.update_stamina()
             player.move(walls)
 
             # Red gem animation (host) — détecter le déclenchement
@@ -1713,18 +1897,46 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                         if hasattr(enemy, 'last_attack_time'):
                             enemy.last_attack_time += 5000
 
+            # --- Cape de l'assassin : fin d'invisibilité + destruction du leurre ---
+            if decoy_owner and decoy_owner.stealth_active:
+                if pygame.time.get_ticks() >= decoy_owner.stealth_end_time:
+                    decoy_owner.end_stealth()
+            if decoy_owner and not decoy_owner.stealth_active:
+                if active_decoy and active_decoy.alive():
+                    # Particules de fumée à la disparition du leurre
+                    for _ in range(10):
+                        smoke = SmokeParticle(active_decoy.feet.centerx + random.randint(-10, 10),
+                                              active_decoy.feet.bottom + random.randint(-10, 5))
+                        group.add(smoke); particles_group.add(smoke)
+                    active_decoy.kill()
+                active_decoy = None
+                decoy_owner = None
+
             # --- Ennemis (figés pendant time stop) ---
             if not time_stop_active:
               for e in list(enemies_group):
-                # Ciblage : seulement les joueurs vivants
-                all_players = [player] + ([player2] if player2 else [])
-                live = [p for p in all_players if p.health > 0]
-                if live:
+                # Ciblage : leurre prioritaire si actif, sinon joueurs vivants
+                if active_decoy and active_decoy.alive():
+                    decoy_dist = (pygame.math.Vector2(active_decoy.feet.center)
+                                  - pygame.math.Vector2(e.feet.center)).length()
+                    # Les mobs ont detection_radius, les boss ont aggro_radius
+                    _detect_r = getattr(e, 'detection_radius', getattr(e, 'aggro_radius', 300))
+                    if decoy_dist < _detect_r:
+                        target = active_decoy
+                    else:
+                        all_players = [player] + ([player2] if player2 else [])
+                        live = [p for p in all_players if p.health > 0 and not getattr(p, 'stealth_active', False)]
+                        target = min(live, key=lambda p: (
+                            pygame.math.Vector2(p.feet.center) - pygame.math.Vector2(e.feet.center)
+                        ).length()) if live else player
+                else:
+                    all_players = [player] + ([player2] if player2 else [])
+                    live = [p for p in all_players if p.health > 0 and not getattr(p, 'stealth_active', False)]
+                    if not live:
+                        live = [p for p in all_players if p.health > 0]
                     target = min(live, key=lambda p: (
                         pygame.math.Vector2(p.feet.center) - pygame.math.Vector2(e.feet.center)
-                    ).length())
-                else:
-                    target = player  # tous morts, peu importe
+                    ).length()) if live else player
 
                 # Sauvegarder position du spirit avant update
                 spirit_pos = None
@@ -1839,6 +2051,34 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                     e.pending_sounds.clear()
 
               projectiles_group.update()
+            if not time_stop_active:
+                enemy_projectiles_group.update()
+
+                # --- Skeleton Archer : tir de flèche au milieu de l'animation d'attaque ---
+                for e in enemies_group:
+                    if isinstance(e, SkeletonArcher) and e.is_attacking and not e._arrow_fired:
+                        anim = e.animations[e.facing].get('attack', [])
+                        if anim and int(e.frame_index) >= len(anim) // 2:
+                            e.fire_arrow(player, group, enemy_projectiles_group)
+
+                # --- Collision flèches ennemies → joueur ---
+                for proj in list(enemy_projectiles_group):
+                    if not hasattr(proj, 'hitbox'):
+                        continue
+                    if player.health > 0:
+                        body = player.feet.copy()
+                        body.height += 25
+                        body.y -= 25
+                        if proj.hitbox.colliderect(body):
+                            player.damage(proj.damage_amount)
+                            proj.kill()
+                            continue
+                    # Collision avec les murs
+                    for wall in walls:
+                        if proj.hitbox.colliderect(wall):
+                            proj.kill()
+                            break
+
             particles_group.update()
             fairies_group.update()
             chests_group.update()
@@ -1857,18 +2097,40 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                         res = player.trigger_attack(binding)
                         if res:
                             typ, data = res
-                            if typ == 'melee':
+                            if typ == 'no_stamina':
+                                _now = pygame.time.get_ticks()
+                                if _now - player._last_no_stamina_ft_time > 1000:
+                                    player._last_no_stamina_ft_time = _now
+                                    ft = FloatingText(player.feet.centerx, player.feet.centery, text="Endurance insuffisante...")
+                                    group.add(ft); particles_group.add(ft)
+                            elif typ == 'melee':
                                 sound_manager.play_spatial('sword', host_pos, host_pos)
                                 sound_events.append({'sound': 'sword', 'x': host_pos[0], 'y': host_pos[1]})
+                                was_crit = player.stealth_crit_active
+                                hit_any_melee = False
                                 for e in list(enemies_group):
+                                    if getattr(e, '_is_player_decoy', False): continue
                                     if getattr(e, 'health', 0) > 0 and data.colliderect(e.feet):
+                                        hit_any_melee = True
                                         dmg = player.melee_damage * player.get_damage_multiplier(target_enemy=e)
                                         e.damage(dmg)
+                                        _spawn_damage_number(e, dmg, player, group, particles_group, is_crit=was_crit)
                                         player.lifesteal(dmg)
                                         if e.health <= 0:
                                             e_pos = (e.feet.centerx, e.feet.centery)
                                             sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
                                         _handle_enemy_death(e, group, items_group, particles_group)
+                                        if e.health <= 0 and not getattr(e, '_xp_granted', False):
+                                            e._xp_granted = True
+                                            xp = _get_enemy_xp(e)
+                                            _players = [player, player2] if player2 else [player]
+                                            _grant_xp(xp, _players, group, particles_group, sound_manager)
+                                player.stealth_crit_active = False  # consommé après application
+                                if was_crit and hit_any_melee:
+                                    crit_ft = FloatingText(player.feet.centerx, player.feet.centery + 10,
+                                                           text="CRIT!", duration=800,
+                                                           color=(255, 255, 0))
+                                    group.add(crit_ft); particles_group.add(crit_ft)
                             elif typ == 'skill':
                                 sound_manager.play_spatial('sword', host_pos, host_pos)
                                 sound_events.append({'sound': 'sword', 'x': host_pos[0], 'y': host_pos[1]})
@@ -1886,6 +2148,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             if new_proj:
                 new_proj._mp_id = _next_id()
                 new_proj._owner = player
+                new_proj._is_crit = player.stealth_crit_active
+                player.stealth_crit_active = False  # consommé au tir
                 group.add(new_proj); projectiles_group.add(new_proj)
 
             # Régénération de flèches (Archer)
@@ -1897,6 +2161,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                     if proj.has_exploded and not getattr(proj, '_damage_dealt', False):
                         proj._damage_dealt = True
                         owner = getattr(proj, '_owner', None)
+                        was_crit_homing = getattr(proj, '_is_crit', False)
+                        hit_any = False
                         for e in list(enemies_group):
                             if getattr(e, 'health', 0) > 0:
                                 dist = pygame.math.Vector2(
@@ -1908,10 +2174,21 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                     if owner:
                                         aoe_dmg *= owner.get_damage_multiplier(target_enemy=e)
                                     e.damage(aoe_dmg)
+                                    _spawn_damage_number(e, aoe_dmg, owner, group, particles_group, is_crit=was_crit_homing)
+                                    hit_any = True
                                     if e.health <= 0:
                                         e_pos = (e.feet.centerx, e.feet.centery)
                                         sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
                                     _handle_enemy_death(e, group, items_group, particles_group)
+                                    if e.health <= 0 and not getattr(e, '_xp_granted', False):
+                                        e._xp_granted = True
+                                        xp = _get_enemy_xp(e)
+                                        _players = [player, player2] if player2 else [player]
+                                        _grant_xp(xp, _players, group, particles_group, sound_manager)
+                        if was_crit_homing and hit_any and owner:
+                            crit_ft = FloatingText(owner.feet.centerx, owner.feet.centery + 10,
+                                                   text="CRIT!", duration=800, color=(255, 255, 0))
+                            group.add(crit_ft); particles_group.add(crit_ft)
                     continue
 
                 # InstantAOE — dégâts en zone immédiatement
@@ -1919,6 +2196,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                     if not getattr(proj, '_damage_dealt', False):
                         proj._damage_dealt = True
                         owner = getattr(proj, '_owner', None)
+                        was_crit_aoe = getattr(proj, '_is_crit', False)
+                        hit_any_aoe = False
                         for e in list(enemies_group):
                             if getattr(e, 'health', 0) > 0:
                                 dist = pygame.math.Vector2(
@@ -1930,6 +2209,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                     if owner:
                                         aoe_dmg *= owner.get_damage_multiplier(target_enemy=e)
                                     e.damage(aoe_dmg)
+                                    _spawn_damage_number(e, aoe_dmg, owner, group, particles_group, is_crit=was_crit_aoe)
+                                    hit_any_aoe = True
                                     # Paralysie (orbe cristal wizard)
                                     paralyze_dur = getattr(proj, '_paralyze_duration', 0)
                                     if paralyze_dur and e.health > 0 and hasattr(e, 'paralyze'):
@@ -1942,6 +2223,15 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                         e_pos = (e.feet.centerx, e.feet.centery)
                                         sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
                                     _handle_enemy_death(e, group, items_group, particles_group)
+                                    if e.health <= 0 and not getattr(e, '_xp_granted', False):
+                                        e._xp_granted = True
+                                        xp = _get_enemy_xp(e)
+                                        _players = [player, player2] if player2 else [player]
+                                        _grant_xp(xp, _players, group, particles_group, sound_manager)
+                        if was_crit_aoe and hit_any_aoe and owner:
+                            crit_ft = FloatingText(owner.feet.centerx, owner.feet.centery + 10,
+                                                   text="CRIT!", duration=800, color=(255, 255, 0))
+                            group.add(crit_ft); particles_group.add(crit_ft)
                     continue
 
                 # HealEffect — juste un visuel, pas de collision
@@ -1952,6 +2242,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 if not hasattr(proj, 'hitbox'):
                     continue
                 for e in list(enemies_group):
+                    if getattr(e, '_is_player_decoy', False): continue
                     if getattr(e, 'health', 0) > 0:
                         body = e.feet.copy()
                         ext = 50 if isinstance(e, (BigEnemy, Necromancer, Medusa, KingBoss, SbireNeant)) else 25
@@ -1968,15 +2259,27 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                             sound_events.append({'sound': 'arrow', 'x': hit_pos[0], 'y': hit_pos[1]})
                             proj_dmg = proj.damage_amount
                             owner = getattr(proj, '_owner', None)
+                            was_crit_proj = getattr(proj, '_is_crit', False)
                             if owner:
                                 proj_dmg *= owner.get_damage_multiplier(target_enemy=e)
                             e.damage(proj_dmg)
+                            _spawn_damage_number(e, proj_dmg, owner, group, particles_group, is_crit=was_crit_proj)
+                            if was_crit_proj and owner:
+                                crit_ft = FloatingText(owner.feet.centerx, owner.feet.centery + 10,
+                                                       text="CRIT!", duration=800,
+                                                       color=(255, 255, 0))
+                                group.add(crit_ft); particles_group.add(crit_ft)
                             if owner and hasattr(owner, 'lifesteal'):
                                 owner.lifesteal(proj_dmg)
                             if e.health <= 0:
                                 e_pos = (e.feet.centerx, e.feet.centery)
                                 sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
                             _handle_enemy_death(e, group, items_group, particles_group)
+                            if e.health <= 0 and not getattr(e, '_xp_granted', False):
+                                e._xp_granted = True
+                                xp = _get_enemy_xp(e)
+                                _players = [player, player2] if player2 else [player]
+                                _grant_xp(xp, _players, group, particles_group, sound_manager)
                             if not getattr(proj, 'piercing', False):
                                 proj.kill(); break
                 if proj.alive():
@@ -2090,6 +2393,11 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
 
             # --- HUD ---
             ui.draw_health_bar(player.health, player.max_health)
+            ui.draw_stamina_bar(player.stamina, player.max_stamina)
+            ui.draw_xp_bar(player.xp, player.xp_to_next_level, player.level)
+            _lu_elapsed = pygame.time.get_ticks() - player.level_up_time
+            if _lu_elapsed < 2000:
+                ui.draw_level_up_message(_lu_elapsed / 2000.0, screen_width // 2, screen_height // 2)
             cr = min(1.0, max(0.0, (pygame.time.get_ticks() - player.last_dash_time) / player.dash_cooldown))
             skill_crs = {sk: player.get_skill_cooldown_ratio(sk) for sk in player.abilities}
             ui.draw_character_hud(player.char_type, player.current_weapon,
@@ -2101,6 +2409,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                   arrow_regen_cr=player.get_arrow_regen_cooldown_ratio(),
                                   travelers_cap_cr=player.get_travelers_cap_cooldown_ratio(),
                                   zhonya_cr=player.get_zhonya_cooldown_ratio(),
+                                  cap_assassin_cr=player.get_cap_assassin_cooldown_ratio(),
                                   item_start_key=player.char_def.get('item_start_key', 2))
             # Barre de vie player2 (en haut à droite)
             if player2:
@@ -2927,6 +3236,11 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         # --- HUD joueur local (complet) ---
         lp_state = players_state[1] if len(players_state) >= 2 else {}
         ui.draw_health_bar(lp_state.get('health', 100), lp_state.get('max_health', 100))
+        ui.draw_stamina_bar(lp_state.get('stamina', 100), lp_state.get('max_stamina', 100))
+        ui.draw_xp_bar(lp_state.get('xp', 0), lp_state.get('xp_to_next_level', 100), lp_state.get('level', 1))
+        _lu_elapsed = pygame.time.get_ticks() - lp_state.get('level_up_time', 0)
+        if _lu_elapsed < 2000:
+            ui.draw_level_up_message(_lu_elapsed / 2000.0, screen_width // 2, screen_height // 2)
         lp_char = lp_state.get('char_type', client_char_type)
         ui.draw_character_hud(lp_char, lp_state.get('current_weapon'),
                               skill_cooldowns=lp_state.get('skill_cooldowns', {}),
@@ -3167,20 +3481,34 @@ def _apply_skill_result(skill_result, caster, group, projectiles_group,
                         sound_manager, sound_events, listener_pos, next_id_fn):
     """Applique les résultats d'une compétence active."""
     # Dégâts de mêlée en zone (Swordsman)
+    was_crit_skill = getattr(caster, 'stealth_crit_active', False)
     for enemy, damage in skill_result.get('melee_hits', []):
         dmg = damage * caster.get_damage_multiplier(target_enemy=enemy)
         enemy.damage(dmg)
+        _spawn_damage_number(enemy, dmg, caster, group, particles_group, is_crit=was_crit_skill)
+    if skill_result.get('melee_hits'):
+        caster.stealth_crit_active = False  # consommé après application
         caster.lifesteal(dmg)
         if enemy.health <= 0:
             e_pos = (enemy.feet.centerx, enemy.feet.centery)
             sound_events.append({'sound': 'enemy_death', 'x': e_pos[0], 'y': e_pos[1]})
         _handle_enemy_death(enemy, group, items_group, particles_group)
+        if enemy.health <= 0 and not getattr(enemy, '_xp_granted', False):
+            enemy._xp_granted = True
+            xp = _get_enemy_xp(enemy)
+            _grant_xp(xp, [caster], group, particles_group, sound_manager)
+    if was_crit_skill and skill_result.get('melee_hits'):
+        crit_ft = FloatingText(caster.feet.centerx, caster.feet.centery + 10,
+                               text="CRIT!", duration=800, color=(255, 255, 0))
+        group.add(crit_ft); particles_group.add(crit_ft)
 
     # Projectile (Wizard fireball, Archer golden arrow)
     proj = skill_result.get('projectile')
     if proj:
         proj._mp_id = next_id_fn()
         proj._owner = caster
+        proj._is_crit = getattr(caster, 'stealth_crit_active', False)
+        caster.stealth_crit_active = False  # consommé au tir
         group.add(proj)
         projectiles_group.add(proj)
         src_pos = (caster.feet.centerx, caster.feet.centery)
@@ -3201,6 +3529,8 @@ def _apply_skill_result(skill_result, caster, group, projectiles_group,
         )
         aoe._mp_id = next_id_fn()
         aoe._owner = caster
+        aoe._is_crit = getattr(caster, 'stealth_crit_active', False)
+        caster.stealth_crit_active = False  # consommé au tir
         aoe._paralyze_duration = homing.get('paralyze', 0)
         aoe._layer = 99
         group.add(aoe)
@@ -3268,6 +3598,34 @@ def _pickup_item(player, item, sound_manager):
     if sound_manager and item.item_type != 'pickaxe':
         sound_manager.play_ui_equipement()
     return True
+
+
+def _grant_xp(amount, players, group, particles_group, sound_manager):
+    """Distribue l'XP à tous les joueurs vivants et affiche les textes flottants."""
+    if amount <= 0:
+        return
+    for p in players:
+        if not hasattr(p, 'gain_xp') or getattr(p, 'health', 0) <= 0:
+            continue
+        leveled = p.gain_xp(amount)
+        # FloatingText "+X XP" au-dessus du joueur
+        ft = FloatingText(p.feet.centerx, p.feet.centery + 10,
+                          text=f"+{amount} XP", duration=600,
+                          color=(255, 255, 255), font_size=16)
+        group.add(ft); particles_group.add(ft)
+        if leveled and sound_manager:
+            sound_manager.play_ui_levelup()
+
+
+def _get_enemy_xp(enemy):
+    """Retourne le montant d'XP selon le type d'ennemi."""
+    if isinstance(enemy, (BigEnemy, Necromancer, Medusa, KingBoss, SbireNeant)):
+        return 200  # Boss
+    if isinstance(enemy, (EliteOrc, GreatswordSkeleton)):
+        return 30   # Mobs élites
+    if isinstance(enemy, Spirit):
+        return 0    # Spirits du Necromancer, pas d'XP
+    return 15       # Mobs normaux
 
 
 def _handle_enemy_death(enemy, group, items_group, particles_group):

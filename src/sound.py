@@ -83,6 +83,9 @@ class SoundManager:
         # --- SON ZHONYA ---
         load_sound('zhonya', "assets/sounds/zhonya.wav")
 
+        # --- SON LEVEL UP ---
+        load_sound('levelup', "assets/sounds/levelup.wav")
+
         self.base_volumes = {
             'step': 0.4,
             'equip_sword': 0.3,
@@ -260,6 +263,9 @@ class SoundManager:
 
     def play_ui_return_time(self):
         if 'return_time' in self.sounds: self.sounds['return_time'].play()
+
+    def play_ui_levelup(self):
+        if 'levelup' in self.sounds: self.sounds['levelup'].play()
 
     # ------------------------------------------------------------------
     # PAS DE MARCHE — spatialisés via channel dédié

@@ -4,7 +4,7 @@ from characters import get_character_def
 from resource_manager import ResourceManager
 
 # Types d'items
-ACTIVE_ITEMS = {'boots', 'bluegem', 'cursed_brand', 'travelers_cap', 'zhonya'}
+ACTIVE_ITEMS = {'boots', 'bluegem', 'cursed_brand', 'travelers_cap', 'zhonya', 'cap_assassin'}
 PASSIVE_ITEMS = {'pickaxe', 'redgem', 'mirror', 'kitsune_mask', 'rabadon'}
 MAX_INVENTORY_ITEMS = 5
 
@@ -100,8 +100,32 @@ class Player(pygame.sprite.Sprite):
         self.zhonya_cooldown = 20000  # 20 secondes
         self.last_zhonya_time = -20000
 
+        # Cape de l'assassin (invisibilité + leurre)
+        self.has_cap_assassin = False
+        self.cap_assassin_cooldown = 20000  # 20 secondes
+        self.last_cap_assassin_time = -20000
+        self.stealth_active = False
+        self.stealth_end_time = 0
+        self.stealth_crit_ready = False   # prochain coup = x2 dégâts
+        self.stealth_crit_active = False  # crit consommé mais actif pour ce swing
+
         # Coiffe de Rabadon (bonus dégâts passif)
         self.has_rabadon = False
+
+        # --- Endurance (Stamina) ---
+        self.stamina = 100
+        self.max_stamina = 100
+        self.stamina_regen_rate = 25  # pts/seconde
+        self.stamina_regen_delay = 2000  # 2s sans action avant regen
+        self.last_stamina_use_time = -2000  # prêt à régénérer
+        self._last_no_stamina_ft_time = -2000  # cooldown message "Endurance insuffisante"
+
+        # --- Expérience / Niveau ---
+        self.level = 1
+        self.xp = 0
+        self.xp_to_next_level = 100  # Niv 1→2 : 100 XP
+        self.stat_points = 0
+        self.level_up_time = 0  # timestamp du dernier level up (pour animation)
 
         self.is_hit = False
         self.last_hit_time = 0
@@ -177,6 +201,15 @@ class Player(pygame.sprite.Sprite):
         if weapon == 'ranged' and not self.has_ranged:
             return None
         self.current_weapon = weapon
+        # Toute attaque/compétence rompt l'invisibilité de la Cape de l'assassin
+        if self.stealth_active:
+            self.end_stealth()
+        # Le crit est consommé dès le déclenchement de l'attaque (qu'elle touche ou non).
+        # On ne l'écrase QUE si stealth_crit_ready est vrai — sinon on ne touche pas
+        # à stealth_crit_active (qui doit rester True jusqu'au fire_frame du projectile).
+        if self.stealth_crit_ready:
+            self.stealth_crit_active = True
+            self.stealth_crit_ready = False
         if weapon in self.abilities:
             return self.use_skill(weapon)
         return self.attack()
@@ -220,6 +253,7 @@ class Player(pygame.sprite.Sprite):
             'mirror': 'has_mirror', 'kitsune_mask': 'has_kitsune_mask',
             'cursed_brand': 'has_cursed_brand', 'travelers_cap': 'has_travelers_cap',
             'zhonya': 'has_zhonya', 'rabadon': 'has_rabadon',
+            'cap_assassin': 'has_cap_assassin',
         }
         attr = flag_map.get(item_type)
         if attr:
@@ -411,6 +445,13 @@ class Player(pygame.sprite.Sprite):
             else:
                 self.cursed_brand_active = False
 
+        # Cape de l'assassin : semi-transparence pendant l'invisibilité
+        if self.stealth_active:
+            if pygame.time.get_ticks() < self.stealth_end_time:
+                self.image.set_alpha(60)
+            else:
+                self.end_stealth()
+
     def apply_stun(self, duration_ms):
         """Applique un stun au joueur (Médusa). Bloque mouvement, attaque, items."""
         self.is_stunned = True
@@ -433,6 +474,10 @@ class Player(pygame.sprite.Sprite):
         if self.current_weapon == 'melee':
             cooldown = self.char_def.get('attack_cooldown_melee', 600)
             if current_time - self.last_attack_time > cooldown:
+                if self.stamina < 15:
+                    return ('no_stamina', None)
+                self.stamina -= 15
+                self.last_stamina_use_time = current_time
                 self.last_attack_time = current_time
                 self.is_attacking = True
                 self.frame_index = 0
@@ -446,6 +491,10 @@ class Player(pygame.sprite.Sprite):
             if current_time - self.last_attack_time > cooldown:
                 if self.arrows <= 0:
                     return None
+                if self.stamina < 20:
+                    return ('no_stamina', None)
+                self.stamina -= 20
+                self.last_stamina_use_time = current_time
                 self.last_attack_time = current_time
                 self.is_attacking = True
                 self.frame_index = 0
@@ -468,6 +517,12 @@ class Player(pygame.sprite.Sprite):
 
         if current_time - last_use < cooldown:
             return None
+
+        stamina_cost = skill.get('stamina_cost', 20)
+        if self.stamina < stamina_cost:
+            return ('no_stamina', None)
+        self.stamina -= stamina_cost
+        self.last_stamina_use_time = current_time
 
         self.skill_cooldowns[skill_name] = current_time
         self.is_attacking = True
@@ -534,6 +589,7 @@ class Player(pygame.sprite.Sprite):
                         attack_rect.right = self.feet.centerx
                     if enemies_group:
                         for e in enemies_group:
+                            if getattr(e, '_is_player_decoy', False): continue
                             if getattr(e, 'health', 0) > 0 and attack_rect.colliderect(e.feet):
                                 result['melee_hits'].append((e, skill.get('damage', 10)))
 
@@ -562,6 +618,7 @@ class Player(pygame.sprite.Sprite):
                     closest = None
                     closest_dist = float('inf')
                     for e in enemies_group:
+                        if getattr(e, '_is_player_decoy', False): continue
                         if getattr(e, 'health', 0) > 0:
                             dist = pygame.math.Vector2(
                                 e.feet.centerx - self.feet.centerx,
@@ -659,6 +716,28 @@ class Player(pygame.sprite.Sprite):
             heal = damage_dealt * 0.08
             self.health = min(self.max_health, self.health + heal)
 
+    def update_stamina(self):
+        """Régénère l'endurance après un délai sans action."""
+        if self.stamina >= self.max_stamina:
+            return
+        current_time = pygame.time.get_ticks()
+        if current_time - self.last_stamina_use_time >= self.stamina_regen_delay:
+            dt = 1 / 60.0  # approximation frame-based
+            self.stamina = min(self.max_stamina, self.stamina + self.stamina_regen_rate * dt)
+
+    def gain_xp(self, amount):
+        """Ajoute de l'XP et gère la montée de niveau. Retourne True si level up."""
+        self.xp += amount
+        leveled_up = False
+        while self.xp >= self.xp_to_next_level:
+            self.xp -= self.xp_to_next_level
+            self.level += 1
+            self.stat_points += 1
+            self.xp_to_next_level = int(self.xp_to_next_level * 1.10)
+            self.level_up_time = pygame.time.get_ticks()
+            leveled_up = True
+        return leveled_up
+
     def is_moving(self):
         return self.velocity.length() > 0
 
@@ -747,9 +826,32 @@ class Player(pygame.sprite.Sprite):
         elapsed = pygame.time.get_ticks() - self.last_zhonya_time
         return min(1.0, max(0.0, elapsed / self.zhonya_cooldown))
 
-    def get_damage_multiplier(self, target_enemy=None):
+    def activate_cap_assassin(self):
+        """Active la Cape de l'assassin : invisibilité 10s + leurre."""
+        current_time = pygame.time.get_ticks()
+        if current_time - self.last_cap_assassin_time < self.cap_assassin_cooldown:
+            return False
+        self.last_cap_assassin_time = current_time
+        self.stealth_active = True
+        self.stealth_end_time = current_time + 10000  # 10 secondes
+        self.stealth_crit_ready = True  # prochain coup = x2
+        return True
+
+    def end_stealth(self):
+        """Met fin à l'invisibilité (timer expiré ou attaque)."""
+        self.stealth_active = False
+        self.stealth_end_time = 0
+        # Note : stealth_crit_ready reste True ici — il sera consommé
+        # dans trigger_attack() dès le prochain déclenchement d'attaque.
+
+    def get_cap_assassin_cooldown_ratio(self):
+        elapsed = pygame.time.get_ticks() - self.last_cap_assassin_time
+        return min(1.0, max(0.0, elapsed / self.cap_assassin_cooldown))
+
+    def get_damage_multiplier(self, target_enemy=None, consume_crit=True):
         """Retourne le multiplicateur de dégâts total.
-        Les bonus se multiplient entre eux : base × 1.40 (rabadon) × 1.5 (cursed) × 1.5 (kitsune)."""
+        Les bonus se multiplient entre eux : base × 1.40 (rabadon) × 1.5 (cursed) × 1.5 (kitsune) × 2.0 (stealth crit).
+        consume_crit=True consomme le crit stealth (usage unique)."""
         mult = 1.0
         if self.has_rabadon:
             mult *= 1.40
@@ -758,6 +860,8 @@ class Player(pygame.sprite.Sprite):
         if target_enemy and self.has_kitsune_mask:
             if getattr(target_enemy, 'health', 0) > 0 and target_enemy.health <= target_enemy.max_health * 0.4:
                 mult *= 1.5
+        if self.stealth_crit_active:
+            mult *= 2.0
         return mult
 
     def heal(self, amount):

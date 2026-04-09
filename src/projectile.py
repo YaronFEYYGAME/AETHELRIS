@@ -241,15 +241,20 @@ class InstantAOE(pygame.sprite.Sprite):
 class FloatingText(pygame.sprite.Sprite):
     """Texte flottant qui apparaît brièvement au-dessus d'un personnage."""
 
-    def __init__(self, x, y, text="fail...", duration=700):
+    def __init__(self, x, y, text="fail...", duration=700, color=(255, 100, 100),
+                 font_size=22, raw_pos=False):
         super().__init__()
-        self._font = ResourceManager.get_font(22, None)
+        self._font = ResourceManager.get_font(font_size, None)
         self._text = text
-        self._base_y = y
+        self._color = color
+        # raw_pos=True : y utilisé tel quel (damage numbers déjà positionnés)
+        # raw_pos=False : comportement historique avec offset -40
+        y_init = y if raw_pos else y - 40
+        self._base_y = y_init
         self.start_time = pygame.time.get_ticks()
         self.duration = duration
-        self.image = self._font.render(text, True, (255, 100, 100))
-        self.rect = self.image.get_rect(center=(x, y - 40))
+        self.image = self._font.render(text, True, color)
+        self.rect = self.image.get_rect(center=(x, y_init))
 
     def update(self):
         elapsed = pygame.time.get_ticks() - self.start_time
@@ -257,7 +262,8 @@ class FloatingText(pygame.sprite.Sprite):
             self.kill()
             return
         progress = elapsed / self.duration
-        self.rect.centery = self._base_y - 40 - int(15 * progress)
+        # _base_y intègre déjà l'offset initial (raw_pos ou -40 historique)
+        self.rect.centery = self._base_y - int(15 * progress)
         alpha = max(0, int(255 * (1.0 - progress)))
-        self.image = self._font.render(self._text, True, (255, 100, 100))
+        self.image = self._font.render(self._text, True, self._color)
         self.image.set_alpha(alpha)

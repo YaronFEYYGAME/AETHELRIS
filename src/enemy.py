@@ -521,12 +521,17 @@ class RemoteEnemy(pygame.sprite.Sprite):
         self.health     = 1
         self.max_health = 1
         self._blue_cache = {}
+        self._red_cache  = {}
 
         # --- État d'animation locale (avancée à 60fps indépendamment du réseau) ---
         self._anim_state  = first_state   # état courant ('idle', 'walk', 'attack'…)
         self._anim_facing = 'right'
         self.frame_index  = 0.0
         self._paralyzed   = False
+
+        # Hit flash local (client-side, déclenché quand la santé baisse)
+        self._hit_flash_time = 0
+        self._prev_health    = 1
 
     # ------------------------------------------------------------------
     # Chargeurs
@@ -687,6 +692,11 @@ class RemoteEnemy(pygame.sprite.Sprite):
             self._anim_facing = new_facing
             self.frame_index  = 0.0
 
+        # Détecter une baisse de santé → déclencher hit flash local
+        if self.health < self._prev_health and self.health > 0:
+            self._hit_flash_time = pygame.time.get_ticks()
+        self._prev_health = self.health
+
     def update(self):
         """Avance l'animation localement à 60fps, indépendamment du tick réseau."""
         anims = self.animations.get(self._anim_facing, self.animations.get('right', {}))
@@ -714,7 +724,23 @@ class RemoteEnemy(pygame.sprite.Sprite):
             self.frame_index = len(frames) - 1 if state == 'death' else 0.0
 
         frame = frames[int(self.frame_index)]
-        self.image = self._get_blue_tinted(frame) if self._paralyzed else frame
+
+        # Priorité : paralysie (bleu) > hit flash (rouge) > normal
+        if self._paralyzed:
+            self.image = self._get_blue_tinted(frame)
+        elif pygame.time.get_ticks() - self._hit_flash_time < 150:
+            fid = id(frame)
+            if fid not in self._red_cache:
+                rf = frame.copy()
+                mask = pygame.mask.from_surface(rf)
+                overlay = mask.to_surface(setcolor=(255, 0, 0, 150), unsetcolor=(0, 0, 0, 0))
+                rf.blit(overlay, (0, 0))
+                if len(self._red_cache) > 100:
+                    self._red_cache.clear()
+                self._red_cache[fid] = rf
+            self.image = self._red_cache[fid]
+        else:
+            self.image = frame
 
 
 # =====================================================================

@@ -364,7 +364,8 @@ class SkeletonArcher(Enemy):
                 self._arrow_fired = False  # Flèche pas encore tirée
 
     def fire_arrow(self, target, group, enemy_projectiles_group):
-        """Tire une flèche vers la cible. Appelé par game.py au milieu de l'animation."""
+        """Tire une flèche vers la cible. Appelé par game.py au milieu de l'animation.
+        Retourne la flèche créée pour permettre l'assignation de _mp_id."""
         direction = "right" if target.feet.centerx > self.feet.centerx else "left"
         arrow = Projectile(
             self.feet.centerx,
@@ -377,3 +378,4 @@ class SkeletonArcher(Enemy):
         group.add(arrow)
         enemy_projectiles_group.add(arrow)
         self._arrow_fired = True
+        return arrow

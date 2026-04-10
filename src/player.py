@@ -926,10 +926,11 @@ class RemotePlayer(pygame.sprite.Sprite):
         self._anim_state  = 'idle'
         self._anim_facing = 'right'
         self.frame_index  = 0.0
-        self._blue_active = False
-        self._cb_active   = False
-        self._stunned     = False
-        self._effect_cache = {}
+        self._blue_active   = False
+        self._cb_active     = False
+        self._stunned       = False
+        self._stealth_active = False
+        self._effect_cache  = {}
 
     def _load_anim(self, state_name, path, num_frames):
         try:
@@ -972,9 +973,10 @@ class RemotePlayer(pygame.sprite.Sprite):
             self.frame_index  = 0.0
 
         # Mémoriser les effets visuels (lus dans update())
-        self._blue_active = state.get('blue_gem_active', False)
-        self._cb_active   = state.get('cursed_brand_active', False)
-        self._stunned     = state.get('is_stunned', False)
+        self._blue_active    = state.get('blue_gem_active', False)
+        self._cb_active      = state.get('cursed_brand_active', False)
+        self._stunned        = state.get('is_stunned', False)
+        self._stealth_active = state.get('stealth_active', False)
 
     def update(self):
         """Avance l'animation localement à 60fps — indépendant du tick réseau."""
@@ -1020,3 +1022,8 @@ class RemotePlayer(pygame.sprite.Sprite):
         if len(self._effect_cache) > 200:
             self._effect_cache.clear()
         self._effect_cache[cache_key] = self.image
+
+        # Stealth (cape de l'assassin) : le sprite distant devient semi-transparent
+        if self._stealth_active:
+            self.image = self.image.copy()
+            self.image.set_alpha(60)

@@ -1038,6 +1038,9 @@ def _serialize_player(p):
         'has_zhonya':     p.has_zhonya,
         'zhonya_cr':      p.get_zhonya_cooldown_ratio(),
         'has_rabadon':    p.has_rabadon,
+        'has_cap_assassin': p.has_cap_assassin,
+        'cap_assassin_cr': p.get_cap_assassin_cooldown_ratio(),
+        'stealth_active': getattr(p, 'stealth_active', False),
         'arrows':         p.arrows,
         'dash_cr':        dash_cr,
         'arrow_regen_cr': p.get_arrow_regen_cooldown_ratio(),
@@ -1045,6 +1048,9 @@ def _serialize_player(p):
         'skill_cooldowns': skill_crs,
         'inventory_items': getattr(p, 'inventory_items', []),
         'item_start_key': p.char_def.get('item_start_key', 2),
+        'inventory_open':    getattr(p, 'inventory_open', False),
+        'inventory_cursor':  getattr(p, 'inventory_cursor', 0),
+        'inventory_grabbed': getattr(p, 'inventory_grabbed', False),
         'is_stunned': getattr(p, 'is_stunned', False),
         'stamina': getattr(p, 'stamina', 100),
         'max_stamina': getattr(p, 'max_stamina', 100),
@@ -1406,15 +1412,16 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
         death_font = ResourceManager.get_font(120, "old english text mt, garamond, times new roman, serif")
         EUREKA_EVENT = pygame.USEREVENT + 1
 
+        # Accumulateurs d'événements réseau — vidés APRÈS envoi, pas au début de chaque frame
+        dash_events  = []
+        sound_events = []
+
         while level_running:
             # --- Déconnexion client ---
             if not solo_mode and not server.connected:
                 _cleanup_audio()
                 _show_disconnected(screen)
                 return
-
-            dash_events  = []  # événements de dash à envoyer au client ce frame
-            sound_events = []  # sons à jouer côté client ce frame
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -1797,6 +1804,16 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                                  player2.feet.bottom + random.randint(-15, 5))
                             group.add(smoke); particles_group.add(smoke)
 
+                # Cape de l'assassin player2
+                if net_inputs.get('cap_assassin') and player2.has_cap_assassin:
+                    if player2.activate_cap_assassin():
+                        if active_decoy:
+                            active_decoy.kill()
+                        decoy = Decoy(player2.feet.centerx, player2.feet.centery, player2)
+                        group.add(decoy)
+                        active_decoy = decoy
+                        decoy_owner = player2
+
                 # Ramasser objet player2 (sans son : le client joue ses propres sons)
                 if net_inputs.get('interact') and player2.health > 0:
                     for item in list(items_group):
@@ -1846,7 +1863,41 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                                              'chest_item': chosen})
                                     break
 
-                # Drop items player2
+                # Inventaire player2 (commandes one-shot envoyées depuis le client)
+                if net_inputs.get('inv_toggle') and player2.health > 0:
+                    player2.inventory_open = not player2.inventory_open
+                    player2.inventory_grabbed = False
+                    if player2.inventory_open:
+                        player2.inventory_cursor = 0
+                if player2.inventory_open:
+                    if net_inputs.get('inv_left'):
+                        if player2.inventory_grabbed:
+                            player2.inventory_swap(-1)
+                        else:
+                            player2.inventory_cursor = max(0, player2.inventory_cursor - 1)
+                    if net_inputs.get('inv_right'):
+                        if player2.inventory_grabbed:
+                            player2.inventory_swap(1)
+                        else:
+                            player2.inventory_cursor = min(
+                                len(player2.inventory_items) - 1, player2.inventory_cursor + 1)
+                    if net_inputs.get('inv_grab'):
+                        if player2.inventory_items and player2.inventory_cursor < len(player2.inventory_items):
+                            player2.inventory_grabbed = not player2.inventory_grabbed
+                    if net_inputs.get('inv_drop'):
+                        if player2.inventory_items and player2.inventory_cursor < len(player2.inventory_items):
+                            drop_type = player2.inventory_items[player2.inventory_cursor]
+                            player2.remove_inventory_item(drop_type)
+                            player2.inventory_grabbed = False
+                            drop_item = Item(player2.feet.centerx, player2.feet.centery, drop_type)
+                            group.add(drop_item); items_group.add(drop_item)
+                            if not player2.inventory_items:
+                                player2.inventory_open = False
+                if net_inputs.get('inv_close'):
+                    player2.inventory_open = False
+                    player2.inventory_grabbed = False
+
+                # Drop items player2 (ancien système, gardé pour compat)
                 if net_inputs.get('drop_item'):
                     drop_type = net_inputs['drop_item']
                     if drop_type in player2.inventory_items:
@@ -2075,12 +2126,22 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                     if isinstance(e, SkeletonArcher) and e.is_attacking and not e._arrow_fired:
                         anim = e.animations[e.facing].get('attack', [])
                         if anim and int(e.frame_index) >= len(anim) // 2:
-                            e.fire_arrow(player, group, enemy_projectiles_group)
+                            # Cibler le joueur vivant le plus proche
+                            _alive = [p for p in ([player] + ([player2] if player2 else []))
+                                      if p.health > 0]
+                            _target = min(_alive, key=lambda p: (
+                                (p.feet.centerx - e.feet.centerx) ** 2 +
+                                (p.feet.centery - e.feet.centery) ** 2
+                            ), default=player)
+                            arrow = e.fire_arrow(_target, group, enemy_projectiles_group)
+                            if arrow and not hasattr(arrow, '_mp_id'):
+                                arrow._mp_id = _next_id()
 
-                # --- Collision flèches ennemies → joueur ---
+                # --- Collision flèches ennemies → joueurs ---
                 for proj in list(enemy_projectiles_group):
                     if not hasattr(proj, 'hitbox'):
                         continue
+                    proj_killed = False
                     if player.health > 0:
                         body = player.feet.copy()
                         body.height += 25
@@ -2088,7 +2149,17 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                         if proj.hitbox.colliderect(body):
                             player.damage(proj.damage_amount)
                             proj.kill()
-                            continue
+                            proj_killed = True
+                    if not proj_killed and player2 and player2.health > 0:
+                        body2 = player2.feet.copy()
+                        body2.height += 25
+                        body2.y -= 25
+                        if proj.hitbox.colliderect(body2):
+                            player2.damage(proj.damage_amount)
+                            proj.kill()
+                            proj_killed = True
+                    if proj_killed:
+                        continue
                     # Collision avec les murs
                     for wall in walls:
                         if proj.hitbox.colliderect(wall):
@@ -2450,10 +2521,10 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                     ui.draw_boss_dialogue(dialogue_text, getattr(e, 'boss_display_name', None))
                     break
 
-            # Dialogues de fées
+            # Dialogues de fées (hôte : affiche uniquement le dialogue qui le cible)
             for fairy in fairies_group:
                 ftxt = fairy.get_current_dialogue()
-                if ftxt:
+                if ftxt and fairy.dialogue_target_player == 0:
                     ui.draw_boss_dialogue(ftxt, "Fee")
                     break
 
@@ -2580,31 +2651,48 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 players_list = [_serialize_player(player)]
                 if player2:
                     players_list.append(_serialize_player(player2))
-                # Sérialiser dialogues de fées actifs
-                fairy_dialogues = []
+                # Sérialiser dialogues de fées actifs — indexés par joueur (0=hôte, 1=client)
+                fairy_dialogues = {}
                 for fairy in fairies_group:
                     ftxt = fairy.get_current_dialogue()
-                    if ftxt:
-                        fairy_dialogues.append(ftxt)
+                    if ftxt and fairy.dialogue_target_player is not None:
+                        fairy_dialogues[fairy.dialogue_target_player] = ftxt
 
+                # Projectiles joueurs + projectiles ennemis (flèches archers, etc.)
+                all_projectiles = (
+                    [_serialize_projectile(pr) for pr in projectiles_group
+                     if not isinstance(pr, HealEffect)]
+                    + [_serialize_projectile(pr) for pr in enemy_projectiles_group]
+                )
+                # Sérialiser le leurre (cape de l'assassin) s'il est actif
+                decoy_state = None
+                if active_decoy and active_decoy.alive() and decoy_owner:
+                    decoy_state = {
+                        'x': active_decoy.feet.centerx,
+                        'y': active_decoy.feet.bottom,
+                        'char_type': decoy_owner.char_type,
+                        'direction': decoy_owner.facing,
+                    }
                 state = {
                     'level':       current_level_index,
                     'players':     players_list,
                     'enemies':     [_serialize_enemy(e)        for e    in enemies_group],
                     'items':       [_serialize_item(it)        for it   in items_group],
-                    'projectiles': [_serialize_projectile(pr)  for pr   in projectiles_group
-                                    if not isinstance(pr, HealEffect)],
+                    'projectiles': all_projectiles,
                     'chests':      [{'x': c.rect.centerx, 'y': c.rect.centery,
                                      'opened': c.opened, 'opening': c.opening,
                                      'frame': int(c.frame_index),
                                      'flipped': c.flipped} for c in chests_group],
                     'game_over':   game_over,
-                    'events':      {'dashes': dash_events, 'sounds': sound_events},
+                    'events':      {'dashes': list(dash_events), 'sounds': list(sound_events)},
                     'time_stop_active': time_stop_active,
                     'time_stop_activator_idx': time_stop_activator_idx,
                     'fairy_dialogues': fairy_dialogues,
+                    'decoy': decoy_state,
                 }
                 server.send_state(state)
+                dash_events.clear()
+                sound_events.clear()
 
             # --- Interface coffre (host MP) ---
             if chest_ui_active:
@@ -2727,21 +2815,51 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
     client_prev_time_stop = False
     client_ts_player_cache = {}
 
+    # État joueur local de la frame précédente (initialisé vide, mis à jour après chaque state)
+    lp_now = {}
+
     while True:
         if not client.connected:
             _cleanup_client_audio(); _show_disconnected(screen); return
+
+        # Flags d'événements clavier one-shot pour l'inventaire (réinitialisés chaque frame)
+        _ev_inv_toggle = False
+        _ev_inv_left   = False
+        _ev_inv_right  = False
+        _ev_inv_grab   = False
+        _ev_inv_drop   = False
+        _ev_inv_close  = False
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 _cleanup_client_audio(); client.stop(); pygame.quit(); import sys; sys.exit()
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                is_paused_client = not is_paused_client   # toggle, ne quitte PAS
+                lp_inv_open = lp_now.get('inventory_open', False)
+                if lp_inv_open:
+                    _ev_inv_close = True  # fermer l'inventaire en priorité
+                else:
+                    is_paused_client = not is_paused_client   # toggle pause
             if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
                 run_game_mp_client._skip_dialogue = True
                 if chest_ui_active and not chest_ui_closing:
                     chest_ui_closing = True
                     chest_ui_close_time = pygame.time.get_ticks()
+
+            # --- Inventaire (one-shot, géré par events) ---
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_i:
+                _ev_inv_toggle = True
+            if event.type == pygame.KEYDOWN:
+                lp_inv_open = lp_now.get('inventory_open', False)
+                if lp_inv_open:
+                    if event.key == pygame.K_q:
+                        _ev_inv_left = True
+                    elif event.key == pygame.K_d:
+                        _ev_inv_right = True
+                    elif event.key == pygame.K_e:
+                        _ev_inv_grab = True
+                    elif event.key == pygame.K_a:
+                        _ev_inv_drop = True
 
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if is_paused_client and pause_rects_client:
@@ -2808,6 +2926,18 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             remote_projectiles    = {}   # id → Projectile
             remote_chests         = {}   # (x,y) → Chest
             client_particles_grp  = pygame.sprite.Group()
+            client_fairies_grp    = pygame.sprite.Group()
+            remote_decoy          = None  # sprite leurre de la cape de l'assassin
+
+            # --- Spawner les fées depuis la carte TMX (sprites visuels statiques) ---
+            for obj in tmx_data.objects:
+                obj_type = getattr(obj, 'type', '').lower()
+                if obj_type == 'fee_1':
+                    f = Fairy(obj.x, obj.y, 1); group.add(f); client_fairies_grp.add(f)
+                elif obj_type == 'fee_2':
+                    f = Fairy(obj.x, obj.y, 2); group.add(f); client_fairies_grp.add(f)
+                elif obj_type == 'fee_3':
+                    f = Fairy(obj.x, obj.y, 3); group.add(f); client_fairies_grp.add(f)
 
         players_state  = state.get('players',     [{}, {}])
         enemies_state  = state.get('enemies',     [])
@@ -3027,6 +3157,26 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             local_player.update()
         for re in remote_enemies.values():
             re.update()
+        client_fairies_grp.update()
+
+        # --- Leurre de la cape de l'assassin (côté client) ---
+        decoy_state_recv = state.get('decoy')
+        if decoy_state_recv:
+            if remote_decoy is None or not remote_decoy.alive():
+                # Créer un sprite leurre léger : idle frame teintée marron
+                remote_decoy = _create_remote_decoy(
+                    decoy_state_recv['x'], decoy_state_recv['y'],
+                    decoy_state_recv['char_type'], decoy_state_recv['direction'])
+                if remote_decoy:
+                    group.add(remote_decoy)
+            else:
+                remote_decoy.feet.midbottom = (decoy_state_recv['x'], decoy_state_recv['y'])
+                remote_decoy.rect.centerx   = remote_decoy.feet.centerx
+                remote_decoy.rect.bottom    = remote_decoy.feet.bottom
+        else:
+            if remote_decoy and remote_decoy.alive():
+                remote_decoy.kill()
+            remote_decoy = None
 
         group.draw(screen)
 
@@ -3219,13 +3369,16 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         cursed_brand_pressed = False
         travelers_cap_pressed = False
         zhonya_pressed = False
+        cap_assassin_pressed = False
         dash_pressed = bool(keys[pygame.K_LSHIFT])
+        # N'autoriser les items actifs que si l'inventaire est fermé
+        _inv_is_open = lp_now.get('inventory_open', False)
         inv_items = lp_now.get('inventory_items', [])
         item_start = lp_now.get('item_start_key', 2)
         active_key = item_start
         for it in inv_items:
             if it in ACTIVE_ITEMS:
-                if keys[getattr(pygame, f'K_{active_key}', 0)]:
+                if not _inv_is_open and keys[getattr(pygame, f'K_{active_key}', 0)]:
                     if it == 'boots':
                         dash_pressed = True
                     elif it == 'bluegem':
@@ -3236,6 +3389,8 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                         travelers_cap_pressed = True
                     elif it == 'zhonya':
                         zhonya_pressed = True
+                    elif it == 'cap_assassin':
+                        cap_assassin_pressed = True
                 active_key += 1
 
         # Détection du skip dialogue (event-based, pas key state)
@@ -3243,12 +3398,12 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         run_game_mp_client._skip_dialogue = False
 
         inputs = {
-            'up':       bool(keys[pygame.K_z]),
-            'down':     bool(keys[pygame.K_s]),
-            'left':     bool(keys[pygame.K_q]),
-            'right':    bool(keys[pygame.K_d]),
-            'attack_mouse': bool(mouse_buttons[0]),
-            'attack_e': bool(keys[pygame.K_e]),
+            'up':       bool(keys[pygame.K_z]) and not _inv_is_open,
+            'down':     bool(keys[pygame.K_s]) and not _inv_is_open,
+            'left':     bool(keys[pygame.K_q]) and not _inv_is_open,
+            'right':    bool(keys[pygame.K_d]) and not _inv_is_open,
+            'attack_mouse': bool(mouse_buttons[0]) and not _inv_is_open,
+            'attack_e': bool(keys[pygame.K_e]) and not _inv_is_open,
             'attack_1': bool(keys[pygame.K_1]),
             'attack_2': bool(keys[pygame.K_2]),
             'interact': bool(keys[pygame.K_f]),
@@ -3257,7 +3412,15 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             'cursed_brand': cursed_brand_pressed,
             'travelers_cap': travelers_cap_pressed,
             'zhonya':   zhonya_pressed,
+            'cap_assassin': cap_assassin_pressed,
             'skip_dialogue': skip_dialogue_pressed,
+            # Inventaire (one-shot)
+            'inv_toggle': _ev_inv_toggle,
+            'inv_left':   _ev_inv_left,
+            'inv_right':  _ev_inv_right,
+            'inv_grab':   _ev_inv_grab,
+            'inv_drop':   _ev_inv_drop,
+            'inv_close':  _ev_inv_close,
         }
         client.send_inputs(inputs)
 
@@ -3280,6 +3443,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                               arrow_regen_cr=lp_state.get('arrow_regen_cr', 1.0),
                               travelers_cap_cr=lp_state.get('travelers_cap_cr', 1.0),
                               zhonya_cr=lp_state.get('zhonya_cr', 1.0),
+                              cap_assassin_cr=lp_state.get('cap_assassin_cr', 1.0),
                               item_start_key=lp_state.get('item_start_key', 2))
 
         # Barre de vie du joueur hôte (en haut à droite)
@@ -3304,10 +3468,21 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 ui.draw_boss_dialogue(dtxt, edata.get('boss_display_name'))
                 break
 
-        # Dialogues de fées (côté client)
-        for ftxt in state.get('fairy_dialogues', []):
-            ui.draw_boss_dialogue(ftxt, "Fee")
-            break
+        # Dialogues de fées (côté client — uniquement ceux qui ciblent le joueur 1 = client)
+        fdlg = state.get('fairy_dialogues', {})
+        my_fairy_txt = fdlg.get(1) if isinstance(fdlg, dict) else None
+        if my_fairy_txt:
+            ui.draw_boss_dialogue(my_fairy_txt, "Fee")
+
+        # --- Écran inventaire du client ---
+        if lp_state.get('inventory_open') and lp_state.get('health', 0) > 0:
+            bindings = get_character_def(client_char_type).get('bindings', {})
+            ui.draw_inventory_screen(
+                lp_state.get('inventory_items', []),
+                lp_state.get('inventory_cursor', 0),
+                lp_state.get('inventory_grabbed', False),
+                item_start_key=lp_state.get('item_start_key', 2),
+                skill_1_exists=bindings.get('1') is not None)
 
         # Dialogue coffre (côté client)
         if local_player and lp_state.get('health', 0) > 0 and not state.get('time_stop_active', False):
@@ -3502,6 +3677,52 @@ def _get_active_item_keys(player):
 def _count_inventory_items(player):
     """Compte le nombre total d'items dans l'inventaire."""
     return len(player.inventory_items)
+
+
+_remote_decoy_cache = {}  # (char_type, direction) → Surface teintée marron
+
+def _create_remote_decoy(x, y, char_type, direction):
+    """Crée un sprite leurre léger pour la cape de l'assassin côté client.
+    Utilise la première frame idle du personnage, teintée marron."""
+    class _DecoySprite(pygame.sprite.Sprite):
+        def __init__(self, x, y, char_type, direction):
+            super().__init__()
+            cache_key = (char_type, direction)
+            if cache_key not in _remote_decoy_cache:
+                try:
+                    char_def = get_character_def(char_type)
+                    scale = char_def['scale_factor']
+                    empty_below = char_def['empty_space_below'] * scale
+                    idle_path, idle_nframes = char_def['animations']['idle']
+                    sheet = ResourceManager.get_image(idle_path)
+                    fw = sheet.get_width() // idle_nframes
+                    fh = sheet.get_height()
+                    frame = sheet.subsurface((0, 0, fw, fh))
+                    nw, nh = int(fw * scale), int(fh * scale)
+                    frame = pygame.transform.scale(frame, (nw, nh))
+                    shifted = pygame.Surface((nw, nh), pygame.SRCALPHA)
+                    shifted.blit(frame, (0, int(empty_below)))
+                    if direction == 'left':
+                        shifted = pygame.transform.flip(shifted, True, False)
+                    tinted = shifted.copy()
+                    tinted.fill((140, 80, 40, 255), special_flags=pygame.BLEND_RGBA_MULT)
+                    _remote_decoy_cache[cache_key] = tinted
+                except Exception:
+                    surf = pygame.Surface((32, 48), pygame.SRCALPHA)
+                    surf.fill((140, 80, 40, 180))
+                    _remote_decoy_cache[cache_key] = surf
+            self.image = _remote_decoy_cache[cache_key]
+            self.rect  = self.image.get_rect()
+            self.feet  = pygame.Rect(0, 0, 15, 15)
+            self.feet.midbottom = (x, y)
+            self.rect.centerx = self.feet.centerx
+            self.rect.bottom  = self.feet.bottom
+        def update(self): pass
+
+    try:
+        return _DecoySprite(x, y, char_type, direction)
+    except Exception:
+        return None
 
 
 def _apply_skill_result(skill_result, caster, group, projectiles_group,

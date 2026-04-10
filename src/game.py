@@ -1081,6 +1081,7 @@ def _serialize_enemy(e):
         'health':    health,
         'max_health': getattr(e, 'max_health', health),
         'etype':     etype,
+        'mob_name':  getattr(e, 'name', None),
         'has_aggro': getattr(e, 'has_aggro', False),
         'paralyzed': getattr(e, 'paralyzed', False),
         'dialogue_text': getattr(e, 'get_current_dialogue', lambda: None)(),
@@ -2839,7 +2840,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             eid = edata['id']
             if eid not in remote_enemies:
                 etype = edata.get('etype', 'enemy')
-                re = RemoteEnemy(etype)
+                re = RemoteEnemy(etype, mob_name=edata.get('mob_name'))
                 group.add(re)
                 remote_enemies[eid]      = re
                 remote_enemy_etypes[eid] = etype
@@ -3018,6 +3019,14 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
             if map_pixel_height < view_h: cam_y = map_pixel_height // 2
             else: cam_y = max(view_h // 2, min(cam_y, map_pixel_height - view_h // 2))
             group.center((cam_x, cam_y))
+
+        # Avancer les animations locales (pyscroll ne call pas update() via group.draw)
+        if remote_player:
+            remote_player.update()
+        if local_player:
+            local_player.update()
+        for re in remote_enemies.values():
+            re.update()
 
         group.draw(screen)
 

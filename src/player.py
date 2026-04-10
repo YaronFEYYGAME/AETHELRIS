@@ -922,6 +922,15 @@ class RemotePlayer(pygame.sprite.Sprite):
         self.health = 100
         self.max_health = 100
 
+        # Animation autonome (60fps local, indépendant du tick réseau)
+        self._anim_state  = 'idle'
+        self._anim_facing = 'right'
+        self.frame_index  = 0.0
+        self._blue_active = False
+        self._cb_active   = False
+        self._stunned     = False
+        self._effect_cache = {}
+
     def _load_anim(self, state_name, path, num_frames):
         try:
             sheet = ResourceManager.get_image(path)
@@ -944,64 +953,70 @@ class RemotePlayer(pygame.sprite.Sprite):
     def update_from_state(self, state):
         x = state.get('x', self.feet.centerx)
         y = state.get('y', self.feet.bottom)
-        direction = state.get('direction', 'right')
-        anim_state = state.get('state', 'idle')
-        frame = state.get('frame', 0)
         self.health = state.get('health', 100)
-        # max_health n'est plus transmis (invariant à 100) — valeur par défaut utilisée
 
         # Interpolation linéaire (lerp) : le sprite glisse vers sa position réseau
-        # plutôt que de se téléporter. Facteur 0.35 = 35% par frame à 60fps.
         _LERP = 0.35
-        target_cx     = round(x)
-        target_bottom = round(y)
-        new_cx     = round(self.feet.centerx + (target_cx     - self.feet.centerx) * _LERP)
-        new_bottom = round(self.feet.bottom   + (target_bottom - self.feet.bottom)  * _LERP)
+        new_cx     = round(self.feet.centerx + (round(x) - self.feet.centerx) * _LERP)
+        new_bottom = round(self.feet.bottom   + (round(y) - self.feet.bottom)  * _LERP)
         self.feet.midbottom = (new_cx, new_bottom)
         self.rect.centerx = self.feet.centerx
         self.rect.bottom = self.feet.bottom
 
-        anims = self.animations.get(direction, self.animations['right'])
-        if anim_state not in anims:
-            anim_state = 'idle'
+        # Détecter changement d'état → réinitialiser l'animation locale
+        new_state   = state.get('state', 'idle')
+        new_facing  = state.get('direction', 'right')
+        if new_state != self._anim_state or new_facing != self._anim_facing:
+            self._anim_state  = new_state
+            self._anim_facing = new_facing
+            self.frame_index  = 0.0
+
+        # Mémoriser les effets visuels (lus dans update())
+        self._blue_active = state.get('blue_gem_active', False)
+        self._cb_active   = state.get('cursed_brand_active', False)
+        self._stunned     = state.get('is_stunned', False)
+
+    def update(self):
+        """Avance l'animation localement à 60fps — indépendant du tick réseau."""
+        anims = self.animations.get(self._anim_facing, self.animations['right'])
+        anim_state = self._anim_state if self._anim_state in anims else 'idle'
         frames = anims[anim_state]
-        base_frame = frames[int(frame) % len(frames)]
 
-        # Déterminer les effets visuels actifs
-        blue_active = state.get('blue_gem_active', False)
-        cb_active = state.get('cursed_brand_active', False) and (pygame.time.get_ticks() // 100) % 2 == 0
-        stunned = state.get('is_stunned', False)
+        # Vitesse : animations d'attaque légèrement plus rapides
+        speed = 0.15
+        if 'attack' in anim_state or 'skill' in anim_state:
+            speed = 0.22
 
-        # Clé de cache basée sur le frame et les effets actifs
-        cache_key = (id(base_frame), blue_active, cb_active, stunned)
-        if not hasattr(self, '_effect_cache'):
-            self._effect_cache = {}
+        self.frame_index += speed
+        if self.frame_index >= len(frames):
+            self.frame_index = 0.0
+
+        base_frame = frames[int(self.frame_index)]
+
+        # Effets visuels — clignotement pour cursed brand (100 ms)
+        cb_active = self._cb_active and (pygame.time.get_ticks() // 100) % 2 == 0
+
+        # Clé de cache
+        cache_key = (id(base_frame), self._blue_active, cb_active, self._stunned)
         if cache_key in self._effect_cache:
             self.image = self._effect_cache[cache_key]
             return
 
         self.image = base_frame.copy()
 
-        # Blue Gem : teinte bleue si invincibilité active
-        if blue_active:
+        if self._blue_active:
             mask = pygame.mask.from_surface(self.image)
             blue_overlay = mask.to_surface(setcolor=(50, 100, 255, 120), unsetcolor=(0, 0, 0, 0))
             self.image.blit(blue_overlay, (0, 0))
 
-        # Cursed Brand : clignotement rouge si boost actif
         if cb_active:
             mask = pygame.mask.from_surface(self.image)
             red_overlay = mask.to_surface(setcolor=(255, 50, 50, 100), unsetcolor=(0, 0, 0, 0))
             self.image.blit(red_overlay, (0, 0))
 
-        # Stun (Médusa) : filtre gris
-        if stunned:
+        if self._stunned:
             self.image.fill((128, 128, 128, 255), special_flags=pygame.BLEND_RGBA_MULT)
 
-        # Limiter la taille du cache
         if len(self._effect_cache) > 200:
             self._effect_cache.clear()
         self._effect_cache[cache_key] = self.image
-
-    def update(self):
-        pass

@@ -367,73 +367,126 @@ class Enemy(pygame.sprite.Sprite):
 # =====================================================================
 
 class RemoteEnemy(pygame.sprite.Sprite):
-    """Sprite ennemi piloté par l'état réseau côté client. Pas d'IA, rendu seul."""
+    """Sprite ennemi piloté par l'état réseau côté client.
+    Animation jouée localement à 60fps ; l'état réseau déclenche les transitions.
+    num_frames=0 dans _CONFIGS → auto-détection depuis les dimensions du sheet."""
 
+    # Clé de config : mob_name (prioritaire) puis etype en fallback.
     _CONFIGS = {
-        'enemy': {
-            'scale': 1.5,
-            'empty_below': 43 * 1.5,
-            'anims': [
-                ('idle',   "assets/images/Orc-Idle.png",    6, 'strip'),
-                ('walk',   "assets/images/Orc-Walk.png",    8, 'strip'),
-                ('attack', "assets/images/Orc-Attack01.png",6, 'strip'),
-                ('death',  "assets/images/Orc-Death.png",   4, 'strip'),
-            ],
-        },
-        'bigenemy': {
-            'scale': 3.5,
-            'empty_below': 12 * 3.5,
-            'anims': [
-                ('idle',   "assets/images/idle.png",   5, 'vstrip'),
-                ('run',    "assets/images/run.png",    8, 'vstrip'),
-                ('attack', "assets/images/attack.png", 8, 'vstrip'),
-                ('hit',    "assets/images/hit.png",    2, 'vstrip'),
-                ('death',  "assets/images/death.png",  5, 'vstrip'),
-            ],
-        },
-        'necromancer': {
-            'scale': 2.0,
-            'empty_below': 25 * 2.0,
-            'anims': [
-                ('idle',   "assets/images/necromancer_idle.png",       4,  'grid', 5, 1),
-                ('run',    "assets/images/necromancer_idle2.png",       8,  'grid', 4, 2),
-                ('attack', "assets/images/necromancer_attacking.png",  13, 'grid', 6, 3),
-                ('skill',  "assets/images/necromancer_skill1.png",    12, 'grid', 6, 2),
-                ('death',  "assets/images/necromancer_death.png",      20, 'grid', 10, 2),
-            ],
-        },
-        'spirit': {
-            'scale': 1.0,
-            'empty_below': 10 * 1.0,
-            'anims': [
-                ('appear', "assets/images/necromancer_summonAppear.png", 6, 'grid', 3, 2),
-                ('idle',   "assets/images/necromancer_summonIdle.png",   4, 'grid', 4, 1),
-                ('run',    "assets/images/necromancer_summonIdle.png",   4, 'grid', 4, 1),
-                ('death',  "assets/images/necromancer_summonDeath.png",  6, 'grid', 3, 2),
-            ],
-        },
-        'medusa': {
-            'scale': 1.0,
-            'empty_below': 8,
-            'anims': [
-                ('idle',    "assets/images/Medusa_boss/Idle.png",     7,  'strip'),
-                ('walk',    "assets/images/Medusa_boss/Walk.png",     13, 'strip'),
-                ('run',     "assets/images/Medusa_boss/Run.png",      7,  'strip'),
-                ('attack1', "assets/images/Medusa_boss/Attack_1.png", 16, 'strip'),
-                ('attack2', "assets/images/Medusa_boss/Attack_2.png", 7,  'strip'),
-                ('special', "assets/images/Medusa_boss/Special.png",  5,  'strip'),
-                ('hurt',    "assets/images/Medusa_boss/Hurt.png",     3,  'strip'),
-                ('death',   "assets/images/Medusa_boss/Dead.png",     3,  'strip'),
-            ],
-        },
+        # ---- Mobs communs (num_frames=0 → auto-détection frames carrées) ----
+        'enemy':               {'scale': 1.5, 'empty_below': 43*1.5, 'anim_speed': 0.2, 'anims': [
+            ('idle',   "assets/images/Orc-Idle.png",    0, 'strip'),
+            ('walk',   "assets/images/Orc-Walk.png",    0, 'strip'),
+            ('attack', "assets/images/Orc-Attack01.png",0, 'strip'),
+            ('death',  "assets/images/Orc-Death.png",   0, 'strip'),
+        ]},
+        'orc':                 {'scale': 1.5, 'empty_below': 43*1.5, 'anim_speed': 0.2, 'anims': [
+            ('idle',   "assets/images/Orc-Idle.png",    0, 'strip'),
+            ('walk',   "assets/images/Orc-Walk.png",    0, 'strip'),
+            ('attack', "assets/images/Orc-Attack01.png",0, 'strip'),
+            ('death',  "assets/images/Orc-Death.png",   0, 'strip'),
+        ]},
+        'skeleton':            {'scale': 1.5, 'empty_below': 43*1.5, 'anim_speed': 0.2, 'anims': [
+            ('idle',   "assets/images/mob/Skeleton/Skeleton-Idle.png",     0, 'strip'),
+            ('walk',   "assets/images/mob/Skeleton/Skeleton-Walk.png",     0, 'strip'),
+            ('attack', "assets/images/mob/Skeleton/Skeleton-Attack01.png", 0, 'strip'),
+            ('death',  "assets/images/mob/Skeleton/Skeleton-Death.png",    0, 'strip'),
+        ]},
+        'slime':               {'scale': 1.5, 'empty_below': 43*1.5, 'anim_speed': 0.2, 'anims': [
+            ('idle',   "assets/images/mob/Slime/Slime-Idle.png",    0, 'strip'),
+            ('walk',   "assets/images/mob/Slime/Slime-Walk.png",    0, 'strip'),
+            ('attack', "assets/images/mob/Slime/Slime-Attack01.png",0, 'strip'),
+            ('death',  "assets/images/mob/Slime/Slime-Death.png",   0, 'strip'),
+        ]},
+        'orc_rider':           {'scale': 1.5, 'empty_below': 43*1.5, 'anim_speed': 0.2, 'anims': [
+            ('idle',    "assets/images/mob/Orc_rider/Orc rider-Idle.png",     0, 'strip'),
+            ('walk',    "assets/images/mob/Orc_rider/Orc rider-Walk.png",     0, 'strip'),
+            ('attack1', "assets/images/mob/Orc_rider/Orc rider-Attack01.png", 0, 'strip'),
+            ('attack2', "assets/images/mob/Orc_rider/Orc rider-Attack02.png", 0, 'strip'),
+            ('attack3', "assets/images/mob/Orc_rider/Orc rider-Attack03.png", 0, 'strip'),
+            ('death',   "assets/images/mob/Orc_rider/Orc rider-Death.png",    0, 'strip'),
+        ]},
+        'elite_orc':           {'scale': 1.5, 'empty_below': 43*1.5, 'anim_speed': 0.2, 'anims': [
+            ('idle',    "assets/images/mob/Elite_Orc/Elite Orc-Idle.png",    0, 'strip'),
+            ('walk',    "assets/images/mob/Elite_Orc/Elite Orc-Walk.png",    0, 'strip'),
+            ('attack1', "assets/images/mob/Elite_Orc/Elite Orc-Attack01.png",0, 'strip'),
+            ('attack2', "assets/images/mob/Elite_Orc/Elite Orc-Attack02.png",0, 'strip'),
+            ('attack3', "assets/images/mob/Elite_Orc/Elite Orc-Attack03.png",0, 'strip'),
+            ('death',   "assets/images/mob/Elite_Orc/Elite Orc-Death.png",   0, 'strip'),
+        ]},
+        'greatsword_skeleton': {'scale': 1.5, 'empty_below': 43*1.5, 'anim_speed': 0.2, 'anims': [
+            ('idle',    "assets/images/mob/greatsword_skeleton/Greatsword Skeleton-Idle.png",     0, 'strip'),
+            ('walk',    "assets/images/mob/greatsword_skeleton/Greatsword Skeleton-Walk.png",     0, 'strip'),
+            ('attack1', "assets/images/mob/greatsword_skeleton/Greatsword Skeleton-Attack01.png", 0, 'strip'),
+            ('attack2', "assets/images/mob/greatsword_skeleton/Greatsword Skeleton-Attack02.png", 0, 'strip'),
+            ('attack3', "assets/images/mob/greatsword_skeleton/Greatsword Skeleton-Attack03.png", 0, 'strip'),
+            ('death',   "assets/images/mob/greatsword_skeleton/Greatsword Skeleton-Death.png",    0, 'strip'),
+        ]},
+        'skeleton_archer':     {'scale': 1.5, 'empty_below': 43*1.5, 'anim_speed': 0.2, 'anims': [
+            ('idle',   "assets/images/mob/skeleton_archer/Skeleton Archer-Idle.png",   0, 'strip'),
+            ('walk',   "assets/images/mob/skeleton_archer/Skeleton Archer-Walk.png",   0, 'strip'),
+            ('attack', "assets/images/mob/skeleton_archer/Skeleton Archer-Attack.png", 0, 'strip'),
+            ('death',  "assets/images/mob/skeleton_archer/Skeleton Archer-Death.png",  0, 'strip'),
+        ]},
+        # ---- Bosses ----
+        'bigenemy':    {'scale': 3.5, 'empty_below': 12*3.5, 'anim_speed': 0.15, 'anims': [
+            ('idle',   "assets/images/idle.png",   5, 'vstrip'),
+            ('run',    "assets/images/run.png",    8, 'vstrip'),
+            ('attack', "assets/images/attack.png", 8, 'vstrip'),
+            ('hit',    "assets/images/hit.png",    2, 'vstrip'),
+            ('death',  "assets/images/death.png",  5, 'vstrip'),
+        ]},
+        'necromancer': {'scale': 2.0, 'empty_below': 25*2.0, 'anim_speed': 0.15, 'anims': [
+            ('idle',   "assets/images/necromancer_idle.png",      4,  'grid', 5, 1),
+            ('run',    "assets/images/necromancer_idle2.png",      8,  'grid', 4, 2),
+            ('attack', "assets/images/necromancer_attacking.png", 13,  'grid', 6, 3),
+            ('skill',  "assets/images/necromancer_skill1.png",   12,  'grid', 6, 2),
+            ('death',  "assets/images/necromancer_death.png",    20,  'grid', 10, 2),
+        ]},
+        'spirit':      {'scale': 1.0, 'empty_below': 10*1.0, 'anim_speed': 0.15, 'anims': [
+            ('appear', "assets/images/necromancer_summonAppear.png", 6, 'grid', 3, 2),
+            ('idle',   "assets/images/necromancer_summonIdle.png",   4, 'grid', 4, 1),
+            ('run',    "assets/images/necromancer_summonIdle.png",   4, 'grid', 4, 1),
+            ('death',  "assets/images/necromancer_summonDeath.png",  6, 'grid', 3, 2),
+        ]},
+        'medusa':      {'scale': 1.0, 'empty_below': 8, 'anim_speed': 0.15, 'anims': [
+            ('idle',    "assets/images/Medusa_boss/Idle.png",     7,  'strip'),
+            ('walk',    "assets/images/Medusa_boss/Walk.png",     13, 'strip'),
+            ('run',     "assets/images/Medusa_boss/Run.png",      7,  'strip'),
+            ('attack1', "assets/images/Medusa_boss/Attack_1.png", 16, 'strip'),
+            ('attack2', "assets/images/Medusa_boss/Attack_2.png", 7,  'strip'),
+            ('special', "assets/images/Medusa_boss/Special.png",  5,  'strip'),
+            ('hurt',    "assets/images/Medusa_boss/Hurt.png",     3,  'strip'),
+            ('death',   "assets/images/Medusa_boss/Dead.png",     3,  'strip'),
+        ]},
+        # KingBoss : grille de frames 128×64 px + attaque spéciale (row 3 de Attacks.png)
+        'king':        {'scale': 1.5, 'empty_below': 8*1.5, 'anim_speed': 0.15, 'anims': [
+            ('idle',   "assets/images/king_boss/Idle.png",    0, 'fixed_grid', 128, 64),
+            ('run',    "assets/images/king_boss/Run.png",     0, 'fixed_grid', 128, 64),
+            ('death',  "assets/images/king_boss/Death.png",   0, 'fixed_grid', 128, 64),
+            ('health', "assets/images/king_boss/Health.png",  0, 'fixed_grid', 128, 64),
+            ('pray',   "assets/images/king_boss/Pray.png",    0, 'fixed_grid', 128, 64),
+            ('attack', "assets/images/king_boss/Attacks.png", 0, 'king_attack', 128, 64),
+        ]},
+        # SbireNeant : spritesheet unique NightBorne.png, rangées indépendantes
+        'sbire':       {'scale': 2.0, 'empty_below': 12*2.0, 'anim_speed': 0.15, 'anims': [
+            ('idle',   "assets/images/NightBorne.png",  9, 'sbire_row', 80, 0),
+            ('run',    "assets/images/NightBorne.png",  6, 'sbire_row', 80, 1),
+            ('attack', "assets/images/NightBorne.png", 12, 'sbire_row', 80, 2),
+            ('death',  "assets/images/NightBorne.png", 23, 'sbire_row', 80, 4),
+        ]},
     }
 
-    def __init__(self, etype='enemy'):
+    def __init__(self, etype='enemy', mob_name=None):
         super().__init__()
-        cfg = self._CONFIGS.get(etype, self._CONFIGS['enemy'])
-        self.scale_factor = cfg['scale']
-        self.empty_below = cfg['empty_below']
-        self.animations = {'right': {}, 'left': {}}
+        # mob_name est plus précis qu'etype (ex: 'skeleton' vs 'enemy' générique)
+        cfg_key = mob_name if (mob_name and mob_name in self._CONFIGS) else etype
+        cfg = self._CONFIGS.get(cfg_key, self._CONFIGS['enemy'])
+
+        self.scale_factor    = cfg['scale']
+        self.empty_below     = cfg['empty_below']
+        self.animation_speed = cfg.get('anim_speed', 0.2)
+        self.animations      = {'right': {}, 'left': {}}
 
         for anim_def in cfg['anims']:
             name, path, num_frames, mode = anim_def[0], anim_def[1], anim_def[2], anim_def[3]
@@ -441,23 +494,43 @@ class RemoteEnemy(pygame.sprite.Sprite):
                 self._load_strip(name, path, num_frames)
             elif mode == 'vstrip':
                 self._load_vstrip(name, path, num_frames)
-            else:
+            elif mode == 'grid':
                 cols, rows = anim_def[4], anim_def[5]
                 self._load_grid(name, path, cols, rows, num_frames)
+            elif mode == 'fixed_grid':
+                fw, fh = anim_def[4], anim_def[5]
+                self._load_fixed_grid(name, path, fw, fh)
+            elif mode == 'king_attack':
+                fw, fh = anim_def[4], anim_def[5]
+                self._load_king_attack(path, fw, fh)
+            elif mode == 'sbire_row':
+                fs, row = anim_def[4], anim_def[5]
+                self._load_sbire_row(name, path, fs, row, num_frames)
 
         first_state = cfg['anims'][0][0]
-        self.image = self.animations['right'][first_state][0]
-        self.rect = self.image.get_rect()
+        first_frames = self.animations['right'].get(first_state) or [pygame.Surface((32, 32), pygame.SRCALPHA)]
+        self.image = first_frames[0]
+        self.rect  = self.image.get_rect()
 
         hitbox_size = 10 * self.scale_factor
         self.feet = pygame.Rect(0, 0, hitbox_size, hitbox_size)
         self.feet.topleft = (0, 0)
         self.rect.centerx = self.feet.centerx
-        self.rect.bottom = self.feet.bottom + int(self.empty_below)
+        self.rect.bottom  = self.feet.bottom + int(self.empty_below)
 
-        self.health = 1
+        self.health     = 1
         self.max_health = 1
         self._blue_cache = {}
+
+        # --- État d'animation locale (avancée à 60fps indépendamment du réseau) ---
+        self._anim_state  = first_state   # état courant ('idle', 'walk', 'attack'…)
+        self._anim_facing = 'right'
+        self.frame_index  = 0.0
+        self._paralyzed   = False
+
+    # ------------------------------------------------------------------
+    # Chargeurs
+    # ------------------------------------------------------------------
 
     def _get_blue_tinted(self, frame):
         frame_id = id(frame)
@@ -469,10 +542,15 @@ class RemoteEnemy(pygame.sprite.Sprite):
         return tinted
 
     def _load_strip(self, state_name, path, num_frames):
+        """Strip horizontal. Si num_frames=0, auto-détecte (frames supposées carrées)."""
         try:
             sheet = ResourceManager.get_image(path)
-            fw = sheet.get_width() // num_frames
             fh = sheet.get_height()
+            if num_frames == 0:
+                fw = fh                          # frames carrées
+                num_frames = sheet.get_width() // fw
+            else:
+                fw = sheet.get_width() // num_frames
             rights, lefts = [], []
             for i in range(num_frames):
                 frame = sheet.subsurface((i * fw, 0, fw, fh))
@@ -481,12 +559,12 @@ class RemoteEnemy(pygame.sprite.Sprite):
                 rights.append(frame)
                 lefts.append(pygame.transform.flip(frame, True, False))
             self.animations['right'][state_name] = rights
-            self.animations['left'][state_name] = lefts
+            self.animations['left'][state_name]  = lefts
         except FileNotFoundError:
             pass
 
     def _load_vstrip(self, state_name, path, num_frames):
-        """Charge un sprite sheet vertical (frames empilées en lignes)."""
+        """Strip vertical (frames empilées en lignes)."""
         try:
             sheet = ResourceManager.get_image(path)
             fw = sheet.get_width()
@@ -499,11 +577,12 @@ class RemoteEnemy(pygame.sprite.Sprite):
                 rights.append(frame)
                 lefts.append(pygame.transform.flip(frame, True, False))
             self.animations['right'][state_name] = rights
-            self.animations['left'][state_name] = lefts
+            self.animations['left'][state_name]  = lefts
         except FileNotFoundError:
             pass
 
     def _load_grid(self, state_name, path, cols, rows, num_frames):
+        """Grille classique cols×rows."""
         try:
             sheet = ResourceManager.get_image(path)
             fw = sheet.get_width() // cols
@@ -521,40 +600,121 @@ class RemoteEnemy(pygame.sprite.Sprite):
                     lefts.append(pygame.transform.flip(frame, True, False))
                     count += 1
             self.animations['right'][state_name] = rights
-            self.animations['left'][state_name] = lefts
+            self.animations['left'][state_name]  = lefts
         except FileNotFoundError:
             pass
 
+    def _load_fixed_grid(self, state_name, path, fw, fh):
+        """Grille à taille de frame fixe fw×fh (ex: KingBoss 128×64)."""
+        try:
+            sheet = ResourceManager.get_image(path)
+            cols = sheet.get_width()  // fw
+            rows = sheet.get_height() // fh
+            rights, lefts = [], []
+            for r in range(rows):
+                for c in range(cols):
+                    frame = sheet.subsurface((c * fw, r * fh, fw, fh))
+                    nw, nh = int(fw * self.scale_factor), int(fh * self.scale_factor)
+                    frame = pygame.transform.scale(frame, (nw, nh))
+                    rights.append(frame)
+                    lefts.append(pygame.transform.flip(frame, True, False))
+            self.animations['right'][state_name] = rights
+            self.animations['left'][state_name]  = lefts
+        except FileNotFoundError:
+            pass
+
+    def _load_king_attack(self, path, fw, fh):
+        """Attaque KingBoss : rangée 3 de Attacks.png, avec inversion droite/gauche
+        identique à la classe KingBoss originale."""
+        try:
+            sheet = ResourceManager.get_image(path)
+            nw, nh = int(fw * self.scale_factor), int(fh * self.scale_factor)
+            frames_r, frames_l = [], []
+            for c in range(8):
+                frame = sheet.subsurface((c * fw, 3 * fh, fw, fh))
+                frame = pygame.transform.scale(frame, (nw, nh))
+                frames_r.append(frame)
+                frames_l.append(pygame.transform.flip(frame, True, False))
+            # KingBoss stocke intentionnellement D↔G inversés
+            self.animations['right']['attack'] = frames_l
+            self.animations['left']['attack']  = frames_r
+        except FileNotFoundError:
+            pass
+
+    def _load_sbire_row(self, state_name, path, fs, row, num_frames):
+        """Charge une rangée spécifique de NightBorne.png (frames 80×80)."""
+        try:
+            sheet = ResourceManager.get_image(path)
+            nw, nh = int(fs * self.scale_factor), int(fs * self.scale_factor)
+            rights, lefts = [], []
+            for c in range(num_frames):
+                frame = sheet.subsurface((c * fs, row * fs, fs, fs))
+                frame = pygame.transform.scale(frame, (nw, nh))
+                rights.append(frame)
+                lefts.append(pygame.transform.flip(frame, True, False))
+            self.animations['right'][state_name] = rights
+            self.animations['left'][state_name]  = lefts
+        except FileNotFoundError:
+            pass
+
+    # ------------------------------------------------------------------
+    # Mise à jour réseau + animation locale
+    # ------------------------------------------------------------------
+
     def update_from_state(self, state):
-        x, y = state.get('x', self.feet.centerx), state.get('y', self.feet.bottom)
-        direction = state.get('direction', 'right')
-        anim_state = state.get('state', 'idle')
-        frame = state.get('frame', 0)
-        self.health = state.get('health', 1)
+        """Applique la position (lerp) et détecte les changements d'état d'animation.
+        N'avance PAS frame_index — c'est le rôle de update() à 60fps."""
+        x = state.get('x', self.feet.centerx)
+        y = state.get('y', self.feet.bottom)
+        self.health     = state.get('health',     1)
         self.max_health = state.get('max_health', 1)
+        self._paralyzed = state.get('paralyzed',  False)
 
-        # Interpolation linéaire (lerp) : glissement vers la position réseau cible
-        # Facteur 0.35 = 35% de la distance par frame → mouvement lissé, pas de téléportation
+        new_state  = state.get('state',     'idle')
+        new_facing = state.get('direction', 'right')
+
+        # Lerp position (35% vers la cible réseau par frame)
         _LERP = 0.35
-        target_cx     = round(x)
-        target_bottom = round(y)
-        new_cx     = round(self.feet.centerx + (target_cx     - self.feet.centerx) * _LERP)
-        new_bottom = round(self.feet.bottom   + (target_bottom - self.feet.bottom)  * _LERP)
+        new_cx     = round(self.feet.centerx + (round(x) - self.feet.centerx) * _LERP)
+        new_bottom = round(self.feet.bottom   + (round(y) - self.feet.bottom)  * _LERP)
         self.feet.midbottom = (new_cx, new_bottom)
-        self.rect.centerx = self.feet.centerx
-        self.rect.bottom = self.feet.bottom + int(self.empty_below)
+        self.rect.centerx   = self.feet.centerx
+        self.rect.bottom    = self.feet.bottom + int(self.empty_below)
 
-        anims = self.animations.get(direction, self.animations['right'])
-        if anim_state not in anims:
-            anim_state = list(anims.keys())[0] if anims else 'idle'
-        if anim_state in anims and anims[anim_state]:
-            frames = anims[anim_state]
-            self.image = frames[int(frame) % len(frames)]
-            if state.get('paralyzed', False):
-                self.image = self._get_blue_tinted(self.image)
+        # Transition d'état → réinitialise l'animation au début
+        if new_state != self._anim_state or new_facing != self._anim_facing:
+            self._anim_state  = new_state
+            self._anim_facing = new_facing
+            self.frame_index  = 0.0
 
     def update(self):
-        pass
+        """Avance l'animation localement à 60fps, indépendamment du tick réseau."""
+        anims = self.animations.get(self._anim_facing, self.animations.get('right', {}))
+        state = self._anim_state
+
+        # Fallback si l'état n'existe pas dans les animations chargées
+        if state not in anims:
+            fallback = next(iter(anims), None)
+            if not fallback:
+                return
+            state = fallback
+
+        frames = anims[state]
+        if not frames:
+            return
+
+        # Les animations d'attaque/compétence avancent plus vite
+        speed = self.animation_speed
+        if 'attack' in state or 'skill' in state:
+            speed *= 1.5
+
+        self.frame_index += speed
+        if self.frame_index >= len(frames):
+            # Mort : bloquer sur la dernière frame
+            self.frame_index = len(frames) - 1 if state == 'death' else 0.0
+
+        frame = frames[int(self.frame_index)]
+        self.image = self._get_blue_tinted(frame) if self._paralyzed else frame
 
 
 # =====================================================================

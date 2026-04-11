@@ -532,6 +532,8 @@ class RemoteEnemy(pygame.sprite.Sprite):
         # Hit flash local (client-side, déclenché quand la santé baisse)
         self._hit_flash_time = 0
         self._prev_health    = 1
+        # Flag de mort pour créer les particules au bon moment côté client
+        self._just_died      = False
 
     # ------------------------------------------------------------------
     # Chargeurs
@@ -688,6 +690,9 @@ class RemoteEnemy(pygame.sprite.Sprite):
 
         # Transition d'état → réinitialise l'animation au début
         if new_state != self._anim_state or new_facing != self._anim_facing:
+            # Signaler la transition vers 'death' pour créer les particules localement
+            if new_state == 'death' and self._anim_state != 'death':
+                self._just_died = True
             self._anim_state  = new_state
             self._anim_facing = new_facing
             self.frame_index  = 0.0

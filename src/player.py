@@ -998,8 +998,9 @@ class RemotePlayer(pygame.sprite.Sprite):
         # Effets visuels — clignotement pour cursed brand (100 ms)
         cb_active = self._cb_active and (pygame.time.get_ticks() // 100) % 2 == 0
 
-        # Clé de cache
-        cache_key = (id(base_frame), self._blue_active, cb_active, self._stunned)
+        # Clé de cache — inclut _stealth_active pour éviter un early-return sans alpha
+        cache_key = (id(base_frame), self._blue_active, cb_active, self._stunned,
+                     self._stealth_active)
         if cache_key in self._effect_cache:
             self.image = self._effect_cache[cache_key]
             return
@@ -1019,11 +1020,11 @@ class RemotePlayer(pygame.sprite.Sprite):
         if self._stunned:
             self.image.fill((128, 128, 128, 255), special_flags=pygame.BLEND_RGBA_MULT)
 
-        if len(self._effect_cache) > 200:
-            self._effect_cache.clear()
-        self._effect_cache[cache_key] = self.image
-
         # Stealth (cape de l'assassin) : le sprite distant devient semi-transparent
         if self._stealth_active:
             self.image = self.image.copy()
             self.image.set_alpha(60)
+
+        if len(self._effect_cache) > 200:
+            self._effect_cache.clear()
+        self._effect_cache[cache_key] = self.image

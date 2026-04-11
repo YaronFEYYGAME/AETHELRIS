@@ -2652,11 +2652,12 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                 if player2:
                     players_list.append(_serialize_player(player2))
                 # Sérialiser dialogues de fées actifs — indexés par joueur (0=hôte, 1=client)
+                # Clés STRING pour survivre à la sérialisation JSON (int → str)
                 fairy_dialogues = {}
                 for fairy in fairies_group:
                     ftxt = fairy.get_current_dialogue()
                     if ftxt and fairy.dialogue_target_player is not None:
-                        fairy_dialogues[fairy.dialogue_target_player] = ftxt
+                        fairy_dialogues[str(fairy.dialogue_target_player)] = ftxt
 
                 # Projectiles joueurs + projectiles ennemis (flèches archers, etc.)
                 all_projectiles = (
@@ -2817,6 +2818,8 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 
     # État joueur local de la frame précédente (initialisé vide, mis à jour après chaque state)
     lp_now = {}
+    # État local de l'inventaire — mis à jour IMMÉDIATEMENT sans attendre l'ack serveur
+    client_inv_open = False
 
     while True:
         if not client.connected:
@@ -2835,31 +2838,30 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 _cleanup_client_audio(); client.stop(); pygame.quit(); import sys; sys.exit()
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                lp_inv_open = lp_now.get('inventory_open', False)
-                if lp_inv_open:
-                    _ev_inv_close = True  # fermer l'inventaire en priorité
+                if client_inv_open:
+                    client_inv_open = False   # fermer l'inventaire en priorité
+                    _ev_inv_close = True
                 else:
-                    is_paused_client = not is_paused_client   # toggle pause
+                    is_paused_client = not is_paused_client
             if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
                 run_game_mp_client._skip_dialogue = True
                 if chest_ui_active and not chest_ui_closing:
                     chest_ui_closing = True
                     chest_ui_close_time = pygame.time.get_ticks()
 
-            # --- Inventaire (one-shot, géré par events) ---
+            # --- Inventaire : état LOCAL immédiat (pas d'attente d'ack serveur) ---
             if event.type == pygame.KEYDOWN and event.key == pygame.K_i:
+                client_inv_open = not client_inv_open
                 _ev_inv_toggle = True
-            if event.type == pygame.KEYDOWN:
-                lp_inv_open = lp_now.get('inventory_open', False)
-                if lp_inv_open:
-                    if event.key == pygame.K_q:
-                        _ev_inv_left = True
-                    elif event.key == pygame.K_d:
-                        _ev_inv_right = True
-                    elif event.key == pygame.K_e:
-                        _ev_inv_grab = True
-                    elif event.key == pygame.K_a:
-                        _ev_inv_drop = True
+            if event.type == pygame.KEYDOWN and client_inv_open:
+                if event.key == pygame.K_q:
+                    _ev_inv_left = True
+                elif event.key == pygame.K_d:
+                    _ev_inv_right = True
+                elif event.key == pygame.K_e:
+                    _ev_inv_grab = True
+                elif event.key == pygame.K_a:
+                    _ev_inv_drop = True
 
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if is_paused_client and pause_rects_client:
@@ -2974,7 +2976,17 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 group.add(re)
                 remote_enemies[eid]      = re
                 remote_enemy_etypes[eid] = etype
-            remote_enemies[eid].update_from_state(edata)
+            re = remote_enemies[eid]
+            re.update_from_state(edata)
+            # Créer les particules dès la transition vers 'death' (pas au retrait de la liste)
+            if re._just_died:
+                re._just_died = False
+                etype = remote_enemy_etypes.get(eid, 'enemy')
+                ParticleClass = DarkParticle if etype in ('necromancer', 'spirit') else BloodParticle
+                for _ in range(15):
+                    p = ParticleClass(re.rect.centerx, re.rect.centery)
+                    group.add(p)
+                    client_particles_grp.add(p)
 
         # --- Items distants ---
         # Clé = (x, y, type) : les items ne bougent pas
@@ -3012,7 +3024,10 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 rc.image = rc.anim_frames[idx]
                 rc.rect = rc.image.get_rect(center=rc.rect.center)
 
-        # --- Projectiles distants ---
+        # --- Projectiles distants (dead reckoning) ---
+        # Les projectiles bougent localement à leur propre vitesse entre les ticks réseau.
+        # À chaque tick réseau on LERP doucement vers la position serveur pour corriger la dérive.
+        _PROJ_LERP = 0.5  # correction réseau 50% par tick (assez forte pour les objets rapides)
         current_pids = {p['id'] for p in projs_state}
         for pid in list(remote_projectiles.keys()):
             if pid not in current_pids:
@@ -3031,7 +3046,6 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                     rp = HealEffect(pdata['x'], pdata['y'],
                                     img_path=pdata.get('img_path'))
                 elif ptype == 'homing':
-                    # Le homing arrive déjà en explosion côté client
                     rp = Projectile(pdata['x'], pdata['y'], pdata['direction'])
                 else:
                     rp = Projectile(pdata['x'], pdata['y'], pdata['direction'],
@@ -3039,12 +3053,18 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 group.add(rp)
                 remote_projectiles[pid] = rp
             else:
+                # Correction réseau par LERP — pas de téléportation
                 rp = remote_projectiles[pid]
-                rp.rect.centerx = pdata['x']
-                rp.rect.centery = pdata['y']
+                rp.rect.centerx = round(rp.rect.centerx + (pdata['x'] - rp.rect.centerx) * _PROJ_LERP)
+                rp.rect.centery = round(rp.rect.centery + (pdata['y'] - rp.rect.centery) * _PROJ_LERP)
                 if hasattr(rp, 'hitbox'):
-                    rp.hitbox.centerx = pdata['x']
-                    rp.hitbox.centery = pdata['y']
+                    rp.hitbox.centerx = rp.rect.centerx
+                    rp.hitbox.centery = rp.rect.centery
+
+        # Avancer les projectiles distants localement entre les ticks réseau (dead reckoning)
+        for rp in list(remote_projectiles.values()):
+            if hasattr(rp, 'velocity_x'):
+                rp.update()
 
         # --- Événements serveur (particules + sons) ---
         events_recv = state.get('events', {})
@@ -3371,8 +3391,8 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         zhonya_pressed = False
         cap_assassin_pressed = False
         dash_pressed = bool(keys[pygame.K_LSHIFT])
-        # N'autoriser les items actifs que si l'inventaire est fermé
-        _inv_is_open = lp_now.get('inventory_open', False)
+        # État local immédiat (client_inv_open), jamais retardé par le réseau
+        _inv_is_open = client_inv_open
         inv_items = lp_now.get('inventory_items', [])
         item_start = lp_now.get('item_start_key', 2)
         active_key = item_start
@@ -3468,14 +3488,14 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 ui.draw_boss_dialogue(dtxt, edata.get('boss_display_name'))
                 break
 
-        # Dialogues de fées (côté client — uniquement ceux qui ciblent le joueur 1 = client)
+        # Dialogues de fées (côté client — clé '1' (string) car JSON converti les int en str)
         fdlg = state.get('fairy_dialogues', {})
-        my_fairy_txt = fdlg.get(1) if isinstance(fdlg, dict) else None
+        my_fairy_txt = fdlg.get('1') if isinstance(fdlg, dict) else None
         if my_fairy_txt:
             ui.draw_boss_dialogue(my_fairy_txt, "Fee")
 
-        # --- Écran inventaire du client ---
-        if lp_state.get('inventory_open') and lp_state.get('health', 0) > 0:
+        # --- Écran inventaire du client (state local pour réactivité immédiate) ---
+        if client_inv_open and lp_state.get('health', 0) > 0:
             bindings = get_character_def(client_char_type).get('bindings', {})
             ui.draw_inventory_screen(
                 lp_state.get('inventory_items', []),

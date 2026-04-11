@@ -3,7 +3,8 @@
     "allow": [
       "Bash(python -c \"import sys; sys.path.insert\\(0, 'src'\\); import game\")",
       "Bash(python -c \"import sys; sys.path.insert\\(0, 'src'\\); import enemy; import player; import mobs\")",
-      "Bash(python -c ':*)"
+      "Bash(python -c ':*)",
+      "Bash(find:*)"
     ]
   }
 }

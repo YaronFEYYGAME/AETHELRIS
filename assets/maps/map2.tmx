@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="200" height="200" tilewidth="16" tileheight="16" infinite="0" nextlayerid="6" nextobjectid="85">
+<map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="200" height="200" tilewidth="16" tileheight="16" infinite="0" nextlayerid="6" nextobjectid="86">
  <tileset firstgid="1" name="Dungeon_Autotiles" tilewidth="16" tileheight="16" tilecount="300" columns="20">
-  <image source="../../../AETHELRIS/assets/images/Dungeon_Autotiles.png" width="320" height="240"/>
+  <image source="../images/Dungeon_Autotiles.png" width="320" height="240"/>
  </tileset>
  <tileset firstgid="301" name="Dungeon_WallsAndFloors" tilewidth="16" tileheight="16" tilecount="192" columns="6">
-  <image source="../../../AETHELRIS/assets/images/Dungeon_WallsAndFloors.png" width="96" height="512"/>
+  <image source="../images/Dungeon_WallsAndFloors.png" width="96" height="512"/>
  </tileset>
  <tileset firstgid="493" name="DungeonDecorations" tilewidth="16" tileheight="16" tilecount="1024" columns="32">
-  <image source="../../../AETHELRIS/assets/images/DungeonDecorations.png" width="512" height="512"/>
+  <image source="../images/DungeonDecorations.png" width="512" height="512"/>
  </tileset>
  <tileset firstgid="1517" name="Dungeon_WaterAnimation" tilewidth="16" tileheight="16" tilecount="54" columns="9">
-  <image source="../../../AETHELRIS/assets/images/Dungeon_WaterAnimation.png" width="144" height="96"/>
+  <image source="../images/Dungeon_WaterAnimation.png" width="144" height="96"/>
   <tile id="0">
    <animation>
     <frame tileid="0" duration="190"/>
@@ -542,7 +542,7 @@
   <object id="3" type="chest_left" x="476.667" y="1886.67">
    <point/>
   </object>
-  <object id="4" type="neant_sbire" x="2502" y="2873">
+  <object id="4" type="sbire_neant" x="2502" y="2873">
    <point/>
   </object>
   <object id="5" type="elite_orc" x="840" y="1794">
@@ -635,9 +635,7 @@
   <object id="82" type="skeleton_archer" x="1194.67" y="1490.67">
    <point/>
   </object>
-  <object id="83" type="exit" x="305.333" y="3193.33">
-   <point/>
-  </object>
+  <object id="85" type="exit" x="219" y="3175" width="171" height="24"/>
  </objectgroup>
  <layer id="5" name="Foreground" width="200" height="200">
   <data encoding="csv">

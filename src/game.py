@@ -139,7 +139,7 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
 
     death_font = ResourceManager.get_font(120, "old english text mt, garamond, times new roman, serif") 
     
-    levels = ["assets/maps/map1.tmx", "assets/maps/map_boss1.tmx", "assets/maps/map2.tmx"]
+    levels = ["assets/maps/map1.tmx", "assets/maps/map_boss1.tmx", "assets/maps/map2.tmx", "assets/maps/map_boss2.tmx", "assets/maps/map_boss3.tmx"]
     current_level_index = 0
 
     player_inventory = {'melee': False, 'ranged': False, 'pickaxe': False, 'boots': False,
@@ -152,7 +152,7 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
     pause_rects = {}
     
     # --- TOGGLE DEBUG DES HITBOXES ---
-    DEBUG_HITBOXES = True
+    DEBUG_HITBOXES = False
 
     # Items déjà droppés par les coffres (persiste entre niveaux, pas de doublon)
     chest_dropped_items = set()
@@ -991,7 +991,7 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
             pygame.display.flip()
             clock.tick(60)
 
-    print("Félicitations, vous avez terminé toutes les zones !")
+    _show_victory_screen(screen)
 
 
 # =============================================================================
@@ -1167,7 +1167,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
     ui = UI(screen)
     sound_manager = SoundManager()
 
-    levels = ["assets/maps/map1.tmx", "assets/maps/map_boss1.tmx", "assets/maps/map2.tmx"]
+    levels = ["assets/maps/map1.tmx", "assets/maps/map_boss1.tmx", "assets/maps/map2.tmx", "assets/maps/map_boss2.tmx", "assets/maps/map_boss3.tmx"]
     current_level_index = 0
 
     player_health  = 100
@@ -1193,7 +1193,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
     is_paused  = False
     pause_rects = {}
     zoom_level = 3.8
-    DEBUG_HITBOXES = True
+    DEBUG_HITBOXES = False
 
     chest_dropped_items = set()
     CHEST_DROPPABLE_ITEMS = [
@@ -2774,6 +2774,15 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
             pygame.display.flip()
             clock.tick(60)
 
+    # Tous les niveaux terminés — écran de victoire
+    if not solo_mode and server is not None:
+        try:
+            server.send_state({'game_won': True})
+        except Exception:
+            pass
+    _cleanup_audio()
+    _show_victory_screen(screen)
+
 
 # =============================================================================
 # BOUCLE CLIENT MULTIJOUEUR
@@ -2839,7 +2848,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         pygame.display.flip()
         clock.tick(60)
 
-    levels = ["assets/maps/map1.tmx", "assets/maps/map_boss1.tmx", "assets/maps/map2.tmx"]
+    levels = ["assets/maps/map1.tmx", "assets/maps/map_boss1.tmx", "assets/maps/map2.tmx", "assets/maps/map_boss2.tmx", "assets/maps/map_boss3.tmx"]
     current_level_index = first_state.get('level', 0)
     loaded_level = -1
 
@@ -3583,6 +3592,13 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         mp_surf = font_small.render("● MULTIJOUEUR (CLIENT)", True, (80, 200, 80))
         screen.blit(mp_surf, (screen_width - mp_surf.get_width() - 10, 10))
 
+        # --- Victoire ---
+        if state.get('game_won', False):
+            pygame.display.flip()
+            _cleanup_client_audio(); client.stop()
+            _show_victory_screen(screen)
+            return
+
         # --- Mort joueur local ---
         lp_health  = lp_state.get('health', 100)
         game_over  = state.get('game_over', False)
@@ -3987,6 +4003,34 @@ def _draw_remote_health(screen, health, max_health, label='P2'):
     font = ResourceManager.get_font(20, None)
     lbl = font.render(label, True, (200, 200, 200))
     screen.blit(lbl, (x - lbl.get_width() - 5, y))
+
+
+def _show_victory_screen(screen):
+    clock = pygame.time.Clock()
+    font_big = ResourceManager.get_font(120, "old english text mt, garamond, times new roman, serif")
+    font_sub = ResourceManager.get_font(36, None)
+    duration = 10000
+    start = pygame.time.get_ticks()
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit(); import sys; sys.exit()
+            if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                return
+        elapsed = pygame.time.get_ticks() - start
+        if elapsed >= duration:
+            return
+        prog = min(1.0, elapsed / 2000.0)
+        alpha = int(255 * prog)
+        screen.fill((0, 0, 0))
+        title = font_big.render("YOU ARE THE HERO", True, (220, 180, 50))
+        title.set_alpha(alpha)
+        screen.blit(title, title.get_rect(center=(screen.get_width() // 2, screen.get_height() // 2)))
+        sub = font_sub.render("Retour au menu dans quelques instants...", True, (180, 160, 100))
+        sub.set_alpha(alpha)
+        screen.blit(sub, sub.get_rect(center=(screen.get_width() // 2, screen.get_height() // 2 + 100)))
+        pygame.display.flip()
+        clock.tick(60)
 
 
 def _show_disconnected(screen):

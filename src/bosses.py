@@ -43,11 +43,11 @@ class BigEnemy(pygame.sprite.Sprite):
         self.rect.centerx = self.feet.centerx
         self.rect.bottom = self.feet.bottom + self.y_offset 
         
-        self.max_health = 390
-        self.health = 390
-        self.speed = 1.8
-        self.damage_amount = 7.5 
-        
+        self.max_health = 292
+        self.health = 292
+        self.speed = 1.35
+        self.damage_amount = 5.625
+
         self.aggro_radius = 300 
         
         self.velocity = pygame.math.Vector2(0, 0)
@@ -698,10 +698,10 @@ class Necromancer(pygame.sprite.Sprite):
         self.rect.centerx = self.feet.centerx
         self.rect.bottom = self.feet.bottom + self.y_offset
 
-        self.max_health = 450
-        self.health = 450
-        self.speed = 1.8
-        self.damage_amount = 10
+        self.max_health = 337
+        self.health = 337
+        self.speed = 1.35
+        self.damage_amount = 7.5
         self.aggro_radius = 400
 
         self.velocity = pygame.math.Vector2(0, 0)
@@ -1155,12 +1155,12 @@ class Medusa(pygame.sprite.Sprite):
         self.rect.bottom = self.feet.bottom + self.y_offset
 
         # Stats (1.5x BigEnemy HP)
-        self.max_health = 585
-        self.health = 585
-        self.base_speed = 1.5
+        self.max_health = 438
+        self.health = 438
+        self.base_speed = 1.125
         self.speed = self.base_speed
-        self.damage_amount = 7.5
-        self.special_damage = 10
+        self.damage_amount = 5.625
+        self.special_damage = 7.5
 
         self.aggro_radius = 300
 
@@ -1680,10 +1680,10 @@ class KingBoss(pygame.sprite.Sprite):
         self.rect.bottom = self.feet.bottom + self.y_offset
 
         # Stats
-        self.max_health = 1200
-        self.health = 1200
-        self.speed = 1.8  # même vitesse que BigEnemy
-        self.damage_amount = 10
+        self.max_health = 900
+        self.health = 900
+        self.speed = 1.35
+        self.damage_amount = 7.5
 
         self.aggro_radius = 300
 
@@ -2035,7 +2035,7 @@ class KingBoss(pygame.sprite.Sprite):
                 self._dealt_frames.add(current_frame)
                 # Salve 1=frame2, salve 2=frame4, salve 3=frame6
                 salve_num = {2: 1, 4: 2, 6: 3}[current_frame]
-                salve_dmg = 5 if salve_num <= 2 else 8  # salve 3 fait + de dégâts
+                salve_dmg = 3.75 if salve_num <= 2 else 6.0  # salve 3 fait + de dégâts
                 self.pending_sounds.append('boss_attack')
                 attack_area = self.get_attack_hitbox(salve=salve_num)
                 # Dégâts au joueur 1
@@ -2243,10 +2243,10 @@ class SbireNeant(pygame.sprite.Sprite):
         self.rect.bottom = self.feet.bottom + self.y_offset
 
         # Stats
-        self.max_health = 586
-        self.health = 586
-        self.speed = 2.5
-        self.damage_amount = 8
+        self.max_health = 439
+        self.health = 439
+        self.speed = 1.875
+        self.damage_amount = 6.0
 
         self.aggro_radius = 300
 

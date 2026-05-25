@@ -133,13 +133,10 @@
   <object id="5" type="collision" x="481" y="48" width="792" height="111"/>
   <object id="6" type="collision" x="833" y="464" width="476" height="336"/>
   <object id="7" type="collision" x="1117" y="144" width="159" height="389"/>
-  <object id="8" type="rock" x="802" y="493">
-   <point/>
-  </object>
   <object id="9" type="collision" x="754.667" y="782.667" width="109.333" height="41.3333"/>
  </objectgroup>
  <objectgroup id="4" name="Spawns">
-  <object id="1" type="bigenemy" x="997" y="311">
+  <object id="1" type="medusa" x="997" y="311">
    <point/>
   </object>
   <object id="2" type="player" x="586" y="275">

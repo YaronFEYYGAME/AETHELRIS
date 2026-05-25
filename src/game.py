@@ -3003,7 +3003,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
 
             # --- Spawner les fées depuis la carte TMX (sprites visuels statiques) ---
             for obj in tmx_data.objects:
-                obj_type = getattr(obj, 'type', '').lower()
+                obj_type = (getattr(obj, 'type', '') or getattr(obj, 'name', '') or '').lower()
                 if obj_type == 'fee_1':
                     f = Fairy(obj.x, obj.y, 1); group.add(f); client_fairies_grp.add(f)
                 elif obj_type == 'fee_2':

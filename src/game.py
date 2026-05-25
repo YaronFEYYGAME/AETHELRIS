@@ -139,9 +139,9 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
 
     death_font = ResourceManager.get_font(120, "old english text mt, garamond, times new roman, serif") 
     
-    levels = ["assets/maps/test_map.tmx", "assets/maps/map1.tmx"] 
+    levels = ["assets/maps/map1.tmx", "assets/maps/map_boss1.tmx", "assets/maps/map2.tmx"]
     current_level_index = 0
-    
+
     player_inventory = {'melee': False, 'ranged': False, 'pickaxe': False, 'boots': False,
                         'red_gem': False, 'blue_gem': False, 'current': None, 'arrows': 0}
     player_health = 100
@@ -429,21 +429,6 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                                     player.switch_weapon('ranged')
                                     sound_manager.play_ui_equip_bow()
 
-                            if event.key == pygame.K_a and can_exit:
-                                player_inventory['melee'] = player.has_melee
-                                player_inventory['ranged'] = player.has_ranged
-                                player_inventory['pickaxe'] = player.has_pickaxe
-                                player_inventory['boots'] = player.has_boots
-                                player_inventory['red_gem'] = player.has_red_gem
-                                player_inventory['blue_gem'] = player.has_blue_gem
-                                player_inventory['current'] = player.current_weapon
-                                player_inventory['arrows'] = player.arrows
-                                player_health = player.health
-                                
-                                current_level_index += 1
-                                level_running = False 
-                                break
-                                
                             if event.key == pygame.K_3:
                                 if player.has_blue_gem:
                                     player.activate_blue_gem()
@@ -455,12 +440,25 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                                             (player.feet.centerx, player.feet.centery))
                                         for _ in range(20):
                                             offset_x = random.randint(-15, 15)
-                                            offset_y = random.randint(-15, 5) 
+                                            offset_y = random.randint(-15, 5)
                                             smoke = SmokeParticle(player.feet.centerx + offset_x, player.feet.bottom + offset_y)
                                             group.add(smoke)
                                             particles_group.add(smoke)
-                                
+
                             if event.key == pygame.K_f:
+                                if can_exit:
+                                    player_inventory['melee'] = player.has_melee
+                                    player_inventory['ranged'] = player.has_ranged
+                                    player_inventory['pickaxe'] = player.has_pickaxe
+                                    player_inventory['boots'] = player.has_boots
+                                    player_inventory['red_gem'] = player.has_red_gem
+                                    player_inventory['blue_gem'] = player.has_blue_gem
+                                    player_inventory['current'] = player.current_weapon
+                                    player_inventory['arrows'] = player.arrows
+                                    player_health = player.health
+                                    current_level_index += 1
+                                    level_running = False
+                                    break
                                 for item in items_group:
                                     if player.feet.colliderect(item.rect):
                                         if item.item_type == 'melee':
@@ -935,7 +933,7 @@ def run_game(screen, start_music_vol=0.5, start_sfx_vol=0.8):
                     break
 
             if show_exit_dialogue:
-                ui.draw_dialogue("Voulez vous rentrer ? (A)")
+                ui.draw_dialogue("Passer au niveau suivant (F)")
             elif show_rock_dialogue:
                 ui.draw_dialogue("Le chemin semble bloqué...")
             elif show_chest_dialogue:
@@ -1015,7 +1013,7 @@ def _serialize_player(p):
         'direction': p.facing,
         'frame': p.frame_index,
         'health': p.health,
-        # max_health invariant (toujours 100) → non transmis chaque frame
+        'max_health': p.max_health,
         'current_weapon': p.current_weapon,
         'has_melee':      p.has_melee,
         'has_ranged':     p.has_ranged,
@@ -1169,11 +1167,21 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
     ui = UI(screen)
     sound_manager = SoundManager()
 
-    levels = ["assets/maps/test_map.tmx", "assets/maps/map1.tmx"]
+    levels = ["assets/maps/map1.tmx", "assets/maps/map_boss1.tmx", "assets/maps/map2.tmx"]
     current_level_index = 0
 
     player_health  = 100
     player2_health = 100
+    player_max_health  = 100
+    player2_max_health = 100
+    player_max_stamina  = 100
+    player2_max_stamina = 100
+    player_level = 1
+    player_xp = 0
+    player_xp_to_next = 100
+    player2_level = 1
+    player2_xp = 0
+    player2_xp_to_next = 100
     player_inv_items = []
     player2_inv_items = []
     player_has_melee = False
@@ -1345,6 +1353,12 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
         # Joueur local (serveur) — avec le personnage choisi
         player = Player(player_x, player_y, char_type=host_char_type)
         player.health = player_health
+        player.max_health = player_max_health
+        player.max_stamina = player_max_stamina
+        player.stamina = player_max_stamina
+        player.level = player_level
+        player.xp = player_xp
+        player.xp_to_next_level = player_xp_to_next
         player.has_melee = player_has_melee or player.has_melee
         player.has_ranged = player_has_ranged or player.has_ranged
         player.arrows = player_arrows or player.arrows
@@ -1357,6 +1371,12 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
         if not solo_mode and client_char_type:
             player2 = Player(player_x + 20, player_y, char_type=client_char_type)
             player2.health = player2_health
+            player2.max_health = player2_max_health
+            player2.max_stamina = player2_max_stamina
+            player2.stamina = player2_max_stamina
+            player2.level = player2_level
+            player2.xp = player2_xp
+            player2.xp_to_next_level = player2_xp_to_next
             group.add(player2)
 
         map_pixel_width  = tmx_data.width  * tmx_data.tilewidth
@@ -1370,6 +1390,8 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
         both_dead_time = None
         can_exit       = False
         show_exit_dialogue = False
+        can_exit_p2    = False
+        show_exit_dialogue_p2 = False
         red_gem_animating = False
         red_gem_anim_start = 0
         mirror_animating = False
@@ -1512,18 +1534,6 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                     break
 
                     if not is_paused and player.health > 0 and not player.is_stunned:
-                        if event.key == pygame.K_a and can_exit:
-                            player_health  = player.health
-                            player_inv_items = list(player.inventory_items)
-                            player_has_melee = player.has_melee
-                            player_has_ranged = player.has_ranged
-                            player_arrows = player.arrows
-                            if player2:
-                                player2_health = player2.health
-                                player2_inv_items = list(player2.inventory_items)
-                            current_level_index += 1
-                            level_running = False
-                            break
                         # Items actifs : touches dynamiques
                         active_items_keys = _get_active_item_keys(player)
                         for key_num, item_name in active_items_keys:
@@ -1608,6 +1618,28 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                                                          player.feet.bottom + random.randint(-15, 5))
                                     group.add(smoke); particles_group.add(smoke)
                         if event.key == pygame.K_f:
+                            if can_exit:
+                                player_health  = player.health
+                                player_max_health = player.max_health
+                                player_max_stamina = player.max_stamina
+                                player_level = player.level
+                                player_xp = player.xp
+                                player_xp_to_next = player.xp_to_next_level
+                                player_inv_items = list(player.inventory_items)
+                                player_has_melee = player.has_melee
+                                player_has_ranged = player.has_ranged
+                                player_arrows = player.arrows
+                                if player2:
+                                    player2_health = player2.health
+                                    player2_max_health = player2.max_health
+                                    player2_max_stamina = player2.max_stamina
+                                    player2_level = player2.level
+                                    player2_xp = player2.xp
+                                    player2_xp_to_next = player2.xp_to_next_level
+                                    player2_inv_items = list(player2.inventory_items)
+                                current_level_index += 1
+                                level_running = False
+                                break
                             for item in list(items_group):
                                 if player.feet.colliderect(item.rect):
                                     if _pickup_item(player, item, sound_manager):
@@ -1816,52 +1848,73 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
 
                 # Ramasser objet player2 (sans son : le client joue ses propres sons)
                 if net_inputs.get('interact') and player2.health > 0:
-                    for item in list(items_group):
-                        if player2.feet.colliderect(item.rect):
-                            if _pickup_item(player2, item, None):
-                                item.kill()
-                            break
-                    if player2.has_pickaxe:
-                        for rock in list(rocks_group):
-                            if player2.feet.colliderect(rock.hitbox.inflate(40, 40)):
-                                for _ in range(15):
-                                    p = RockParticle(rock.rect.centerx, rock.rect.centery)
-                                    group.add(p); particles_group.add(p)
-                                rx, ry = rock.rect.centerx, rock.rect.centery
-                                rock.kill()
-                                if rock.hitbox in walls: walls.remove(rock.hitbox)
-                                player2.has_pickaxe = False
-                                sound_manager.play_spatial('rock_broke', (rx, ry), host_pos)
-                                sound_events.append({'sound': 'rock_broke', 'x': rx, 'y': ry})
-                                pygame.time.set_timer(EUREKA_EVENT, 250, 1)
-                                sound_events.append({'sound': 'eureka', 'x': rx, 'y': ry})
+                    if can_exit_p2:
+                        player_health  = player.health
+                        player_max_health = player.max_health
+                        player_max_stamina = player.max_stamina
+                        player_level = player.level
+                        player_xp = player.xp
+                        player_xp_to_next = player.xp_to_next_level
+                        player_inv_items = list(player.inventory_items)
+                        player_has_melee = player.has_melee
+                        player_has_ranged = player.has_ranged
+                        player_arrows = player.arrows
+                        player2_health = player2.health
+                        player2_max_health = player2.max_health
+                        player2_max_stamina = player2.max_stamina
+                        player2_level = player2.level
+                        player2_xp = player2.xp
+                        player2_xp_to_next = player2.xp_to_next_level
+                        player2_inv_items = list(player2.inventory_items)
+                        current_level_index += 1
+                        level_running = False
+                    else:
+                        for item in list(items_group):
+                            if player2.feet.colliderect(item.rect):
+                                if _pickup_item(player2, item, None):
+                                    item.kill()
                                 break
-                    # Interaction fée (client)
-                    for fairy in fairies_group:
-                        if player2.feet.colliderect(fairy.rect.inflate(30, 30)):
-                            fairy.interact(player2, 1)
-                            break
-                    # Interaction coffre (player2)
-                    if not time_stop_active:
-                        for chest in chests_group:
-                            if not chest.opened and not chest.opening:
-                                if player2.feet.colliderect(chest.hitbox.inflate(40, 40)):
-                                    chest.open()
-                                    _players = [player, player2] if player2 else [player]
-                                    _grant_xp(50, _players, group, particles_group, sound_manager)
-                                    available = [it for it in CHEST_DROPPABLE_ITEMS
-                                                 if it not in chest_dropped_items]
-                                    if available:
-                                        chosen = random.choice(available)
-                                        chest_dropped_items.add(chosen)
-                                        if not player2.add_inventory_item(chosen):
-                                            drop = Item(chest.rect.centerx, chest.rect.bottom + 10, chosen)
-                                            group.add(drop); items_group.add(drop)
-                                        sound_events.append({'sound': 'get_item',
-                                                             'x': chest.rect.centerx,
-                                                             'y': chest.rect.centery,
-                                                             'chest_item': chosen})
+                        if player2.has_pickaxe:
+                            for rock in list(rocks_group):
+                                if player2.feet.colliderect(rock.hitbox.inflate(40, 40)):
+                                    for _ in range(15):
+                                        p = RockParticle(rock.rect.centerx, rock.rect.centery)
+                                        group.add(p); particles_group.add(p)
+                                    rx, ry = rock.rect.centerx, rock.rect.centery
+                                    rock.kill()
+                                    if rock.hitbox in walls: walls.remove(rock.hitbox)
+                                    player2.has_pickaxe = False
+                                    sound_manager.play_spatial('rock_broke', (rx, ry), host_pos)
+                                    sound_events.append({'sound': 'rock_broke', 'x': rx, 'y': ry})
+                                    pygame.time.set_timer(EUREKA_EVENT, 250, 1)
+                                    sound_events.append({'sound': 'eureka', 'x': rx, 'y': ry})
                                     break
+                        # Interaction fée (client)
+                        for fairy in fairies_group:
+                            if player2.feet.colliderect(fairy.rect.inflate(30, 30)):
+                                fairy.interact(player2, 1)
+                                break
+                        # Interaction coffre (player2)
+                        if not time_stop_active:
+                            for chest in chests_group:
+                                if not chest.opened and not chest.opening:
+                                    if player2.feet.colliderect(chest.hitbox.inflate(40, 40)):
+                                        chest.open()
+                                        _players = [player, player2] if player2 else [player]
+                                        _grant_xp(50, _players, group, particles_group, sound_manager)
+                                        available = [it for it in CHEST_DROPPABLE_ITEMS
+                                                     if it not in chest_dropped_items]
+                                        if available:
+                                            chosen = random.choice(available)
+                                            chest_dropped_items.add(chosen)
+                                            if not player2.add_inventory_item(chosen):
+                                                drop = Item(chest.rect.centerx, chest.rect.bottom + 10, chosen)
+                                                group.add(drop); items_group.add(drop)
+                                            sound_events.append({'sound': 'get_item',
+                                                                 'x': chest.rect.centerx,
+                                                                 'y': chest.rect.centery,
+                                                                 'chest_item': chosen})
+                                        break
 
                 # Inventaire player2 (commandes one-shot envoyées depuis le client)
                 if net_inputs.get('inv_toggle') and player2.health > 0:
@@ -2385,6 +2438,13 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                     if player.feet.colliderect(zone):
                         can_exit = True; show_exit_dialogue = True; break
 
+            can_exit_p2 = False
+            show_exit_dialogue_p2 = False
+            if player2 and player2.health > 0:
+                for zone in exit_zones:
+                    if player2.feet.colliderect(zone):
+                        can_exit_p2 = True; show_exit_dialogue_p2 = True; break
+
             show_chest_dialogue = False
             if player.health > 0 and not time_stop_active:
                 for chest in chests_group:
@@ -2529,7 +2589,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                     break
 
             if show_exit_dialogue:
-                ui.draw_dialogue("Voulez vous rentrer ? (A)")
+                ui.draw_dialogue("Passer au niveau suivant (F)")
             elif show_chest_dialogue:
                 ui.draw_dialogue("Appuyer sur F pour ouvrir")
 
@@ -2690,6 +2750,7 @@ def run_game_mp_server(screen, server, start_music_vol=0.5, start_sfx_vol=0.8,
                     'time_stop_activator_idx': time_stop_activator_idx,
                     'fairy_dialogues': fairy_dialogues,
                     'decoy': decoy_state,
+                    'show_exit_dialogue_p2': show_exit_dialogue_p2,
                 }
                 server.send_state(state)
                 dash_events.clear()
@@ -2778,7 +2839,7 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
         pygame.display.flip()
         clock.tick(60)
 
-    levels = ["assets/maps/test_map.tmx", "assets/maps/map1.tmx"]
+    levels = ["assets/maps/map1.tmx", "assets/maps/map_boss1.tmx", "assets/maps/map2.tmx"]
     current_level_index = first_state.get('level', 0)
     loaded_level = -1
 
@@ -3504,8 +3565,12 @@ def run_game_mp_client(screen, client, start_music_vol=0.5, start_sfx_vol=0.8):
                 item_start_key=lp_state.get('item_start_key', 2),
                 skill_1_exists=bindings.get('1') is not None)
 
+        # Dialogue exit zone (côté client)
+        if state.get('show_exit_dialogue_p2', False) and lp_state.get('health', 0) > 0:
+            ui.draw_dialogue("Passer au niveau suivant (F)")
+
         # Dialogue coffre (côté client)
-        if local_player and lp_state.get('health', 0) > 0 and not state.get('time_stop_active', False):
+        elif local_player and lp_state.get('health', 0) > 0 and not state.get('time_stop_active', False):
             for cd in chests_state:
                 if not cd['opened'] and not cd['opening']:
                     ckey = (cd['x'], cd['y'])

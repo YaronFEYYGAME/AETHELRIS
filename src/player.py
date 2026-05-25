@@ -735,6 +735,10 @@ class Player(pygame.sprite.Sprite):
             self.stat_points += 1
             self.xp_to_next_level = int(self.xp_to_next_level * 1.10)
             self.level_up_time = pygame.time.get_ticks()
+            self.max_health = int(self.max_health * 1.15)
+            self.health = self.max_health
+            self.max_stamina = int(self.max_stamina * 1.15)
+            self.stamina = self.max_stamina
             leveled_up = True
         return leveled_up
 

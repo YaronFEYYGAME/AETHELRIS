@@ -2,6 +2,9 @@ import sys
 import os
 import pygame
 
+if getattr(sys, 'frozen', False):
+    os.chdir(sys._MEIPASS)
+
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
 from menu import start_menu
